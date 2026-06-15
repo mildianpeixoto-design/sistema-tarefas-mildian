@@ -1,0 +1,2598 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Gestão de Equipe</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4b4fa8">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f3f5f8;
+  --card:#ffffff;
+  --border:#dde3ec;
+  --text:#1b2638;
+  --text2:#5a6b7d;
+  --text3:#9aa6b8;
+  --accent:#1f3a5f;
+  --accent-bg:#e4eaf2;
+  --lilac:#3d6e8f;
+  --lilac-bg:#e6eef3;
+  --gold:#b8860b;
+  --gold-bg:#f7efd9;
+  --sidebar-bg:#16263b;
+  --sidebar-bg2:#0e1b2c;
+  --gradient: linear-gradient(135deg,#274a73 0%,#0f2238 100%);
+  --green:#0d6b4f; --green-bg:#dff3ec;
+  --amber:#946200; --amber-bg:#fbf0db;
+  --red:#a02525; --red-bg:#fbe8e8;
+  --blue:#1f5fa8; --blue-bg:#e5eef9;
+  --gray:#5a5e66; --gray-bg:#eef0f2;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+.app{max-width:1240px;margin:0 auto;padding:16px;display:flex;gap:20px;align-items:flex-start;}
+.sidebar{width:220px;flex-shrink:0;position:sticky;top:16px;background:var(--gradient);color:#fff;border-radius:10px;padding:18px 14px;box-shadow:0 4px 14px rgba(15,34,56,0.18);}
+.sidebar h1{font-size:17px;font-weight:600;margin:0 0 4px;color:#fff;letter-spacing:.3px;}
+.sidebar .date{color:rgba(255,255,255,0.55);font-size:12px;text-transform:capitalize;margin-bottom:16px;}
+.main{flex:1;min-width:0;}
+.userbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.12);flex-wrap:wrap;}
+.userbar .uname{font-size:13px;color:rgba(255,255,255,0.7);}
+.userbar .btn{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.18);color:#fff;}
+.userbar .btn:hover{background:rgba(255,255,255,0.16);}
+nav{display:flex;flex-direction:column;gap:2px;}
+nav button{background:none;border:none;padding:10px 12px;font-size:13.5px;cursor:pointer;color:rgba(255,255,255,0.65);border-left:3px solid transparent;font-weight:500;text-align:left;border-radius:0 6px 6px 0;letter-spacing:.2px;}
+nav button:hover{background:rgba(255,255,255,0.06);color:#fff;}
+nav button.active{color:#fff;border-left-color:var(--gold);background:rgba(255,255,255,0.1);font-weight:600;}
+.logo-wrap{margin-bottom:12px;background:#fff;border-radius:8px;padding:8px;display:inline-block;}
+.logo-wrap img{max-width:100%;max-height:56px;display:block;}
+.sidebar h1{border-top:none;border-bottom:2px solid var(--gold);padding-bottom:10px;margin-bottom:10px;}
+@media (max-width:760px){
+  .app{flex-direction:column;}
+  .sidebar{width:100%;position:static;}
+  nav{flex-direction:row;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,0.12);padding-bottom:8px;}
+  nav button{border-left:none;border-bottom:2px solid transparent;border-radius:0;}
+  nav button.active{border-left-color:transparent;border-bottom-color:var(--gold);background:none;color:#fff;}
+  .userbar{border-top:none;margin-top:8px;padding-top:0;}
+}
+.section{display:none;}
+.section.active{display:block;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
+.card .label{font-size:11px;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;}
+.card .value{font-size:22px;font-weight:600;color:var(--accent);}
+.group{margin-bottom:20px;}
+.group h3{font-size:14px;font-weight:600;margin:0 0 8px;display:flex;align-items:center;gap:8px;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;}
+.activity{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
+.activity-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;}
+.activity-title{font-weight:600;font-size:14px;margin-right:6px;}
+.activity-desc{color:var(--text2);font-size:13px;margin-top:4px;}
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:100px;margin-right:4px;}
+.badge.alta{background:var(--red-bg);color:var(--red);}
+.badge.media{background:var(--amber-bg);color:var(--amber);}
+.badge.baixa{background:var(--green-bg);color:var(--green);}
+.badge.pendente{background:var(--gray-bg);color:var(--gray);}
+.badge.finalizada{background:var(--green-bg);color:var(--green);}
+.badge.redirecionada{background:var(--blue-bg);color:var(--blue);}
+.badge.reagendada{background:var(--amber-bg);color:var(--amber);}
+.badge.owner{background:var(--gold-bg);color:var(--gold);}
+.badge.collaborator{background:var(--gray-bg);color:var(--gray);}
+.activity-controls{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;}
+select, input, textarea, button.btn{font-family:inherit;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:#fff;color:var(--text);}
+button.btn{cursor:pointer;}
+button.btn:hover{background:var(--bg);}
+button.btn.primary{background:var(--gradient);color:#fff;border-color:transparent;}
+button.btn.primary:hover{filter:brightness(1.08);}
+.timer{font-variant-numeric:tabular-nums;font-weight:600;min-width:64px;display:inline-block;}
+form.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
+form.form-grid .full{grid-column:1/-1;}
+form.form-grid label{font-size:12px;color:var(--text2);display:block;margin-bottom:4px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+table th, table td{text-align:left;padding:8px;border-bottom:1px solid var(--border);}
+table th{color:var(--text2);font-weight:500;font-size:12px;}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.muted{color:var(--text2);font-size:12px;}
+.empty{color:var(--text3);font-size:13px;padding:20px;text-align:center;}
+.icon-btn{background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:4px;text-decoration:underline;}
+.icon-btn:hover{color:var(--red);}
+.chat-wrap{display:flex;flex-direction:column;height:70vh;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
+.chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+.chat-msg{max-width:80%;padding:8px 12px;border-radius:10px;background:var(--bg);align-self:flex-start;}
+.chat-msg.mine{align-self:flex-end;background:var(--accent-bg);}
+.chat-msg .chat-meta{font-size:11px;color:var(--text2);margin-bottom:2px;}
+.chat-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);}
+.chat-form input{flex:1;}
+/* Layout da tela inicial (Hoje) com chat fixo na lateral direita */
+.home-layout{display:flex;gap:16px;align-items:flex-start;}
+.home-main{flex:1;min-width:0;}
+.home-chat{width:320px;flex-shrink:0;position:sticky;top:0;}
+.home-chat-title{margin:0 0 8px;font-size:14px;color:var(--text2);font-weight:600;}
+.home-chat .chat-wrap{height:calc(100vh - 120px);}
+@media (max-width:1000px){
+  .home-layout{flex-direction:column;}
+  .home-chat{width:100%;position:static;}
+  .home-chat .chat-wrap{height:400px;}
+}
+/* Campo com ícone (ex: valor em R$) */
+.input-icon-wrap{position:relative;}
+.input-icon-wrap .input-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:13px;font-weight:600;pointer-events:none;}
+.input-icon-wrap input{padding-left:30px;width:100%;}
+textarea{width:100%;min-height:60px;resize:vertical;}
+.cliente-tag{color:var(--accent);font-size:12px;margin-top:2px;}
+.comments{margin-top:10px;border-top:1px solid var(--border);padding-top:8px;}
+.comment-list{margin-top:6px;}
+.comment{background:var(--bg);border-radius:6px;padding:6px 8px;margin-bottom:6px;font-size:13px;}
+.comment b{font-size:12px;}
+.act-notes{margin-top:10px;border-top:1px solid var(--border);padding-top:8px;}
+.act-notes .comment{background:var(--gold-bg);}
+.hist-list{margin-top:6px;border-top:1px solid var(--border);padding-top:6px;}
+.attachments{margin-top:8px;}
+.attachments .att-item{font-size:13px;margin-top:4px;}
+.attachments a{color:var(--accent);}
+.overdue h3{color:var(--red);}
+.overdue .activity{border-color:var(--red-bg);}
+.chart-card{height:260px;}
+.chart-card canvas{max-height:220px;}
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+@media (max-width:600px){.charts-grid{grid-template-columns:1fr;}}
+/* Comissão - botões de percentual */
+.pct-group{display:flex;gap:6px;flex-wrap:wrap;}
+.pct-group button{border:1px solid var(--border);background:#fff;border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;color:var(--text2);}
+.pct-group button.active{background:var(--gradient);color:#fff;border-color:transparent;}
+.pct-group input[type=hidden]{display:none;}
+/* Funil de vendas - kanban */
+.kanban{display:grid;grid-template-columns:repeat(6,minmax(180px,1fr));gap:10px;overflow-x:auto;}
+@media (max-width:1100px){.kanban{grid-template-columns:repeat(6,220px);}}
+.kanban-col{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;min-height:120px;}
+.kanban-col h4{font-size:13px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;color:var(--accent);border-bottom:2px solid var(--gold);padding-bottom:6px;}
+.kanban-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px;}
+.kanban-card .kc-title{font-weight:600;margin-bottom:4px;}
+.kanban-card .kc-value{color:var(--gold);font-weight:600;font-size:12px;margin-bottom:4px;}
+.kanban-card select{width:100%;margin-bottom:6px;}
+.kanban-card .row{gap:6px;}
+.summary-cards .card .value{color:var(--accent);}
+/* Auth screen */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--gradient);}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:28px;width:100%;max-width:360px;box-shadow:0 10px 30px rgba(15,34,56,0.25);}
+.auth-card h1{font-size:20px;margin:0 0 16px;text-align:center;color:var(--accent);border-bottom:2px solid var(--gold);padding-bottom:12px;}
+.auth-card label{font-size:12px;color:var(--text2);display:block;margin:10px 0 4px;}
+.auth-card input{width:100%;}
+.auth-card button.btn{width:100%;margin-top:14px;}
+.auth-links{display:flex;justify-content:space-between;margin-top:14px;font-size:12px;}
+.auth-links a{color:var(--accent);text-decoration:none;}
+.auth-error{background:var(--red-bg);color:var(--red);border-radius:6px;padding:8px 10px;font-size:13px;margin-bottom:8px;}
+.auth-info{background:var(--accent-bg);color:var(--accent);border-radius:6px;padding:8px 10px;font-size:12px;margin-top:10px;}
+.spinner-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--text2);}
+/* Aba Hoje - grade de ícones */
+.activity-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;}
+/* Aba Hoje - grupos como ícones clicáveis (Atrasadas, colaboradores) */
+.hoje-icon-grid{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;}
+.hoje-icon-card{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:96px;cursor:pointer;box-shadow:0 1px 3px rgba(28,38,56,0.04);transition:border-color .15s,box-shadow .15s;}
+.hoje-icon-card:hover{border-color:var(--accent);}
+.hoje-icon-card.active{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-bg);}
+.hoje-icon-card .hoje-icon{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;background:var(--accent-bg);color:var(--accent);}
+.hoje-icon-card.overdue .hoje-icon{background:var(--red-bg);color:var(--red);}
+.hoje-icon-label{font-size:12px;font-weight:600;color:var(--text);text-align:center;}
+.hoje-icon-count{font-size:11px;color:var(--text2);}
+.activity.compact{padding:10px 12px;}
+.act-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+.alerts{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.act-head{display:flex;align-items:center;gap:8px;}
+.act-icon{font-size:20px;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.act-icon.pendente{background:var(--gray-bg);color:var(--gray);}
+.act-icon.finalizada{background:var(--green-bg);color:var(--green);}
+.act-icon.redirecionada{background:var(--blue-bg);color:var(--blue);}
+.act-icon.running{background:var(--lilac-bg);color:var(--lilac);}
+.act-head .activity-title{font-size:13px;}
+.act-toggle{margin-top:8px;}
+/* Avatares de colaborador */
+.avatar{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;color:#fff;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;}
+.avatar.lg{width:48px;height:48px;font-size:18px;}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(20,16,40,0.45);display:flex;align-items:center;justify-content:center;z-index:1000;}
+.modal{background:var(--card);border-radius:10px;padding:20px;max-width:380px;width:90%;box-shadow:0 10px 30px rgba(15,34,56,0.2);}
+.modal h3{margin:0 0 4px;}
+.modal .close-row{text-align:right;margin-top:14px;}
+/* Alertas */
+.alert-card{border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid var(--border);}
+.alert-card.birthday{background:var(--gold-bg);border-color:var(--gold);}
+.alert-card.contact{background:var(--lilac-bg);border-color:var(--lilac);}
+.alert-card h4{margin:0 0 4px;font-size:13px;}
+/* Próximo contato no kanban */
+.kc-next{font-size:12px;margin-top:4px;padding:2px 6px;border-radius:6px;display:inline-block;}
+.kc-next.due{background:var(--amber-bg);color:var(--amber);}
+.kc-next.overdue{background:var(--red-bg);color:var(--red);}
+.kc-next.future{background:var(--bg);color:var(--text2);}
+/* Aba Cards (quadro de notas) */
+.notes-board{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+.note-card{border-radius:10px;padding:12px 14px;border:1px solid var(--border);min-height:120px;display:flex;flex-direction:column;}
+.note-card h4{margin:0 0 6px;font-size:14px;}
+.note-card .note-body{flex:1;font-size:13px;color:var(--text2);white-space:pre-wrap;word-break:break-word;}
+.note-card .note-footer{margin-top:8px;display:flex;justify-content:flex-end;gap:6px;}
+.note-color-c1{background:var(--lilac-bg);}
+.note-color-c2{background:var(--accent-bg);}
+.note-color-c3{background:var(--gold-bg);}
+.note-color-c4{background:var(--green-bg);}
+.note-color-c5{background:var(--amber-bg);}
+.note-color-c6{background:#fff;}
+</style>
+</head>
+<body>
+
+<div id="loadingScreen" class="spinner-wrap">Carregando…</div>
+
+<div id="loginScreen" class="auth-wrap" style="display:none;">
+  <div class="auth-card">
+    <h1>Gestão de Equipe</h1>
+    <div id="authError" class="auth-error" style="display:none;"></div>
+
+    <form id="loginForm">
+      <label>E-mail</label>
+      <input type="email" id="loginEmail" required>
+      <label>Senha</label>
+      <input type="password" id="loginPassword" required>
+      <button class="btn primary" type="submit">Entrar</button>
+    </form>
+    <div class="auth-links">
+      <a href="#" id="showSignup">Primeiro acesso? Criar conta</a>
+      <a href="#" id="showReset">Esqueci a senha</a>
+    </div>
+
+    <form id="signupForm" style="display:none;">
+      <label>Nome</label>
+      <input type="text" id="signupName" required>
+      <label>E-mail</label>
+      <input type="email" id="signupEmail" required>
+      <label>Senha (mínimo 6 caracteres)</label>
+      <input type="password" id="signupPassword" required minlength="6">
+      <button class="btn primary" type="submit">Criar conta</button>
+      <div class="auth-info">Use isto apenas para criar a primeira conta (administradora). Depois de criar, siga o guia de configuração para se tornar administradora e adicionar colaboradores pelo próprio sistema.</div>
+      <div class="auth-links"><a href="#" id="backToLogin1">Voltar para login</a></div>
+    </form>
+
+    <form id="resetForm" style="display:none;">
+      <label>E-mail</label>
+      <input type="email" id="resetEmail" required>
+      <button class="btn primary" type="submit">Enviar link de redefinição</button>
+      <div class="auth-links"><a href="#" id="backToLogin2">Voltar para login</a></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+<div class="app">
+<aside class="sidebar">
+  <div class="logo-wrap"><img src="logo.png" alt="Logo da empresa" onerror="this.style.display='none'"></div>
+  <h1>Gestão de Equipe</h1>
+  <div class="date" id="todayLabel"></div>
+  <nav id="mainNav"></nav>
+  <div class="userbar">
+    <span class="uname" id="userName"></span>
+    <button class="btn" id="logoutBtn">Sair</button>
+  </div>
+</aside>
+<main class="main">
+
+<section id="tab-hoje" class="section active">
+  <div class="home-layout">
+    <div class="home-main">
+      <div class="cards" id="hojeStats"></div>
+      <div id="hojeGroups"></div>
+    </div>
+    <aside class="home-chat">
+      <h3 class="home-chat-title">💬 Chat da equipe</h3>
+      <div class="chat-wrap">
+        <div id="chatMessages" class="chat-messages"></div>
+        <form id="chatForm" class="chat-form">
+          <input type="text" id="chatInput" placeholder="Digite uma mensagem..." autocomplete="off" required>
+          <button class="btn primary" type="submit">Enviar</button>
+        </form>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<section id="tab-atividades" class="section owner-only">
+  <div class="row" style="margin-bottom:12px;">
+    <button class="btn primary" id="newActivityBtn">+ Nova atividade</button>
+  </div>
+  <div id="activityFormWrap"></div>
+  <div id="activitiesList"></div>
+</section>
+
+<section id="tab-clientes" class="section">
+  <div class="cards summary-cards" id="clientesStats"></div>
+  <div class="row" style="margin-bottom:12px;">
+    <button class="btn primary" id="newClientBtn">+ Novo cliente</button>
+  </div>
+  <div id="clientFormWrap"></div>
+  <div id="clientsList"></div>
+</section>
+
+<section id="tab-funil" class="section owner-only">
+  <div class="row" style="margin-bottom:12px;">
+    <button class="btn primary" id="newLeadBtn">+ Novo lead</button>
+  </div>
+  <div id="leadFormWrap"></div>
+  <div class="kanban" id="funilBoard"></div>
+</section>
+
+<section id="tab-colaboradores" class="section owner-only">
+  <div id="addCollabMsg"></div>
+  <form class="form-grid" id="collabForm">
+    <div><label>Nome</label><input type="text" id="collabName" required></div>
+    <div><label>E-mail</label><input type="email" id="collabEmail" required></div>
+    <div><label>Senha provisória (mín. 6 caracteres)</label><input type="password" id="collabPassword" required minlength="6"></div>
+    <div class="full"><button class="btn primary" type="submit">Adicionar colaborador</button></div>
+    <div class="full muted">Compartilhe o e-mail e a senha provisória com a pessoa. Ela pode trocar a senha depois usando "Esqueci a senha" na tela de login.</div>
+  </form>
+  <div id="collabList"></div>
+</section>
+
+<section id="tab-ponto" class="section">
+  <div id="pontoList"></div>
+</section>
+
+<section id="tab-relatorios" class="section owner-only">
+  <div class="row" style="margin-bottom:16px;">
+    <label class="muted">Data:</label>
+    <input type="date" id="reportDate">
+    <button class="btn" id="copyReportBtn">Copiar resumo</button>
+    <button class="btn" id="exportCsvBtn">Exportar CSV</button>
+    <button class="btn" id="exportPdfBtn">Exportar PDF</button>
+  </div>
+  <div class="charts-grid">
+    <div class="card chart-card"><canvas id="chartHoras"></canvas></div>
+    <div class="card chart-card"><canvas id="chartStatus"></canvas></div>
+  </div>
+  <div id="reportContent"></div>
+</section>
+
+<section id="tab-arquivo" class="section owner-only">
+  <p class="muted">Relatórios diários arquivados automaticamente (gerados ao acessar o sistema, cobrindo dias anteriores que ainda não tinham sido arquivados).</p>
+  <div id="arquivoList"></div>
+</section>
+
+<section id="tab-contas" class="section owner-only">
+  <div class="row" style="margin-bottom:12px;">
+    <button class="btn primary" id="newPayableBtn">+ Nova conta</button>
+    <button class="btn" id="genPayablesReportBtn">Gerar relatório do mês e arquivar</button>
+  </div>
+  <div id="payableFormWrap"></div>
+  <h3>Contas deste mês</h3>
+  <div id="payablesMonthList"></div>
+  <h3>Todas as contas cadastradas</h3>
+  <div id="payablesList"></div>
+  <h3>Relatórios mensais arquivados</h3>
+  <p class="muted">Arquivados automaticamente ao acessar o sistema (meses anteriores) ou manualmente pelo botão acima (mês atual).</p>
+  <div id="payablesArchiveList"></div>
+</section>
+
+<section id="tab-links" class="section">
+  <div class="row" style="margin-bottom:12px;" id="linksAddRow"></div>
+  <div id="linkFormWrap"></div>
+  <div id="linksList"></div>
+</section>
+
+<section id="tab-cards" class="section">
+  <div class="row" style="margin-bottom:12px;">
+    <button class="btn primary" id="newCardBtn">+ Novo card</button>
+  </div>
+  <div id="noteCardFormWrap"></div>
+  <div class="notes-board" id="notesBoard"></div>
+</section>
+
+<section id="tab-video" class="section">
+  <div class="form-grid" style="margin-bottom:12px;">
+    <div>
+      <label>Nome da sala</label>
+      <input type="text" id="videoRoomName" placeholder="Ex: reuniao-cliente-joao">
+    </div>
+    <div class="full row">
+      <button class="btn primary" id="startVideoBtn">Iniciar / Entrar na sala</button>
+    </div>
+  </div>
+  <div id="videoShareWrap" style="display:none;margin-bottom:12px;">
+    <label>Link para compartilhar (o cliente entra direto, sem login)</label>
+    <div class="row">
+      <input type="text" id="videoShareLink" readonly style="flex:1;">
+      <button class="btn" id="copyVideoLinkBtn">Copiar link</button>
+    </div>
+  </div>
+  <div id="videoFrameWrap"></div>
+</section>
+
+</main>
+</div>
+</div>
+
+<div id="collabModalOverlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeCollabProfile();">
+  <div class="modal" id="collabModalContent"></div>
+</div>
+
+<script>
+/* ======================================================================
+   CONFIGURAÇÃO DO FIREBASE
+   Substitua os valores abaixo pelas credenciais do SEU projeto Firebase.
+   Veja o GUIA_DE_CONFIGURACAO.md para o passo a passo.
+   ====================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAQAyxO4GbO6Zx_EWmmzmkmalVEzqzTDQw",
+  authDomain: "gestao-equipe-mildian-peixoto.firebaseapp.com",
+  projectId: "gestao-equipe-mildian-peixoto",
+  storageBucket: "gestao-equipe-mildian-peixoto.firebasestorage.app",
+  messagingSenderId: "267662756079",
+  appId: "1:267662756079:web:710bc48c54cb362dd4b31a"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+/* ====================== Constantes e helpers ====================== */
+const PRIORITY_LABELS={alta:'Alta',media:'Média',baixa:'Baixa'};
+const RECUR_LABELS={nenhuma:'Não repete',diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal',mensal:'Mensal'};
+const STATUS_LABELS={pendente:'Pendente',finalizada:'Finalizada',redirecionada:'Redirecionada',reagendada:'Reagendada'};
+
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function prioRank(p){return {alta:0,media:1,baixa:2}[p]??3;}
+function dstr(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
+function todayStr(){return dstr(new Date());}
+function fmtHMS(sec){
+  sec=Math.max(0,Math.round(sec));
+  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+  return [h,m,s].map(v=>String(v).padStart(2,'0')).join(':');
+}
+function fmtHours(sec){ return (sec/3600).toFixed(1).replace('.',',')+'h'; }
+function ts(){ return firebase.firestore.Timestamp.now(); }
+function del(){ return firebase.firestore.FieldValue.delete(); }
+
+function activityAppliesOn(act,ds){
+  if(ds<act.startDate) return false;
+  const date=new Date(ds+'T00:00:00');
+  const start=new Date(act.startDate+'T00:00:00');
+  switch(act.recurrence){
+    case 'nenhuma': return ds===act.startDate;
+    case 'diaria': return true;
+    case 'semanal': return date.getDay()===start.getDay();
+    case 'quinzenal': return Math.round((date-start)/86400000)%14===0;
+    case 'mensal': return date.getDate()===start.getDate();
+    default: return false;
+  }
+}
+function occElapsed(occ){
+  let t=(occ&&occ.timeSpent)||0;
+  if(occ&&occ.timerStart) t += (Date.now()-occ.timerStart.toMillis())/1000;
+  return t;
+}
+function logTotalSeconds(log){
+  if(!log) return 0;
+  let total=(log.sessions||[]).reduce((s,x)=>s+(x.out.toMillis()-x.in.toMillis())/1000,0);
+  if(log.activeStart) total += (Date.now()-log.activeStart.toMillis())/1000;
+  return total;
+}
+function userName(uid){
+  const u=state.users.find(u=>u.id===uid);
+  return u?u.name:'(removido)';
+}
+function fmtDateTime(tsVal){
+  if(!tsVal) return '';
+  return new Date(tsVal.toMillis()).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function historicoListHtml(historico){
+  if(!historico||!historico.length) return '<div class="muted">Nenhum registro ainda.</div>';
+  return historico.slice().reverse().map(h=>`<div class="comment"><span class="muted">${fmtDateTime(h.at)}${h.name?' · '+esc(h.name):''}</span><div>${esc(h.texto)}</div></div>`).join('');
+}
+function fmtDateBR(ds){
+  const [y,m,d]=ds.split('-');
+  return `${d}/${m}`;
+}
+function fmtDateFull(ds){
+  if(!ds) return '';
+  const [y,m,d]=ds.split('-');
+  return `${d}/${m}/${y}`;
+}
+function fmtBRL(v){
+  return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+}
+
+/* ====================== Avatares de colaborador ====================== */
+const AVATAR_COLORS=['#9b6fd1','#4658c9','#c8973b','#0f6e56','#185fa5','#a32d2d','#854f0b','#5f5e5a'];
+function avatarColor(uid){
+  let h=0; for(let i=0;i<(uid||'').length;i++) h=(h*31+uid.charCodeAt(i))>>>0;
+  return AVATAR_COLORS[h%AVATAR_COLORS.length];
+}
+function initials(name){
+  return (name||'?').trim().split(/\s+/).slice(0,2).map(p=>p[0]).join('').toUpperCase();
+}
+function avatarHtml(uid,size){
+  const u=state.users.find(x=>x.id===uid);
+  const name=u?u.name:'(removido)';
+  return `<span class="avatar${size==='lg'?' lg':''}" style="background:${avatarColor(uid)}" onclick="event.stopPropagation();showCollabProfile('${uid}')" title="${esc(name)}">${esc(initials(name))}</span>`;
+}
+function showCollabProfile(uid){
+  const u=state.users.find(x=>x.id===uid);
+  if(!u) return;
+  const ds=todayStr();
+  let totalAtividades=0, finalizadas=0;
+  state.activities.forEach(act=>{
+    if(!activityAppliesOn(act,ds)) return;
+    const occ=state.occToday[act.id]||{status:'pendente',redirectedTo:null};
+    const eff=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
+    if(eff!==uid) return;
+    totalAtividades++;
+    if(occ.status==='finalizada') finalizadas++;
+  });
+  const horas=fmtHours(logTotalSeconds(state.logsToday[uid]));
+  document.getElementById('collabModalContent').innerHTML=`
+    <div class="row" style="align-items:center;gap:12px;">
+      <span class="avatar lg" style="background:${avatarColor(uid)}">${esc(initials(u.name))}</span>
+      <div>
+        <h3>${esc(u.name)}</h3>
+        <div class="muted">${esc(u.email||'')}</div>
+        <span class="badge ${u.role}">${u.role==='owner'?'Administradora':'Colaborador(a)'}</span>
+      </div>
+    </div>
+    <div class="cards" style="margin-top:14px;">
+      <div class="card"><div class="label">Atividades hoje</div><div class="value">${totalAtividades}</div></div>
+      <div class="card"><div class="label">Finalizadas hoje</div><div class="value">${finalizadas}</div></div>
+      <div class="card"><div class="label">Horas hoje</div><div class="value">${horas}</div></div>
+    </div>
+    <div class="close-row"><button class="btn" onclick="closeCollabProfile()">Fechar</button></div>
+  `;
+  document.getElementById('collabModalOverlay').style.display='flex';
+}
+function closeCollabProfile(){
+  document.getElementById('collabModalOverlay').style.display='none';
+}
+
+/* ====================== Alertas: aniversariantes e próximos contatos ====================== */
+function getAniversariantesHoje(){
+  const today=new Date();
+  const mm=String(today.getMonth()+1).padStart(2,'0');
+  const dd=String(today.getDate()).padStart(2,'0');
+  return state.clients.filter(c=>c.dataNascimento && c.dataNascimento.slice(5)===`${mm}-${dd}`);
+}
+function getContatosPendentes(){
+  const ds=todayStr();
+  return (state.leads||[]).filter(l=>l.proximoContato && l.proximoContato<=ds);
+}
+
+/* ====================== Constantes: Clientes e Funil ====================== */
+const COMMISSION_OPTIONS=[10,15,20,25,30,35,40];
+const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',perdido:'Perdida'};
+const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','perdido'];
+
+/* ====================== Estado global ====================== */
+let currentUser=null; // {uid,name,email,role}
+let listeners=[];      // listeners "permanentes" (users, activities)
+let todayUnsubs=[];    // listeners do dia atual
+let reportUnsubs=[];   // listeners do relatório (data selecionada)
+let overdueUnsubs=[];  // listeners das atividades atrasadas
+let expandedComments=new Set();
+let expandedArquivo=new Set();
+let expandedLeadHist=new Set();
+let expandedClientHist=new Set();
+let expandedActDetail=new Set();
+let expandedHojeGroups=new Set();
+let expandedReschedule=new Set();
+let expandedNotes=new Set();
+let reportsArchived=false;
+let chartHoras=null, chartStatus=null;
+let state={
+  users:[],
+  activities:[],
+  occToday:{},
+  logsToday:{},
+  occReport:{},
+  logsReport:{},
+  occRange:{},
+  clients:[],
+  leads:[],
+  links:[],
+  dailyReports:[],
+  cards:[],
+  payables:[],
+  payableOccCurrent:{},
+  payablesArchive:[]
+};
+
+document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+
+/* ====================== Autenticação ====================== */
+function showAuthError(err){
+  const map={
+    'auth/user-not-found':'Usuário não encontrado.',
+    'auth/wrong-password':'Senha incorreta.',
+    'auth/invalid-email':'E-mail inválido.',
+    'auth/email-already-in-use':'Este e-mail já está cadastrado.',
+    'auth/weak-password':'A senha deve ter pelo menos 6 caracteres.',
+    'auth/invalid-credential':'E-mail ou senha incorretos.',
+    'auth/too-many-requests':'Muitas tentativas. Tente novamente mais tarde.'
+  };
+  const el=document.getElementById('authError');
+  el.textContent = map[err.code] || ('Erro: '+err.message);
+  el.style.display='block';
+}
+function clearAuthError(){
+  const el=document.getElementById('authError');
+  el.style.display='none'; el.textContent='';
+}
+function showAuthForm(which){
+  clearAuthError();
+  document.getElementById('loginForm').style.display = which==='login'?'block':'none';
+  document.getElementById('signupForm').style.display = which==='signup'?'block':'none';
+  document.getElementById('resetForm').style.display = which==='reset'?'block':'none';
+  document.querySelector('.auth-links').style.display = which==='login'?'flex':'none';
+}
+document.getElementById('showSignup').addEventListener('click',e=>{e.preventDefault();showAuthForm('signup');});
+document.getElementById('showReset').addEventListener('click',e=>{e.preventDefault();showAuthForm('reset');});
+document.getElementById('backToLogin1').addEventListener('click',e=>{e.preventDefault();showAuthForm('login');});
+document.getElementById('backToLogin2').addEventListener('click',e=>{e.preventDefault();showAuthForm('login');});
+
+document.getElementById('loginForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  clearAuthError();
+  const email=document.getElementById('loginEmail').value.trim();
+  const pass=document.getElementById('loginPassword').value;
+  auth.signInWithEmailAndPassword(email,pass).catch(showAuthError);
+});
+document.getElementById('signupForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  clearAuthError();
+  const name=document.getElementById('signupName').value.trim();
+  const email=document.getElementById('signupEmail').value.trim();
+  const pass=document.getElementById('signupPassword').value;
+  auth.createUserWithEmailAndPassword(email,pass).then(cred=>{
+    return db.collection('users').doc(cred.user.uid).set({
+      name, email, role:'collaborator', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }).catch(showAuthError);
+});
+document.getElementById('resetForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  clearAuthError();
+  const email=document.getElementById('resetEmail').value.trim();
+  auth.sendPasswordResetEmail(email).then(()=>{
+    alert('Se este e-mail estiver cadastrado, um link de redefinição foi enviado.');
+    showAuthForm('login');
+  }).catch(showAuthError);
+});
+document.getElementById('logoutBtn').addEventListener('click',()=>auth.signOut());
+
+auth.onAuthStateChanged(async user=>{
+  document.getElementById('loadingScreen').style.display='none';
+  detachAllListeners();
+  if(user){
+    try{
+      const docSnap=await db.collection('users').doc(user.uid).get();
+      if(!docSnap.exists){
+        await auth.signOut();
+        return;
+      }
+      currentUser={uid:user.uid, ...docSnap.data()};
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('app').style.display='block';
+      initApp();
+    }catch(err){
+      document.getElementById('loginScreen').style.display='flex';
+      showAuthForm('login');
+      showAuthError(err);
+    }
+  }else{
+    currentUser=null;
+    document.getElementById('app').style.display='none';
+    document.getElementById('loginScreen').style.display='flex';
+    showAuthForm('login');
+  }
+});
+
+function detachAllListeners(){
+  listeners.forEach(u=>u()); listeners=[];
+  todayUnsubs.forEach(u=>u()); todayUnsubs=[];
+  reportUnsubs.forEach(u=>u()); reportUnsubs=[];
+  overdueUnsubs.forEach(u=>u()); overdueUnsubs=[];
+  reportsArchived=false;
+}
+
+/* ====================== Inicialização do app ====================== */
+function initApp(){
+  document.getElementById('userName').textContent =
+    currentUser.name + (currentUser.role==='owner'?' · administradora':' · colaborador(a)');
+  setupNav();
+
+  listeners.push(db.collection('users').onSnapshot(snap=>{
+    state.users=[]; snap.forEach(d=>state.users.push({id:d.id,...d.data()}));
+    renderAll();
+  },err=>console.error(err)));
+
+  listeners.push(db.collection('activities').onSnapshot(snap=>{
+    state.activities=[]; snap.forEach(d=>state.activities.push({id:d.id,...d.data()}));
+    renderAll();
+    if(currentUser.role==='owner' && !reportsArchived){
+      reportsArchived=true;
+      archiveMissingReports();
+    }
+  },err=>console.error(err)));
+
+  subscribeToday();
+  subscribeOverdue();
+
+  listeners.push(db.collection('links').onSnapshot(snap=>{
+    state.links=[]; snap.forEach(d=>state.links.push({id:d.id,...d.data()}));
+    renderLinks();
+  },err=>console.error(err)));
+
+  listeners.push(db.collection('cards').onSnapshot(snap=>{
+    state.cards=[]; snap.forEach(d=>state.cards.push({id:d.id,...d.data()}));
+    renderNotesBoard();
+  },err=>console.error(err)));
+
+  listeners.push(db.collection('chatMessages').orderBy('createdAt','desc').limit(CHAT_LIMIT).onSnapshot(snap=>{
+    const msgs=[]; snap.forEach(d=>msgs.push({id:d.id,...d.data()}));
+    msgs.reverse();
+    renderChat(msgs);
+  },err=>console.error(err)));
+
+  listeners.push(db.collection('clients').onSnapshot(snap=>{
+    state.clients=[]; snap.forEach(d=>state.clients.push({id:d.id,...d.data()}));
+    renderClients();
+    renderHoje();
+  },err=>console.error(err)));
+
+  if(currentUser.role==='owner'){
+    document.getElementById('reportDate').value=todayStr();
+    subscribeReport(todayStr());
+
+    listeners.push(db.collection('leads').onSnapshot(snap=>{
+      state.leads=[]; snap.forEach(d=>state.leads.push({id:d.id,...d.data()}));
+      renderFunil();
+      renderHoje();
+    },err=>console.error(err)));
+
+    listeners.push(db.collection('dailyReports').onSnapshot(snap=>{
+      state.dailyReports=[]; snap.forEach(d=>state.dailyReports.push({id:d.id,...d.data()}));
+      renderArquivo();
+    },err=>console.error(err)));
+
+    listeners.push(db.collection('payables').onSnapshot(snap=>{
+      state.payables=[]; snap.forEach(d=>state.payables.push({id:d.id,...d.data()}));
+      renderPayables();
+    },err=>console.error(err)));
+
+    listeners.push(db.collection('payableOccurrences').where('month','==',currentMonthKey()).onSnapshot(snap=>{
+      state.payableOccCurrent={}; snap.forEach(d=>{ const data=d.data(); state.payableOccCurrent[data.payableId]=data; });
+      renderPayablesMonthList();
+    },err=>console.error(err)));
+
+    listeners.push(db.collection('payablesArchive').onSnapshot(snap=>{
+      state.payablesArchive=[]; snap.forEach(d=>state.payablesArchive.push({id:d.id,...d.data()}));
+      renderPayablesArchive();
+    },err=>console.error(err)));
+
+    archiveMissingPayablesReports();
+  }
+
+  switchTab('hoje');
+}
+
+function setupNav(){
+  const nav=document.getElementById('mainNav');
+  if(currentUser.role==='owner'){
+    nav.innerHTML=`
+      <button data-tab="hoje" class="active">Hoje</button>
+      <button data-tab="atividades">Atividades</button>
+      <button data-tab="clientes">Clientes</button>
+      <button data-tab="funil">Funil de Vendas</button>
+      <button data-tab="colaboradores">Colaboradores</button>
+      <button data-tab="ponto">Ponto</button>
+      <button data-tab="relatorios">Relatórios</button>
+      <button data-tab="arquivo">Arquivo</button>
+      <button data-tab="contas">Contas a Pagar</button>
+      <button data-tab="links">Links</button>
+      <button data-tab="cards">Cards</button>
+      <button data-tab="video">Videoconferência</button>
+    `;
+  }else{
+    nav.innerHTML=`
+      <button data-tab="hoje" class="active">Minhas tarefas</button>
+      <button data-tab="clientes">Clientes</button>
+      <button data-tab="ponto">Meu ponto</button>
+      <button data-tab="links">Links</button>
+      <button data-tab="cards">Cards</button>
+      <button data-tab="video">Videoconferência</button>
+    `;
+  }
+  nav.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab,b)));
+  document.querySelectorAll('.owner-only').forEach(el=>{
+    el.style.display = currentUser.role==='owner' ? '' : 'none';
+  });
+}
+function switchTab(tab,btn){
+  document.querySelectorAll('#mainNav button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  const navBtn = btn || document.querySelector(`#mainNav button[data-tab="${tab}"]`);
+  if(navBtn) navBtn.classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+}
+
+/* ====================== Listeners do dia atual ====================== */
+function subscribeToday(){
+  todayUnsubs.forEach(u=>u()); todayUnsubs=[];
+  const ds=todayStr();
+  todayUnsubs.push(db.collection('occurrences').where('date','==',ds).onSnapshot(snap=>{
+    state.occToday={}; snap.forEach(d=>state.occToday[d.data().activityId]=d.data());
+    renderHoje();
+  },err=>console.error(err)));
+  todayUnsubs.push(db.collection('timeLogs').where('date','==',ds).onSnapshot(snap=>{
+    state.logsToday={}; snap.forEach(d=>state.logsToday[d.data().uid]=d.data());
+    renderHoje();
+    renderPonto();
+  },err=>console.error(err)));
+}
+
+/* ====================== Atividades atrasadas ====================== */
+const OVERDUE_LOOKBACK_DAYS=7;
+function subscribeOverdue(){
+  overdueUnsubs.forEach(u=>u()); overdueUnsubs=[];
+  const start=dstr(new Date(Date.now()-OVERDUE_LOOKBACK_DAYS*86400000));
+  const today=todayStr();
+  overdueUnsubs.push(db.collection('occurrences').where('date','>=',start).where('date','<',today).onSnapshot(snap=>{
+    state.occRange={};
+    snap.forEach(d=>{ const data=d.data(); state.occRange[`${data.date}_${data.activityId}`]=data; });
+    renderHoje();
+  },err=>console.error(err)));
+}
+function computeOverdue(){
+  const isOwner=currentUser.role==='owner';
+  const result=[];
+  for(let i=1;i<=OVERDUE_LOOKBACK_DAYS;i++){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const ds=dstr(d);
+    state.activities.forEach(act=>{
+      if(!activityAppliesOn(act,ds)) return;
+      const occ=state.occRange[`${ds}_${act.id}`]||{status:'pendente',timeSpent:0};
+      if(occ.status==='finalizada'||occ.status==='reagendada') return;
+      const isRedirected=occ.status==='redirecionada'&&occ.redirectedTo;
+      const effAssignee=isRedirected?occ.redirectedTo:act.assignedTo;
+      const isOriginalResponsible=act.assignedTo===currentUser.uid;
+      if(!isOwner && effAssignee!==currentUser.uid && !(isRedirected && isOriginalResponsible)) return;
+      const redirectedFromMe=!!(isRedirected && isOriginalResponsible && effAssignee!==currentUser.uid);
+      result.push({act,occ,date:ds,assignee:effAssignee,redirectedFromMe});
+    });
+  }
+  result.sort((a,b)=>a.date.localeCompare(b.date));
+  return result;
+}
+function markOverdueDone(actId,ds){
+  setOccurrence(ds,actId,{status:'finalizada',timerStart:del()});
+}
+function toggleRescheduleForm(key){
+  if(expandedReschedule.has(key)) expandedReschedule.delete(key);
+  else expandedReschedule.add(key);
+  renderHoje();
+}
+function confirmReschedule(actId,ds,key){
+  const input=document.getElementById(`reschedule-${key}`);
+  if(!input||!input.value) return;
+  const newDate=input.value;
+  const act=state.activities.find(a=>a.id===actId);
+  setOccurrence(ds,actId,{status:'reagendada',timerStart:del(),rescheduledTo:newDate});
+  if(act&&act.recurrence==='nenhuma'){
+    db.collection('activities').doc(actId).set({startDate:newDate},{merge:true});
+  }
+  expandedReschedule.delete(key);
+  renderHoje();
+}
+
+/* ====================== Render geral ====================== */
+function renderAll(){
+  renderHoje();
+  if(currentUser.role==='owner'){
+    renderActivitiesList();
+    renderCollaborators();
+  }
+  renderPonto();
+  if(currentUser.role==='owner') renderReport();
+}
+
+/* ====================== Hoje / Minhas tarefas ====================== */
+function setOccurrence(date,activityId,patch){
+  return db.collection('occurrences').doc(`${date}_${activityId}`).set({date,activityId,...patch},{merge:true});
+}
+function toggleTimer(actId){
+  const ds=todayStr();
+  const occ=state.occToday[actId]||{};
+  if(occ.timerStart){
+    const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
+    setOccurrence(ds,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()});
+  }else{
+    setOccurrence(ds,actId,{timerStart:ts(), status:occ.status||'pendente'});
+  }
+}
+function setStatus(actId,status){
+  const ds=todayStr();
+  const occ=state.occToday[actId]||{};
+  const patch={status};
+  if(status==='finalizada' && occ.timerStart){
+    const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
+    patch.timeSpent=(occ.timeSpent||0)+elapsed;
+    patch.timerStart=del();
+  }
+  if(status!=='redirecionada') patch.redirectedTo=null;
+  setOccurrence(ds,actId,patch);
+}
+function setRedirect(actId,collabId){
+  setOccurrence(todayStr(),actId,{redirectedTo:collabId});
+}
+
+/* ====================== Comentários ====================== */
+function toggleComments(actId){
+  if(expandedComments.has(actId)) expandedComments.delete(actId);
+  else expandedComments.add(actId);
+  expandedActDetail.add(actId);
+  renderHoje();
+}
+function toggleActDetail(actId){
+  if(expandedActDetail.has(actId)) expandedActDetail.delete(actId);
+  else expandedActDetail.add(actId);
+  renderHoje();
+}
+function addComment(actId){
+  const input=document.getElementById(`commentInput-${actId}`);
+  if(!input) return;
+  const text=input.value.trim();
+  if(!text) return;
+  const ds=todayStr();
+  const occ=state.occToday[actId]||{};
+  const comments=(occ.comments||[]).concat([{uid:currentUser.uid,name:currentUser.name,text,at:ts()}]);
+  input.value='';
+  setOccurrence(ds,actId,{comments}).catch(err=>alert('Erro: '+err.message));
+}
+
+/* ====================== Observações da atividade (persistentes) ====================== */
+function toggleActivityNotes(actId){
+  if(expandedNotes.has(actId)) expandedNotes.delete(actId);
+  else expandedNotes.add(actId);
+  expandedActDetail.add(actId);
+  renderHoje();
+}
+function addActivityNote(actId){
+  const input=document.getElementById(`noteInput-${actId}`);
+  if(!input) return;
+  const text=input.value.trim();
+  if(!text) return;
+  const act=state.activities.find(a=>a.id===actId);
+  const notes=((act&&act.notes)||[]).concat([{uid:currentUser.uid,name:currentUser.name,text,at:ts()}]);
+  input.value='';
+  db.collection('activities').doc(actId).set({notes},{merge:true})
+    .catch(err=>alert('Erro: '+err.message));
+}
+
+/* ====================== Anexos (guardados no Firestore) ====================== */
+const MAX_ATTACHMENT_CHARS=700000; // ~700KB em base64 por arquivo (limite do documento é 1MB)
+function processAttachmentFile(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    if(file.type.startsWith('image/')){
+      reader.onload=e=>{
+        const img=new Image();
+        img.onload=()=>{
+          let{width,height}=img;
+          const maxDim=1280;
+          if(width>maxDim||height>maxDim){
+            const scale=maxDim/Math.max(width,height);
+            width=Math.round(width*scale); height=Math.round(height*scale);
+          }
+          const canvas=document.createElement('canvas');
+          canvas.width=width; canvas.height=height;
+          canvas.getContext('2d').drawImage(img,0,0,width,height);
+          let quality=0.8;
+          let dataUrl=canvas.toDataURL('image/jpeg',quality);
+          while(dataUrl.length>MAX_ATTACHMENT_CHARS && quality>0.25){
+            quality-=0.15;
+            dataUrl=canvas.toDataURL('image/jpeg',quality);
+          }
+          resolve(dataUrl);
+        };
+        img.onerror=()=>reject(new Error('Não foi possível ler a imagem.'));
+        img.src=e.target.result;
+      };
+    }else{
+      reader.onload=e=>resolve(e.target.result);
+    }
+    reader.onerror=()=>reject(new Error('Não foi possível ler o arquivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+function uploadAttachment(actId,inputEl){
+  const file=inputEl.files[0];
+  if(!file) return;
+  const ds=todayStr();
+  const attId='att_'+Date.now();
+  const statusEl=document.getElementById(`attStatus-${actId}`);
+  if(statusEl) statusEl.textContent='Processando...';
+  processAttachmentFile(file).then(dataUrl=>{
+    if(dataUrl.length>MAX_ATTACHMENT_CHARS){
+      throw new Error('Arquivo muito grande. Use uma foto (será comprimida automaticamente) ou um arquivo menor que ~500KB.');
+    }
+    return setOccurrence(ds,actId,{attachments:{[attId]:{
+      name:file.name, type:file.type, data:dataUrl,
+      uploadedBy:currentUser.uid, uploadedByName:currentUser.name, uploadedAt:ts()
+    }}});
+  }).then(()=>{ if(statusEl) statusEl.textContent=''; })
+    .catch(err=>{
+      if(statusEl) statusEl.textContent='';
+      alert('Erro ao anexar arquivo: '+err.message);
+    })
+    .finally(()=>{ inputEl.value=''; });
+}
+function deleteAttachment(actId,attId){
+  if(!confirm('Remover este anexo?')) return;
+  const ds=todayStr();
+  db.collection('occurrences').doc(`${ds}_${actId}`)
+    .update({[`attachments.${attId}`]:del()})
+    .catch(err=>alert('Erro: '+err.message));
+}
+
+const ACT_ICONS={pendente:'⏳',finalizada:'✓',redirecionada:'↪'};
+function renderActivityCard(act,occ){
+  const redirNote=(occ.status==='redirecionada'&&occ.redirectedTo)?`<span class="muted"> · originalmente de ${esc(userName(act.assignedTo))}</span>`:'';
+  const comments=occ.comments||[];
+  const notes=act.notes||[];
+  const expandedComm=expandedComments.has(act.id);
+  const expandedNote=expandedNotes.has(act.id);
+  const expanded=expandedActDetail.has(act.id);
+  const atts=occ.attachments||{};
+  const attEntries=Object.entries(atts);
+  const running=!!occ.timerStart;
+  const iconClass=running?'running':occ.status;
+  const icon=running?'▶':ACT_ICONS[occ.status];
+  return `<div class="activity compact" data-act="${act.id}">
+    <div class="act-head" onclick="toggleActDetail('${act.id}')" style="cursor:pointer;">
+      <span class="act-icon ${iconClass}">${icon}</span>
+      <div style="flex:1;min-width:0;">
+        <span class="activity-title">${esc(act.title)}</span><br>
+        <span class="badge ${act.priority}">${PRIORITY_LABELS[act.priority]}</span>
+        <span class="badge ${occ.status}">${STATUS_LABELS[occ.status]}</span>
+      </div>
+      <span class="icon-btn">${expanded?'▲':'▼'}</span>
+    </div>
+    ${expanded?`<div class="act-detail">
+    <div class="activity-top">
+      <div>
+        ${redirNote}
+        ${act.recurrence!=='nenhuma'?`<span class="muted">${RECUR_LABELS[act.recurrence]}</span>`:''}
+      </div>
+    </div>
+    ${act.description?`<div class="activity-desc">${esc(act.description)}</div>`:''}
+    ${act.cliente?`<div class="cliente-tag">Cliente/Apólice: ${esc(act.cliente)}</div>`:''}
+    <div class="activity-controls">
+      <span class="timer" id="timer-${act.id}">${fmtHMS(occElapsed(occ))}</span>
+      ${occ.status!=='finalizada'?`
+        ${occ.timerStart
+          ? `<button class="btn" onclick="toggleTimer('${act.id}')">⏸ Pausar</button>`
+          : `<button class="btn" onclick="toggleTimer('${act.id}')">▶ Iniciar</button>`}
+        <button class="btn primary" onclick="setStatus('${act.id}','finalizada')">✓ Finalizar</button>
+        <select onchange="setStatus('${act.id}',this.value)">
+          <option value="pendente" ${occ.status==='pendente'?'selected':''}>${STATUS_LABELS.pendente}</option>
+          <option value="redirecionada" ${occ.status==='redirecionada'?'selected':''}>${STATUS_LABELS.redirecionada}</option>
+        </select>
+      `:`
+        <button class="btn" onclick="setStatus('${act.id}','pendente')">↺ Reabrir tarefa</button>
+      `}
+      ${occ.status==='redirecionada'?`<select onchange="setRedirect('${act.id}',this.value)">
+        ${state.users.filter(x=>x.id!==act.assignedTo).map(x=>`<option value="${x.id}" ${occ.redirectedTo===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
+      </select>`:''}
+    </div>
+    <div class="attachments">
+      <div class="row">
+        <label class="icon-btn" style="cursor:pointer;">📎 Anexar arquivo
+          <input type="file" style="display:none;" onchange="uploadAttachment('${act.id}',this)">
+        </label>
+        <span class="muted" id="attStatus-${act.id}"></span>
+      </div>
+      ${attEntries.map(([attId,a])=>`<div class="att-item row">
+        ${a.type&&a.type.startsWith('image/')?`<img src="${esc(a.data)}" alt="${esc(a.name)}" style="max-width:60px;max-height:60px;border-radius:4px;vertical-align:middle;">`:''}
+        <a href="${esc(a.data)}" download="${esc(a.name)}" target="_blank" rel="noopener">${esc(a.name)}</a>
+        <span class="muted">${esc(a.uploadedByName||'')}</span>
+        <button class="icon-btn" onclick="deleteAttachment('${act.id}','${attId}')">remover</button>
+      </div>`).join('')}
+    </div>
+    <div class="comments">
+      <button class="icon-btn" onclick="toggleComments('${act.id}')">💬 ${comments.length} comentário(s) ${expandedComm?'▲':'▼'}</button>
+      ${expandedComm?`<div class="comment-list">
+        ${comments.length?comments.map(c=>`<div class="comment"><b>${esc(c.name)}</b> <span class="muted">${fmtDateTime(c.at)}</span><div>${esc(c.text)}</div></div>`).join(''):'<div class="muted">Nenhum comentário ainda.</div>'}
+        <div class="row" style="margin-top:6px;">
+          <input type="text" id="commentInput-${act.id}" placeholder="Adicionar comentário..." style="flex:1;" onkeydown="if(event.key==='Enter'){addComment('${act.id}')}">
+          <button class="btn" onclick="addComment('${act.id}')">Enviar</button>
+        </div>
+      </div>`:''}
+    </div>
+    <div class="act-notes">
+      <button class="icon-btn" onclick="toggleActivityNotes('${act.id}')">📝 ${notes.length} observação(ões) ${expandedNote?'▲':'▼'}</button>
+      ${expandedNote?`<div class="comment-list">
+        ${notes.length?notes.map(n=>`<div class="comment"><b>${esc(n.name)}</b> <span class="muted">${fmtDateTime(n.at)}</span><div>${esc(n.text)}</div></div>`).join(''):'<div class="muted">Nenhuma observação ainda.</div>'}
+        <div class="row" style="margin-top:6px;">
+          <input type="text" id="noteInput-${act.id}" placeholder="Adicionar observação..." style="flex:1;" onkeydown="if(event.key==='Enter'){addActivityNote('${act.id}')}">
+          <button class="btn" onclick="addActivityNote('${act.id}')">Enviar</button>
+        </div>
+      </div>`:''}
+    </div>
+    </div>`:''}
+  </div>`;
+}
+
+function renderHoje(){
+  const ds=todayStr();
+  const isOwner=currentUser.role==='owner';
+  const stats={total:0,finalizada:0,pendente:0,redirecionada:0};
+  const groups={};
+
+  state.activities.forEach(act=>{
+    if(!activityAppliesOn(act,ds)) return;
+    const occ=state.occToday[act.id]||{status:'pendente',timeSpent:0,timerStart:null,redirectedTo:null};
+    const effAssignee=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
+    if(!isOwner && effAssignee!==currentUser.uid) return;
+    stats.total++;
+    stats[occ.status]=(stats[occ.status]||0)+1;
+    if(!groups[effAssignee]) groups[effAssignee]=[];
+    groups[effAssignee].push({act,occ});
+  });
+
+  let cardsHtml=`
+    <div class="card"><div class="label">Atividades hoje</div><div class="value">${stats.total}</div></div>
+    <div class="card"><div class="label">Finalizadas</div><div class="value">${stats.finalizada||0}</div></div>
+    <div class="card"><div class="label">Pendentes</div><div class="value">${stats.pendente||0}</div></div>
+    <div class="card"><div class="label">Redirecionadas</div><div class="value">${stats.redirecionada||0}</div></div>
+  `;
+  if(isOwner){
+    let totalHours=0;
+    state.users.forEach(u=>{ totalHours+=logTotalSeconds(state.logsToday[u.id]); });
+    cardsHtml+=`<div class="card"><div class="label">Horas trabalhadas (equipe)</div><div class="value">${fmtHours(totalHours)}</div></div>`;
+  }else{
+    cardsHtml+=`<div class="card"><div class="label">Minhas horas hoje</div><div class="value">${fmtHours(logTotalSeconds(state.logsToday[currentUser.uid]))}</div></div>`;
+  }
+  document.getElementById('hojeStats').innerHTML=cardsHtml;
+
+  let html='';
+  /* Alertas: aniversariantes e próximos contatos (apenas administradora) */
+  if(isOwner){
+    const aniversariantes=getAniversariantesHoje();
+    const contatos=getContatosPendentes();
+    if(aniversariantes.length>0 || contatos.length>0){
+      html+='<div class="alerts">';
+      aniversariantes.forEach(c=>{
+        html+=`<div class="alert-card birthday"><h4>🎂 Aniversário hoje</h4>${esc(c.nome||c.name||'')}</div>`;
+      });
+      contatos.forEach(l=>{
+        const overdueC=l.proximoContato<todayStr();
+        html+=`<div class="alert-card contact"><h4>📞 ${overdueC?'Contato atrasado':'Contato hoje'}</h4>${esc(l.nome||l.name||'')} <span class="muted">· ${fmtDateBR(l.proximoContato)}</span></div>`;
+      });
+      html+='</div>';
+    }
+  }
+  const overdue=computeOverdue();
+
+  if(stats.total===0 && overdue.length===0){
+    html+='<div class="empty">Nenhuma atividade programada para hoje.</div>';
+  }
+
+  /* Ícones clicáveis: Atrasadas + um por colaborador com tarefas hoje */
+  const hojeGroupsWithItems=[];
+  if(overdue.length>0) hojeGroupsWithItems.push('overdue');
+  state.users.forEach(u=>{ if((groups[u.id]||[]).length>0) hojeGroupsWithItems.push(u.id); });
+
+  if(hojeGroupsWithItems.length>0){
+    html+='<div class="hoje-icon-grid">';
+    if(overdue.length>0){
+      const active=expandedHojeGroups.has('overdue')?' active':'';
+      html+=`<div class="hoje-icon-card overdue${active}" onclick="toggleHojeGroup('overdue')">
+        <div class="hoje-icon">⚠</div>
+        <div class="hoje-icon-label">Atrasadas</div>
+        <div class="hoje-icon-count">${overdue.length}</div>
+      </div>`;
+    }
+    state.users.forEach(u=>{
+      const items=groups[u.id]||[];
+      if(items.length===0) return;
+      const active=expandedHojeGroups.has(u.id)?' active':'';
+      html+=`<div class="hoje-icon-card${active}" onclick="toggleHojeGroup('${u.id}')">
+        <span class="avatar lg" style="background:${avatarColor(u.id)}">${esc(initials(u.name))}</span>
+        <div class="hoje-icon-label">${esc(u.name)}</div>
+        <div class="hoje-icon-count">${items.length}</div>
+      </div>`;
+    });
+    html+='</div>';
+  }
+
+  if(overdue.length>0 && expandedHojeGroups.has('overdue')){
+    html+=`<div class="group overdue"><h3>⚠ Atrasadas (${overdue.length})</h3>`;
+    overdue.forEach(({act,occ,date,assignee,redirectedFromMe})=>{
+      html+=`<div class="activity">
+        <div class="activity-top">
+          <div>
+            <span class="activity-title">${esc(act.title)}</span>
+            <span class="badge ${act.priority}">${PRIORITY_LABELS[act.priority]}</span>
+            <span class="badge ${occ.status}">${STATUS_LABELS[occ.status]}</span>
+            <span class="muted"> · ${fmtDateBR(date)}</span>
+            ${isOwner?`<span class="muted"> · ${esc(userName(assignee))}</span>`:''}
+            ${redirectedFromMe?`<span class="muted"> · Redirecionada para ${esc(userName(occ.redirectedTo))}</span>`:''}
+          </div>
+        </div>
+        ${act.cliente?`<div class="cliente-tag">Cliente/Apólice: ${esc(act.cliente)}</div>`:''}
+        <div class="activity-controls">
+          <button class="btn" onclick="markOverdueDone('${act.id}','${date}')">Marcar como finalizada</button>
+          <button class="btn" onclick="toggleRescheduleForm('${date}_${act.id}')">Reagendar</button>
+        </div>
+        ${expandedReschedule.has(`${date}_${act.id}`)?`<div class="row" style="margin-top:6px;">
+          <input type="date" id="reschedule-${date}_${act.id}" value="${todayStr()}">
+          <button class="btn primary" onclick="confirmReschedule('${act.id}','${date}','${date}_${act.id}')">Confirmar nova data</button>
+        </div>`:''}
+      </div>`;
+    });
+    html+='</div>';
+  }
+
+  state.users.forEach(u=>{
+    const items=groups[u.id]||[];
+    if(items.length===0) return;
+    if(!expandedHojeGroups.has(u.id)) return;
+    items.sort((a,b)=>prioRank(a.act.priority)-prioRank(b.act.priority));
+    html+=`<div class="group"><h3>${avatarHtml(u.id)} ${esc(u.name)} <span class="muted">(${items.length})</span></h3>`;
+    html+='<div class="activity-grid">';
+    items.forEach(({act,occ})=>{ html+=renderActivityCard(act,occ); });
+    html+='</div></div>';
+  });
+
+  document.getElementById('hojeGroups').innerHTML=html;
+}
+function toggleHojeGroup(key){
+  if(expandedHojeGroups.has(key)) expandedHojeGroups.delete(key);
+  else expandedHojeGroups.add(key);
+  renderHoje();
+}
+
+/* timers ao vivo */
+setInterval(()=>{
+  const ds=todayStr();
+  document.querySelectorAll('[id^="timer-"]').forEach(el=>{
+    const actId=el.id.replace('timer-','');
+    const occ=state.occToday[actId];
+    if(occ&&occ.timerStart) el.textContent=fmtHMS(occElapsed(occ));
+  });
+  document.querySelectorAll('[id^="ponto-"]').forEach(el=>{
+    const uid=el.id.replace('ponto-','');
+    const log=state.logsToday[uid];
+    if(log&&log.activeStart) el.textContent=fmtHMS(logTotalSeconds(log));
+  });
+},1000);
+
+/* ====================== Atividades (administradora) ====================== */
+document.getElementById('newActivityBtn').addEventListener('click',()=>showActivityForm());
+
+function showActivityForm(act){
+  const isEdit=!!act;
+  act=act||{id:null,title:'',description:'',cliente:'',assignedTo:currentUser.uid,priority:'media',recurrence:'nenhuma',startDate:todayStr()};
+  document.getElementById('activityFormWrap').innerHTML=`
+    <form class="form-grid" id="activityForm">
+      <div class="full"><label>Título</label><input type="text" id="actTitle" value="${esc(act.title)}" required></div>
+      <div class="full"><label>Descrição (opcional)</label><textarea id="actDesc">${esc(act.description)}</textarea></div>
+      <div class="full"><label>Cliente/Apólice (opcional)</label><input type="text" id="actCliente" value="${esc(act.cliente)}" placeholder="Ex: João Silva - Apólice 12345"></div>
+      <div><label>Responsável</label><select id="actAssignee">
+        ${state.users.map(u=>`<option value="${u.id}" ${act.assignedTo===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}
+      </select></div>
+      <div><label>Prioridade</label><select id="actPriority">
+        ${Object.keys(PRIORITY_LABELS).map(p=>`<option value="${p}" ${act.priority===p?'selected':''}>${PRIORITY_LABELS[p]}</option>`).join('')}
+      </select></div>
+      <div><label>Recorrência</label><select id="actRecurrence">
+        ${Object.keys(RECUR_LABELS).map(r=>`<option value="${r}" ${act.recurrence===r?'selected':''}>${RECUR_LABELS[r]}</option>`).join('')}
+      </select></div>
+      <div><label id="startDateLabel">Data</label><input type="date" id="actStartDate" value="${act.startDate}" required></div>
+      <div class="full row">
+        <button class="btn primary" type="submit">${isEdit?'Salvar':'Criar atividade'}</button>
+        <button class="btn" type="button" id="cancelActBtn">Cancelar</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('actRecurrence').addEventListener('change',updateStartDateLabel);
+  updateStartDateLabel();
+  document.getElementById('cancelActBtn').addEventListener('click',cancelActivityForm);
+  document.getElementById('activityForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const obj={
+      title: document.getElementById('actTitle').value.trim(),
+      description: document.getElementById('actDesc').value.trim(),
+      cliente: document.getElementById('actCliente').value.trim(),
+      assignedTo: document.getElementById('actAssignee').value,
+      priority: document.getElementById('actPriority').value,
+      recurrence: document.getElementById('actRecurrence').value,
+      startDate: document.getElementById('actStartDate').value,
+    };
+    if(!obj.title) return;
+    const p = isEdit
+      ? db.collection('activities').doc(act.id).set(obj,{merge:true})
+      : db.collection('activities').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+    p.then(()=>{ cancelActivityForm(); }).catch(err=>alert('Erro: '+err.message));
+  });
+}
+function updateStartDateLabel(){
+  const r=document.getElementById('actRecurrence').value;
+  const label=document.getElementById('startDateLabel');
+  const map={nenhuma:'Data',diaria:'Começa em',semanal:'Primeira ocorrência (define o dia da semana)',quinzenal:'Primeira ocorrência (define o ciclo)',mensal:'Primeira ocorrência (define o dia do mês)'};
+  label.textContent=map[r]||'Data';
+}
+function cancelActivityForm(){ document.getElementById('activityFormWrap').innerHTML=''; }
+function editActivity(id){
+  const act=state.activities.find(a=>a.id===id);
+  showActivityForm(act);
+}
+function deleteActivity(id){
+  if(!confirm('Excluir esta atividade? O histórico de ocorrências passadas será mantido, mas ela deixará de aparecer nos próximos dias.')) return;
+  db.collection('activities').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+}
+function activitiesTableHtml(items){
+  let html='<table><thead><tr><th>Título</th><th>Cliente/Apólice</th><th>Prioridade</th><th>Recorrência</th><th></th></tr></thead><tbody>';
+  items.forEach(act=>{
+    html+=`<tr>
+      <td>${esc(act.title)}</td>
+      <td>${esc(act.cliente||'')}</td>
+      <td><span class="badge ${act.priority}">${PRIORITY_LABELS[act.priority]}</span></td>
+      <td>${RECUR_LABELS[act.recurrence]}</td>
+      <td class="row">
+        <button class="icon-btn" onclick="editActivity('${act.id}')">Editar</button>
+        <button class="icon-btn" onclick="deleteActivity('${act.id}')">Excluir</button>
+      </td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  return html;
+}
+function renderActivitiesList(){
+  if(state.activities.length===0){
+    document.getElementById('activitiesList').innerHTML='<div class="empty">Nenhuma atividade cadastrada ainda.</div>';
+    return;
+  }
+  // Agrupar por responsável e ordenar por prioridade (alta > média > baixa)
+  const groups={};
+  state.activities.forEach(act=>{
+    (groups[act.assignedTo]=groups[act.assignedTo]||[]).push(act);
+  });
+  let html='';
+  const handled=new Set();
+  state.users.forEach(u=>{
+    const items=groups[u.id];
+    if(!items || items.length===0) return;
+    handled.add(u.id);
+    items.sort((a,b)=>prioRank(a.priority)-prioRank(b.priority));
+    html+=`<div class="group"><h3>${avatarHtml(u.id)} ${esc(u.name)} <span class="muted">(${items.length})</span></h3>${activitiesTableHtml(items)}</div>`;
+  });
+  // Responsáveis que não existem mais na lista de usuários
+  Object.keys(groups).forEach(uid=>{
+    if(handled.has(uid)) return;
+    const items=groups[uid].sort((a,b)=>prioRank(a.priority)-prioRank(b.priority));
+    html+=`<div class="group"><h3>${avatarHtml(uid)} ${esc(userName(uid))} <span class="muted">(${items.length})</span></h3>${activitiesTableHtml(items)}</div>`;
+  });
+  document.getElementById('activitiesList').innerHTML=html;
+}
+
+/* ====================== Colaboradores (administradora) ====================== */
+document.getElementById('collabForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const name=document.getElementById('collabName').value.trim();
+  const email=document.getElementById('collabEmail').value.trim();
+  const password=document.getElementById('collabPassword').value;
+  const msg=document.getElementById('addCollabMsg');
+  msg.innerHTML='<div class="muted">Criando conta…</div>';
+  addCollaborator(name,email,password).then(()=>{
+    msg.innerHTML=`<div class="auth-info">Colaborador criado! Compartilhe com ${esc(name)}: e-mail ${esc(email)} e a senha provisória definida.</div>`;
+    document.getElementById('collabForm').reset();
+  }).catch(err=>{
+    msg.innerHTML=`<div class="auth-error">Erro ao criar colaborador: ${esc(err.message)}</div>`;
+  });
+});
+function addCollaborator(name,email,password){
+  const secondaryApp=firebase.initializeApp(firebaseConfig,'Secondary'+Date.now());
+  const secAuth=secondaryApp.auth();
+  const secDb=secondaryApp.firestore();
+  return secAuth.createUserWithEmailAndPassword(email,password)
+    .then(cred=>secDb.collection('users').doc(cred.user.uid).set({
+      name, email, role:'collaborator', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(()=>secAuth.signOut()))
+    .finally(()=>secondaryApp.delete());
+}
+function setUserRole(uid,role){
+  const label = role==='owner'?'administradora':'colaborador(a)';
+  if(!confirm(`Tornar esta pessoa ${label}?`)) { renderCollaborators(); return; }
+  db.collection('users').doc(uid).update({role}).catch(err=>alert('Erro: '+err.message));
+}
+function removeCollaborator(uid){
+  if(!confirm('Remover o acesso desta pessoa ao sistema? (a conta de login não é apagada, apenas o perfil dela aqui)')) return;
+  db.collection('users').doc(uid).delete().catch(err=>alert('Erro: '+err.message));
+}
+function renderCollaborators(){
+  let html='<table><thead><tr><th>Nome</th><th>E-mail</th><th>Função</th><th></th></tr></thead><tbody>';
+  state.users.forEach(u=>{
+    html+=`<tr>
+      <td>${esc(u.name)}</td>
+      <td>${esc(u.email||'')}</td>
+      <td><span class="badge ${u.role}">${u.role==='owner'?'Administradora':'Colaborador(a)'}</span></td>
+      <td class="row">
+        ${u.id!==currentUser.uid?`<button class="icon-btn" onclick="setUserRole('${u.id}','${u.role==='owner'?'collaborator':'owner'}')">${u.role==='owner'?'Tornar colaborador(a)':'Tornar administradora'}</button>
+        <button class="icon-btn" onclick="removeCollaborator('${u.id}')">Remover</button>`:'<span class="muted">Você</span>'}
+      </td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  document.getElementById('collabList').innerHTML=html;
+}
+
+/* ====================== Ponto ====================== */
+function toggleClock(){
+  const ds=todayStr();
+  const uid=currentUser.uid;
+  const log=state.logsToday[uid];
+  const ref=db.collection('timeLogs').doc(`${ds}_${uid}`);
+  if(log&&log.activeStart){
+    ref.update({
+      sessions: firebase.firestore.FieldValue.arrayUnion({in:log.activeStart, out:ts()}),
+      activeStart: del()
+    }).catch(err=>alert('Erro: '+err.message));
+  }else{
+    ref.set({date:ds, uid, activeStart:ts()},{merge:true}).catch(err=>alert('Erro: '+err.message));
+  }
+}
+function renderPonto(){
+  const isOwner=currentUser.role==='owner';
+  const usersToShow = isOwner ? state.users : state.users.filter(u=>u.id===currentUser.uid);
+  let html='';
+  usersToShow.forEach(u=>{
+    const log=state.logsToday[u.id];
+    const total=logTotalSeconds(log);
+    const active=log&&log.activeStart;
+    const canToggle=u.id===currentUser.uid;
+    html+=`<div class="activity">
+      <div class="activity-top">
+        <div><span class="activity-title">${esc(u.name)}</span> ${active?'<span class="badge finalizada">Em expediente</span>':'<span class="badge pendente">Fora do expediente</span>'}</div>
+        <div class="row">
+          <span class="timer" id="ponto-${u.id}">${fmtHMS(total)}</span>
+          ${canToggle?`<button class="btn" onclick="toggleClock()">${active?'Encerrar expediente':'Iniciar expediente'}</button>`:''}
+        </div>
+      </div>
+      ${(log&&log.sessions&&log.sessions.length)?`<div class="muted" style="margin-top:8px;">${log.sessions.map(s=>`${new Date(s.in.toMillis()).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} – ${new Date(s.out.toMillis()).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`).join(' · ')}</div>`:''}
+    </div>`;
+  });
+  if(usersToShow.length===0) html='<div class="empty">Nenhum colaborador cadastrado.</div>';
+  document.getElementById('pontoList').innerHTML=html;
+}
+
+/* ====================== Relatórios (administradora) ====================== */
+const reportDateInput=document.getElementById('reportDate');
+reportDateInput.addEventListener('change',()=>subscribeReport(reportDateInput.value||todayStr()));
+
+function subscribeReport(ds){
+  reportUnsubs.forEach(u=>u()); reportUnsubs=[];
+  reportUnsubs.push(db.collection('occurrences').where('date','==',ds).onSnapshot(snap=>{
+    state.occReport={}; snap.forEach(d=>state.occReport[d.data().activityId]=d.data());
+    renderReport();
+  },err=>console.error(err)));
+  reportUnsubs.push(db.collection('timeLogs').where('date','==',ds).onSnapshot(snap=>{
+    state.logsReport={}; snap.forEach(d=>state.logsReport[d.data().uid]=d.data());
+    renderReport();
+  },err=>console.error(err)));
+}
+function renderReport(){
+  const ds=reportDateInput.value||todayStr();
+  let html='<div class="cards">';
+  state.users.forEach(u=>{
+    html+=`<div class="card"><div class="label">${esc(u.name)}</div><div class="value">${fmtHours(logTotalSeconds(state.logsReport[u.id]))}</div></div>`;
+  });
+  html+='</div>';
+
+  const items=[];
+  state.activities.forEach(act=>{
+    if(!activityAppliesOn(act,ds)) return;
+    const occ=state.occReport[act.id]||{status:'pendente',timeSpent:0,redirectedTo:null};
+    items.push({act,occ});
+  });
+  if(items.length===0){
+    html+='<div class="empty">Nenhuma atividade registrada nesta data.</div>';
+  }else{
+    html+='<table><thead><tr><th>Atividade</th><th>Cliente/Apólice</th><th>Responsável</th><th>Prioridade</th><th>Status</th><th>Tempo gasto</th></tr></thead><tbody>';
+    items.forEach(({act,occ})=>{
+      const assignee=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
+      html+=`<tr>
+        <td>${esc(act.title)}</td>
+        <td>${esc(act.cliente||'')}</td>
+        <td>${esc(userName(assignee))}</td>
+        <td><span class="badge ${act.priority}">${PRIORITY_LABELS[act.priority]}</span></td>
+        <td><span class="badge ${occ.status}">${STATUS_LABELS[occ.status]}</span></td>
+        <td>${fmtHMS(occ.timeSpent||0)}</td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+  }
+  document.getElementById('reportContent').innerHTML=html;
+  renderReportCharts(items);
+}
+function renderReportCharts(items){
+  const horasCtx=document.getElementById('chartHoras');
+  const statusCtx=document.getElementById('chartStatus');
+  if(!horasCtx||!statusCtx) return;
+
+  const horasLabels=state.users.map(u=>u.name);
+  const horasData=state.users.map(u=>+(logTotalSeconds(state.logsReport[u.id])/3600).toFixed(2));
+  if(chartHoras) chartHoras.destroy();
+  chartHoras=new Chart(horasCtx,{
+    type:'bar',
+    data:{labels:horasLabels,datasets:[{label:'Horas trabalhadas',data:horasData,backgroundColor:'#4f7cff'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Horas trabalhadas por colaborador'}},scales:{y:{beginAtZero:true}}}
+  });
+
+  const statusCount={pendente:0,finalizada:0,redirecionada:0};
+  items.forEach(({occ})=>{ statusCount[occ.status]=(statusCount[occ.status]||0)+1; });
+  if(chartStatus) chartStatus.destroy();
+  chartStatus=new Chart(statusCtx,{
+    type:'doughnut',
+    data:{
+      labels:[STATUS_LABELS.pendente,STATUS_LABELS.finalizada,STATUS_LABELS.redirecionada],
+      datasets:[{data:[statusCount.pendente,statusCount.finalizada,statusCount.redirecionada],backgroundColor:['#f5a623','#2ecc71','#9b59b6']}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Status das atividades'}}}
+  });
+}
+document.getElementById('copyReportBtn').addEventListener('click',()=>{
+  const ds=reportDateInput.value||todayStr();
+  let text=`Relatório do dia ${new Date(ds+'T00:00:00').toLocaleDateString('pt-BR')}\n\n`;
+  state.users.forEach(u=>{
+    text+=`${u.name}: ${fmtHours(logTotalSeconds(state.logsReport[u.id]))} trabalhadas\n`;
+  });
+  text+='\nAtividades:\n';
+  let any=false;
+  state.activities.forEach(act=>{
+    if(!activityAppliesOn(act,ds)) return;
+    any=true;
+    const occ=state.occReport[act.id]||{status:'pendente',timeSpent:0};
+    text+=`- [${STATUS_LABELS[occ.status]}] ${act.title} (${userName(act.assignedTo)}, ${fmtHMS(occ.timeSpent||0)})\n`;
+  });
+  if(!any) text+='(nenhuma)\n';
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=document.getElementById('copyReportBtn');
+    const old=btn.textContent;
+    btn.textContent='Copiado!';
+    setTimeout(()=>btn.textContent=old,1500);
+  });
+});
+document.getElementById('exportCsvBtn').addEventListener('click',()=>{
+  const ds=reportDateInput.value||todayStr();
+  const rows=[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Tempo gasto (hh:mm:ss)']];
+  state.activities.forEach(act=>{
+    if(!activityAppliesOn(act,ds)) return;
+    const occ=state.occReport[act.id]||{status:'pendente',timeSpent:0,redirectedTo:null};
+    const assignee=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
+    rows.push([act.title,act.cliente||'',userName(assignee),PRIORITY_LABELS[act.priority],STATUS_LABELS[occ.status],fmtHMS(occ.timeSpent||0)]);
+  });
+  rows.push([]);
+  rows.push(['Colaborador','Horas trabalhadas']);
+  state.users.forEach(u=>{
+    rows.push([u.name,fmtHours(logTotalSeconds(state.logsReport[u.id]))]);
+  });
+  const csvEscape=v=>{
+    const s=String(v==null?'':v);
+    return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  const csv=rows.map(r=>r.map(csvEscape).join(';')).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`relatorio_${ds}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+document.getElementById('exportPdfBtn').addEventListener('click',()=>{
+  const ds=reportDateInput.value||todayStr();
+  const dateLabel=new Date(ds+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF();
+  const pageWidth=doc.internal.pageSize.getWidth();
+  let y=15;
+
+  doc.setFontSize(16);
+  doc.text('Relatório do dia '+dateLabel,14,y);
+  y+=8;
+
+  // Tabela de horas por colaborador
+  const horasRows=state.users.map(u=>[u.name, fmtHours(logTotalSeconds(state.logsReport[u.id]))]);
+  doc.autoTable({
+    startY:y,
+    head:[['Colaborador','Horas trabalhadas']],
+    body: horasRows.length?horasRows:[['(nenhum colaborador)','']],
+    theme:'grid', styles:{fontSize:9}, headStyles:{fillColor:[60,52,137]}
+  });
+  y=doc.lastAutoTable.finalY+8;
+
+  // Gráficos
+  try{
+    const chartHorasEl=document.getElementById('chartHoras');
+    const chartStatusEl=document.getElementById('chartStatus');
+    if(chartHorasEl && chartStatusEl){
+      const imgW=(pageWidth-14*2-8)/2;
+      const imgH=imgW*0.7;
+      if(y+imgH>280){ doc.addPage(); y=15; }
+      doc.addImage(chartHorasEl.toDataURL('image/png',1.0),'PNG',14,y,imgW,imgH);
+      doc.addImage(chartStatusEl.toDataURL('image/png',1.0),'PNG',14+imgW+8,y,imgW,imgH);
+      y+=imgH+10;
+    }
+  }catch(e){ console.error('Erro ao incluir gráficos no PDF:',e); }
+
+  // Tabela de atividades
+  const items=[];
+  state.activities.forEach(act=>{
+    if(!activityAppliesOn(act,ds)) return;
+    const occ=state.occReport[act.id]||{status:'pendente',timeSpent:0,redirectedTo:null};
+    const assignee=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
+    items.push([act.title,act.cliente||'',userName(assignee),PRIORITY_LABELS[act.priority],STATUS_LABELS[occ.status],fmtHMS(occ.timeSpent||0)]);
+  });
+  if(y>270){ doc.addPage(); y=15; }
+  doc.setFontSize(12);
+  doc.text('Atividades',14,y);
+  y+=4;
+  doc.autoTable({
+    startY:y,
+    head:[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Tempo gasto']],
+    body: items.length?items:[['(nenhuma atividade nesta data)','','','','','']],
+    theme:'grid', styles:{fontSize:8}, headStyles:{fillColor:[60,52,137]}
+  });
+
+  doc.save(`relatorio_${ds}.pdf`);
+});
+
+/* ====================== Clientes ====================== */
+function showClientForm(client){
+  const isEdit=!!(client&&client.id);
+  client=client||{id:null,nome:'',cpf:'',telefone:'',email:'',dataNascimento:'',endereco:'',coberturas:'',valorPagamento:0,comissaoPercent:10,historico:[]};
+  document.getElementById('clientFormWrap').innerHTML=`
+    <form class="form-grid" id="clientForm">
+      <div class="full"><label>Nome completo</label><input type="text" id="cliNome" value="${esc(client.nome)}" required></div>
+      <div><label>CPF</label><input type="text" id="cliCpf" value="${esc(client.cpf)}" placeholder="000.000.000-00"></div>
+      <div><label>Telefone (com DDD)</label><input type="text" id="cliTelefone" value="${esc(client.telefone||'')}" placeholder="(00) 00000-0000"></div>
+      <div><label>E-mail</label><input type="email" id="cliEmail" value="${esc(client.email||'')}"></div>
+      <div><label>Data de nascimento</label><input type="date" id="cliNasc" value="${client.dataNascimento||''}"></div>
+      <div class="full"><label>Endereço</label><input type="text" id="cliEndereco" value="${esc(client.endereco)}"></div>
+      <div class="full"><label>Coberturas do seguro</label><textarea id="cliCoberturas" placeholder="Ex: Vida, Residencial, Auto...">${esc(client.coberturas)}</textarea></div>
+      <div><label>Valor de pagamento (R$)</label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}"></div>
+      <div class="full">
+        <label>Comissão</label>
+        <div class="pct-group" id="cliPctGroup">
+          ${COMMISSION_OPTIONS.map(p=>`<button type="button" data-pct="${p}" class="${client.comissaoPercent===p?'active':''}">${p}%</button>`).join('')}
+        </div>
+      </div>
+      ${!isEdit && client.historico && client.historico.length?`<div class="full"><label>Histórico de contato (migrado do lead)</label><div class="hist-list">${historicoListHtml(client.historico)}</div></div>`:''}
+      <div class="full row">
+        <button class="btn primary" type="submit">${isEdit?'Salvar':'Cadastrar cliente'}</button>
+        <button class="btn" type="button" id="cancelClientBtn">Cancelar</button>
+      </div>
+    </form>
+  `;
+  let selectedPct=client.comissaoPercent||10;
+  document.querySelectorAll('#cliPctGroup button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      selectedPct=+b.dataset.pct;
+      document.querySelectorAll('#cliPctGroup button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+  document.getElementById('cancelClientBtn').addEventListener('click',cancelClientForm);
+  document.getElementById('clientForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const valorPagamento=parseFloat(document.getElementById('cliValor').value)||0;
+    const obj={
+      nome: document.getElementById('cliNome').value.trim(),
+      cpf: document.getElementById('cliCpf').value.trim(),
+      telefone: document.getElementById('cliTelefone').value.trim(),
+      email: document.getElementById('cliEmail').value.trim(),
+      dataNascimento: document.getElementById('cliNasc').value,
+      endereco: document.getElementById('cliEndereco').value.trim(),
+      coberturas: document.getElementById('cliCoberturas').value.trim(),
+      valorPagamento,
+      comissaoPercent: selectedPct,
+      comissaoValor: +(valorPagamento*selectedPct/100).toFixed(2),
+      historico: client.historico||[]
+    };
+    if(!obj.nome) return;
+    const p = isEdit
+      ? db.collection('clients').doc(client.id).set(obj,{merge:true})
+      : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+    p.then(()=>cancelClientForm()).catch(err=>alert('Erro: '+err.message));
+  });
+}
+function cancelClientForm(){ document.getElementById('clientFormWrap').innerHTML=''; }
+function editClient(id){
+  const c=state.clients.find(x=>x.id===id);
+  if(c) showClientForm(c);
+}
+function deleteClient(id){
+  if(!confirm('Excluir este cliente?')) return;
+  db.collection('clients').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+}
+function renderClients(){
+  const total=state.clients.length;
+  const somaValor=state.clients.reduce((s,c)=>s+(c.valorPagamento||0),0);
+  const somaComissao=state.clients.reduce((s,c)=>s+(c.comissaoValor||0),0);
+  document.getElementById('clientesStats').innerHTML=`
+    <div class="card"><div class="label">Clientes cadastrados</div><div class="value">${total}</div></div>
+    <div class="card"><div class="label">Soma valor de pagamentos</div><div class="value">${fmtBRL(somaValor)}</div></div>
+    <div class="card"><div class="label">Total de comissão</div><div class="value">${fmtBRL(somaComissao)}</div></div>
+  `;
+  const listEl=document.getElementById('clientsList');
+  if(total===0){
+    listEl.innerHTML='<div class="empty">Nenhum cliente cadastrado ainda.</div>';
+    return;
+  }
+  let html='<table><thead><tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th>Nascimento</th><th>Endereço</th><th>Coberturas</th><th>Valor pagamento</th><th>Comissão</th><th></th></tr></thead><tbody>';
+  state.clients.slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(c=>{
+    html+=`<tr>
+      <td>${esc(c.nome)}</td>
+      <td>${esc(c.cpf||'')}</td>
+      <td>${esc(c.telefone||'')}</td>
+      <td>${esc(c.email||'')}</td>
+      <td>${fmtDateFull(c.dataNascimento)}</td>
+      <td>${esc(c.endereco||'')}</td>
+      <td>${esc(c.coberturas||'')}</td>
+      <td>${fmtBRL(c.valorPagamento)}</td>
+      <td>${c.comissaoPercent||0}% (${fmtBRL(c.comissaoValor)})</td>
+      <td class="row">
+        <button class="icon-btn" onclick="editClient('${c.id}')">Editar</button>
+        <button class="icon-btn" onclick="deleteClient('${c.id}')">Excluir</button>
+        <button class="icon-btn" onclick="convertClientToLead('${c.id}')">Converter em lead</button>
+        <button class="icon-btn" onclick="toggleClientHist('${c.id}')">${expandedClientHist.has(c.id)?'Ocultar histórico':'Histórico'} (${(c.historico||[]).length})</button>
+      </td>
+    </tr>`;
+    if(expandedClientHist.has(c.id)){
+      html+=`<tr><td colspan="10">
+        <div class="hist-list">
+          ${historicoListHtml(c.historico)}
+          <div class="row" style="margin-top:6px;">
+            <input type="text" id="cliHistInput-${c.id}" placeholder="Novo registro de contato..." style="flex:1;" onkeydown="if(event.key==='Enter'){addClientHistorico('${c.id}')}">
+            <button class="btn" onclick="addClientHistorico('${c.id}')">Adicionar</button>
+          </div>
+        </div>
+      </td></tr>`;
+    }
+  });
+  html+='</tbody></table>';
+  listEl.innerHTML=html;
+}
+function toggleClientHist(id){
+  if(expandedClientHist.has(id)) expandedClientHist.delete(id);
+  else expandedClientHist.add(id);
+  renderClients();
+}
+function addClientHistorico(id){
+  const input=document.getElementById(`cliHistInput-${id}`);
+  if(!input) return;
+  const text=input.value.trim();
+  if(!text) return;
+  const c=state.clients.find(x=>x.id===id);
+  const historico=((c&&c.historico)||[]).concat([{texto:text,at:ts(),uid:currentUser.uid,name:currentUser.name}]);
+  input.value='';
+  db.collection('clients').doc(id).set({historico},{merge:true}).catch(err=>alert('Erro: '+err.message));
+}
+document.getElementById('newClientBtn').addEventListener('click',()=>showClientForm());
+
+/* ====================== Funil de Vendas ====================== */
+function showLeadForm(lead){
+  const isEdit=!!(lead&&lead.id);
+  lead=lead||{id:null,nome:'',telefone:'',email:'',valorEstimado:0,etapa:'lead',historico:[]};
+  document.getElementById('leadFormWrap').innerHTML=`
+    <form class="form-grid" id="leadForm">
+      <div class="full"><label>Nome / Empresa</label><input type="text" id="leadNome" value="${esc(lead.nome)}" required></div>
+      <div><label>Telefone (com DDD)</label><input type="text" id="leadTelefone" value="${esc(lead.telefone||lead.contato||'')}" placeholder="(00) 00000-0000"></div>
+      <div><label>E-mail</label><input type="email" id="leadEmail" value="${esc(lead.email||'')}"></div>
+      <div><label>Valor estimado (R$)</label><input type="number" id="leadValor" step="0.01" min="0" value="${lead.valorEstimado||0}"></div>
+      <div><label>Etapa</label><select id="leadEtapa">
+        ${STAGE_ORDER.map(s=>`<option value="${s}" ${lead.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
+      </select></div>
+      <div><label>Próximo contato</label><input type="date" id="leadProximoContato" value="${esc(lead.proximoContato||'')}"></div>
+      ${!isEdit?`<div class="full"><label>Observação inicial (opcional)</label><textarea id="leadObsInicial" placeholder="Será registrada no histórico com a data de hoje"></textarea></div>`:''}
+      <div class="full row">
+        <button class="btn primary" type="submit">${isEdit?'Salvar':'Adicionar lead'}</button>
+        <button class="btn" type="button" id="cancelLeadBtn">Cancelar</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('cancelLeadBtn').addEventListener('click',cancelLeadForm);
+  document.getElementById('leadForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const obj={
+      nome: document.getElementById('leadNome').value.trim(),
+      telefone: document.getElementById('leadTelefone').value.trim(),
+      email: document.getElementById('leadEmail').value.trim(),
+      valorEstimado: parseFloat(document.getElementById('leadValor').value)||0,
+      etapa: document.getElementById('leadEtapa').value,
+      proximoContato: document.getElementById('leadProximoContato').value||null,
+      historico: lead.historico||[]
+    };
+    if(!obj.nome) return;
+    if(!isEdit){
+      const obsInicial=document.getElementById('leadObsInicial').value.trim();
+      if(obsInicial) obj.historico=[{texto:obsInicial,at:ts(),uid:currentUser.uid,name:currentUser.name}];
+    }
+    const p = isEdit
+      ? db.collection('leads').doc(lead.id).set(obj,{merge:true})
+      : db.collection('leads').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+    p.then(()=>cancelLeadForm()).catch(err=>alert('Erro: '+err.message));
+  });
+}
+function cancelLeadForm(){ document.getElementById('leadFormWrap').innerHTML=''; }
+function editLead(id){
+  const l=state.leads.find(x=>x.id===id);
+  if(l) showLeadForm(l);
+}
+function deleteLead(id){
+  if(!confirm('Excluir este lead?')) return;
+  db.collection('leads').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+}
+function moveLead(id,etapa){
+  db.collection('leads').doc(id).update({etapa}).catch(err=>alert('Erro: '+err.message));
+}
+function convertLeadToClient(id){
+  const l=state.leads.find(x=>x.id===id);
+  if(!l) return;
+  switchTab('clientes');
+  showClientForm({id:null,nome:l.nome,cpf:'',telefone:l.telefone||l.contato||'',email:l.email||'',dataNascimento:'',endereco:'',coberturas:'',valorPagamento:l.valorEstimado||0,comissaoPercent:10,historico:l.historico||[]});
+}
+function convertClientToLead(id){
+  const c=state.clients.find(x=>x.id===id);
+  if(!c) return;
+  switchTab('funil');
+  showLeadForm({id:null,nome:c.nome,telefone:c.telefone||'',email:c.email||'',valorEstimado:c.valorPagamento||0,etapa:'lead',proximoContato:null,historico:[]});
+  const obsEl=document.getElementById('leadObsInicial');
+  if(obsEl) obsEl.value=`Cliente ativo "${c.nome}" — novo lead para atualização de plano.`;
+}
+function toggleLeadHist(id){
+  if(expandedLeadHist.has(id)) expandedLeadHist.delete(id);
+  else expandedLeadHist.add(id);
+  renderFunil();
+}
+function addLeadHistorico(id){
+  const input=document.getElementById(`leadHistInput-${id}`);
+  if(!input) return;
+  const text=input.value.trim();
+  if(!text) return;
+  const l=state.leads.find(x=>x.id===id);
+  const historico=((l&&l.historico)||[]).concat([{texto:text,at:ts(),uid:currentUser.uid,name:currentUser.name}]);
+  input.value='';
+  db.collection('leads').doc(id).set({historico},{merge:true}).catch(err=>alert('Erro: '+err.message));
+}
+function renderFunil(){
+  let html='';
+  STAGE_ORDER.forEach(stage=>{
+    const items=state.leads.filter(l=>l.etapa===stage);
+    html+=`<div class="kanban-col"><h4>${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
+    items.forEach(l=>{
+      html+=`<div class="kanban-card">
+        <div class="kc-title">${esc(l.nome)}</div>
+        ${l.valorEstimado?`<div class="kc-value">${fmtBRL(l.valorEstimado)}</div>`:''}
+        ${l.telefone?`<div class="muted">📞 ${esc(l.telefone)}</div>`:''}
+        ${l.email?`<div class="muted">✉ ${esc(l.email)}</div>`:''}
+        ${(!l.telefone&&!l.email&&l.contato)?`<div class="muted">${esc(l.contato)}</div>`:''}
+        ${(!l.historico&&l.observacoes)?`<div class="muted">${esc(l.observacoes)}</div>`:''}
+        ${l.proximoContato?(()=>{
+          const ds=todayStr();
+          const cls=l.proximoContato<ds?'overdue':(l.proximoContato===ds?'due':'future');
+          const lbl=l.proximoContato<ds?'Contato atrasado':(l.proximoContato===ds?'Contato hoje':'Próximo contato');
+          return `<div class="kc-next ${cls}">📅 ${lbl}: ${fmtDateBR(l.proximoContato)}</div>`;
+        })():''}
+        <select onchange="moveLead('${l.id}',this.value)">
+          ${STAGE_ORDER.map(s=>`<option value="${s}" ${l.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
+        </select>
+        <div class="row">
+          <button class="icon-btn" onclick="editLead('${l.id}')">Editar</button>
+          <button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>
+          ${stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
+        </div>
+        <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">${expandedLeadHist.has(l.id)?'Ocultar histórico':'Histórico'} (${(l.historico||[]).length})</button>
+        ${expandedLeadHist.has(l.id)?`
+          <div class="hist-list">
+            ${historicoListHtml(l.historico)}
+            <div class="row" style="margin-top:6px;">
+              <input type="text" id="leadHistInput-${l.id}" placeholder="Novo registro de contato..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadHistorico('${l.id}')}">
+              <button class="btn" onclick="addLeadHistorico('${l.id}')">Adicionar</button>
+            </div>
+          </div>
+        `:''}
+      </div>`;
+    });
+    html+='</div>';
+  });
+  document.getElementById('funilBoard').innerHTML=html;
+}
+document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
+
+/* ====================== Links úteis ====================== */
+function showLinkForm(link){
+  const isEdit=!!(link&&link.id);
+  link=link||{id:null,titulo:'',url:'',descricao:''};
+  document.getElementById('linkFormWrap').innerHTML=`
+    <form class="form-grid" id="linkForm">
+      <div><label>Título</label><input type="text" id="linkTitulo" value="${esc(link.titulo)}" required></div>
+      <div><label>URL</label><input type="url" id="linkUrl" value="${esc(link.url)}" placeholder="https://..." required></div>
+      <div class="full"><label>Descrição (opcional)</label><input type="text" id="linkDescricao" value="${esc(link.descricao)}"></div>
+      <div class="full row">
+        <button class="btn primary" type="submit">${isEdit?'Salvar':'Adicionar link'}</button>
+        <button class="btn" type="button" id="cancelLinkBtn">Cancelar</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('cancelLinkBtn').addEventListener('click',cancelLinkForm);
+  document.getElementById('linkForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    let url=document.getElementById('linkUrl').value.trim();
+    if(url && !/^https?:\/\//i.test(url)) url='https://'+url;
+    const obj={
+      titulo: document.getElementById('linkTitulo').value.trim(),
+      url,
+      descricao: document.getElementById('linkDescricao').value.trim()
+    };
+    if(!obj.titulo || !obj.url) return;
+    const p = isEdit
+      ? db.collection('links').doc(link.id).set(obj,{merge:true})
+      : db.collection('links').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+    p.then(()=>cancelLinkForm()).catch(err=>alert('Erro: '+err.message));
+  });
+}
+function cancelLinkForm(){ document.getElementById('linkFormWrap').innerHTML=''; }
+function editLink(id){
+  const l=state.links.find(x=>x.id===id);
+  if(l) showLinkForm(l);
+}
+function deleteLink(id){
+  if(!confirm('Excluir este link?')) return;
+  db.collection('links').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+}
+function renderLinks(){
+  const isOwner=currentUser.role==='owner';
+  document.getElementById('linksAddRow').innerHTML = isOwner
+    ? `<button class="btn primary" id="newLinkBtn">+ Novo link</button>` : '';
+  if(isOwner){
+    document.getElementById('newLinkBtn').addEventListener('click',()=>showLinkForm());
+  }
+  const listEl=document.getElementById('linksList');
+  if(state.links.length===0){
+    listEl.innerHTML='<div class="empty">Nenhum link cadastrado ainda.</div>';
+    return;
+  }
+  let html='<table><thead><tr><th>Título</th><th>Link</th><th>Descrição</th>'+(isOwner?'<th></th>':'')+'</tr></thead><tbody>';
+  state.links.slice().sort((a,b)=>(a.titulo||'').localeCompare(b.titulo||'')).forEach(l=>{
+    html+=`<tr>
+      <td>${esc(l.titulo)}</td>
+      <td><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.url)}</a></td>
+      <td>${esc(l.descricao||'')}</td>
+      ${isOwner?`<td class="row">
+        <button class="icon-btn" onclick="editLink('${l.id}')">Editar</button>
+        <button class="icon-btn" onclick="deleteLink('${l.id}')">Excluir</button>
+      </td>`:''}
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  listEl.innerHTML=html;
+}
+
+/* ====================== Cards (quadro de notas) ====================== */
+const NOTE_COLOR_LABELS={c1:'Lilás',c2:'Azul',c3:'Dourado',c4:'Verde',c5:'Âmbar',c6:'Branco'};
+function showNoteCardForm(card){
+  const isEdit=!!(card&&card.id);
+  card=card||{id:null,titulo:'',conteudo:'',cor:'c1',attachment:null};
+  const att=card.attachment;
+  document.getElementById('noteCardFormWrap').innerHTML=`
+    <form class="form-grid" id="noteCardForm">
+      <div class="full"><label>Título</label><input type="text" id="noteTitulo" value="${esc(card.titulo)}" required></div>
+      <div class="full"><label>Conteúdo</label><textarea id="noteConteudo" rows="4">${esc(card.conteudo||'')}</textarea></div>
+      <div><label>Cor</label><select id="noteCor">
+        ${Object.keys(NOTE_COLOR_LABELS).map(c=>`<option value="${c}" ${(card.cor||'c1')===c?'selected':''}>${NOTE_COLOR_LABELS[c]}</option>`).join('')}
+      </select></div>
+      <div class="full">
+        <label>Anexar arquivo (imagem, PDF, etc.)</label>
+        ${att?`<div class="row" style="margin-bottom:6px;">
+          <span class="muted">📎 ${esc(att.name)}</span>
+          <button class="btn" type="button" id="removeNoteAttachmentBtn">Remover anexo</button>
+        </div>`:''}
+        <input type="file" id="noteAttachmentInput">
+        <span class="muted" id="noteAttachmentStatus"></span>
+      </div>
+      <div class="full row">
+        <button class="btn primary" type="submit">${isEdit?'Salvar':'Adicionar card'}</button>
+        <button class="btn" type="button" id="cancelNoteCardBtn">Cancelar</button>
+      </div>
+    </form>
+  `;
+  let currentAttachment=att||null;
+  document.getElementById('cancelNoteCardBtn').addEventListener('click',cancelNoteCardForm);
+  const removeBtn=document.getElementById('removeNoteAttachmentBtn');
+  if(removeBtn) removeBtn.addEventListener('click',()=>{
+    currentAttachment=null;
+    cancelNoteCardForm();
+    showNoteCardForm({...card,attachment:null});
+  });
+  document.getElementById('noteCardForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const fileInput=document.getElementById('noteAttachmentInput');
+    const statusEl=document.getElementById('noteAttachmentStatus');
+    const file=fileInput.files[0];
+    const buildObj=(attachment)=>({
+      titulo: document.getElementById('noteTitulo').value.trim(),
+      conteudo: document.getElementById('noteConteudo').value.trim(),
+      cor: document.getElementById('noteCor').value,
+      attachment: attachment||null
+    });
+    const save=(obj)=>{
+      const p = isEdit
+        ? db.collection('cards').doc(card.id).set(obj,{merge:true})
+        : db.collection('cards').add({...obj, createdBy:currentUser.uid, createdByName:currentUser.name, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+      p.then(()=>cancelNoteCardForm()).catch(err=>alert('Erro: '+err.message));
+    };
+    const obj=buildObj(currentAttachment);
+    if(!obj.titulo) return;
+    if(file){
+      if(statusEl) statusEl.textContent='Processando arquivo...';
+      processAttachmentFile(file).then(dataUrl=>{
+        if(dataUrl.length>MAX_ATTACHMENT_CHARS){
+          throw new Error('Arquivo muito grande. Use uma imagem (será comprimida automaticamente) ou um arquivo menor que ~500KB.');
+        }
+        save(buildObj({name:file.name,type:file.type,data:dataUrl}));
+      }).catch(err=>{
+        if(statusEl) statusEl.textContent='';
+        alert('Erro ao anexar arquivo: '+err.message);
+      });
+    }else{
+      save(obj);
+    }
+  });
+}
+function cancelNoteCardForm(){ document.getElementById('noteCardFormWrap').innerHTML=''; }
+function editNoteCard(id){
+  const c=state.cards.find(x=>x.id===id);
+  if(c) showNoteCardForm(c);
+}
+function deleteNoteCard(id){
+  if(!confirm('Excluir este card?')) return;
+  db.collection('cards').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+}
+function renderNotesBoard(){
+  const boardEl=document.getElementById('notesBoard');
+  if(!boardEl) return;
+  if(state.cards.length===0){
+    boardEl.innerHTML='<div class="empty">Nenhum card salvo ainda.</div>';
+    return;
+  }
+  let html='';
+  state.cards.slice().sort((a,b)=>((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0)).forEach(c=>{
+    const att=c.attachment;
+    let attHtml='';
+    if(att){
+      if((att.type||'').startsWith('image/')){
+        attHtml=`<div class="note-attachment"><img src="${att.data}" alt="${esc(att.name)}" style="max-width:100%;border-radius:6px;margin-top:6px;"></div>`;
+      }else{
+        attHtml=`<div class="note-attachment" style="margin-top:6px;">📎 <a href="${att.data}" download="${esc(att.name)}">${esc(att.name)}</a></div>`;
+      }
+    }
+    html+=`<div class="note-card note-color-${c.cor||'c1'}">
+      <h4>${esc(c.titulo)}</h4>
+      <div class="note-body">${esc(c.conteudo||'')}</div>
+      ${attHtml}
+      <div class="muted" style="font-size:11px;">${esc(c.createdByName||'')}</div>
+      <div class="note-footer">
+        <button class="icon-btn" onclick="editNoteCard('${c.id}')">Editar</button>
+        <button class="icon-btn" onclick="deleteNoteCard('${c.id}')">Excluir</button>
+      </div>
+    </div>`;
+  });
+  boardEl.innerHTML=html;
+}
+document.getElementById('newCardBtn').addEventListener('click',()=>showNoteCardForm());
+
+/* ====================== Arquivo de relatórios diários ====================== */
+const DAILY_REPORT_LOOKBACK_DAYS=30;
+async function buildAndSaveDailyReport(ds){
+  const [occSnap,logsSnap]=await Promise.all([
+    db.collection('occurrences').where('date','==',ds).get(),
+    db.collection('timeLogs').where('date','==',ds).get()
+  ]);
+  const occByAct={};
+  occSnap.forEach(d=>{ const data=d.data(); occByAct[data.activityId]=data; });
+  const logsByUid={};
+  logsSnap.forEach(d=>{ const data=d.data(); logsByUid[data.uid]=data; });
+
+  const items=[];
+  state.activities.forEach(act=>{
+    if(!activityAppliesOn(act,ds)) return;
+    const occ=occByAct[act.id]||{status:'pendente',timeSpent:0,redirectedTo:null};
+    const assignee=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
+    items.push({
+      title:act.title, cliente:act.cliente||'', responsavel:userName(assignee),
+      prioridade:act.priority, status:occ.status, tempo:occ.timeSpent||0
+    });
+  });
+
+  // Dia sem nenhuma atividade programada e sem registro de ponto: não arquiva
+  if(items.length===0 && logsSnap.empty) return;
+
+  const stats={total:items.length,finalizada:0,pendente:0,redirecionada:0};
+  items.forEach(it=>{ stats[it.status]=(stats[it.status]||0)+1; });
+
+  const users=state.users.map(u=>({uid:u.id,name:u.name,horas:logTotalSeconds(logsByUid[u.id])}));
+
+  await db.collection('dailyReports').doc(ds).set({
+    date:ds,
+    generatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    stats, users, activities:items
+  });
+}
+async function archiveMissingReports(){
+  try{
+    const existingSnap=await db.collection('dailyReports').get();
+    const existing=new Set(existingSnap.docs.map(d=>d.id));
+    for(let i=1;i<=DAILY_REPORT_LOOKBACK_DAYS;i++){
+      const d=new Date(); d.setDate(d.getDate()-i);
+      const ds=dstr(d);
+      if(existing.has(ds)) continue;
+      await buildAndSaveDailyReport(ds);
+    }
+  }catch(err){ console.error('Erro ao arquivar relatórios diários:',err); }
+}
+function toggleArquivoDetail(id){
+  if(expandedArquivo.has(id)) expandedArquivo.delete(id);
+  else expandedArquivo.add(id);
+  renderArquivo();
+}
+function arquivoDetailHtml(r){
+  let html='<div class="cards">';
+  (r.users||[]).forEach(u=>{
+    html+=`<div class="card"><div class="label">${esc(u.name)}</div><div class="value">${fmtHours(u.horas||0)}</div></div>`;
+  });
+  html+='</div>';
+  const acts=r.activities||[];
+  if(acts.length===0){
+    html+='<div class="empty">Nenhuma atividade registrada nesta data.</div>';
+  }else{
+    html+='<table><thead><tr><th>Atividade</th><th>Cliente/Apólice</th><th>Responsável</th><th>Prioridade</th><th>Status</th><th>Tempo gasto</th></tr></thead><tbody>';
+    acts.forEach(it=>{
+      html+=`<tr>
+        <td>${esc(it.title)}</td>
+        <td>${esc(it.cliente||'')}</td>
+        <td>${esc(it.responsavel)}</td>
+        <td><span class="badge ${it.prioridade}">${PRIORITY_LABELS[it.prioridade]||it.prioridade}</span></td>
+        <td><span class="badge ${it.status}">${STATUS_LABELS[it.status]||it.status}</span></td>
+        <td>${fmtHMS(it.tempo||0)}</td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+  }
+  return html;
+}
+function exportArquivoCsv(id){
+  const r=state.dailyReports.find(x=>x.id===id);
+  if(!r) return;
+  const rows=[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Tempo gasto (hh:mm:ss)']];
+  (r.activities||[]).forEach(it=>{
+    rows.push([it.title,it.cliente||'',it.responsavel,PRIORITY_LABELS[it.prioridade]||it.prioridade,STATUS_LABELS[it.status]||it.status,fmtHMS(it.tempo||0)]);
+  });
+  rows.push([]);
+  rows.push(['Colaborador','Horas trabalhadas']);
+  (r.users||[]).forEach(u=>rows.push([u.name,fmtHours(u.horas||0)]));
+  const csvEscape=v=>{
+    const s=String(v==null?'':v);
+    return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  const csv=rows.map(rw=>rw.map(csvEscape).join(';')).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`relatorio_${r.date}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function renderArquivo(){
+  const listEl=document.getElementById('arquivoList');
+  if(!listEl) return;
+  if(state.dailyReports.length===0){
+    listEl.innerHTML='<div class="empty">Nenhum relatório arquivado ainda.</div>';
+    return;
+  }
+  let html='<table><thead><tr><th>Data</th><th>Atividades</th><th>Finalizadas</th><th>Pendentes</th><th>Redirecionadas</th><th></th></tr></thead><tbody>';
+  state.dailyReports.slice().sort((a,b)=>b.date.localeCompare(a.date)).forEach(r=>{
+    const st=r.stats||{};
+    html+=`<tr>
+      <td>${fmtDateFull(r.date)}</td>
+      <td>${st.total||0}</td>
+      <td>${st.finalizada||0}</td>
+      <td>${st.pendente||0}</td>
+      <td>${st.redirecionada||0}</td>
+      <td class="row">
+        <button class="icon-btn" onclick="toggleArquivoDetail('${r.id}')">${expandedArquivo.has(r.id)?'Ocultar':'Ver detalhes'}</button>
+        <button class="icon-btn" onclick="exportArquivoCsv('${r.id}')">Exportar CSV</button>
+      </td>
+    </tr>`;
+    if(expandedArquivo.has(r.id)){
+      html+=`<tr><td colspan="6">${arquivoDetailHtml(r)}</td></tr>`;
+    }
+  });
+  html+='</tbody></table>';
+  listEl.innerHTML=html;
+}
+
+/* ====================== Contas a Pagar ====================== */
+const PAYABLES_LOOKBACK_MONTHS=12;
+function monthKeyOf(ds){ return ds.slice(0,7); }
+function currentMonthKey(){ return todayStr().slice(0,7); }
+function monthDiff(a,b){
+  const [ay,am]=a.split('-').map(Number);
+  const [by,bm]=b.split('-').map(Number);
+  return (by-ay)*12+(bm-am);
+}
+function fmtMonthBR(mk){
+  const [y,m]=mk.split('-');
+  const names=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  return `${names[parseInt(m,10)-1]}/${y}`;
+}
+function payableAppliesInMonth(p,mk){
+  if(p.recurrence==='unico') return !!p.dueDate && monthKeyOf(p.dueDate)===mk;
+  const startMonth=monthKeyOf(p.startDate);
+  if(mk<startMonth) return false;
+  if(p.termType==='parcelas'){
+    const diff=monthDiff(startMonth,mk);
+    if(diff>=(p.termCount||0)) return false;
+  }
+  return true;
+}
+function payableDueDateInMonth(p,mk){
+  if(p.recurrence==='unico') return p.dueDate;
+  const [y,m]=mk.split('-').map(Number);
+  const lastDay=new Date(y,m,0).getDate();
+  const day=Math.min(p.dueDay||1,lastDay);
+  return `${mk}-${String(day).padStart(2,'0')}`;
+}
+function showPayableForm(p){
+  const isEdit=!!p;
+  p=p||{id:null,name:'',value:0,recurrence:'unico',dueDate:todayStr(),dueDay:1,startDate:todayStr(),termType:'indefinido',termCount:12};
+  document.getElementById('payableFormWrap').innerHTML=`
+    <form class="form-grid" id="payableForm">
+      <div class="full"><label>Nome da conta</label><input type="text" id="payName" value="${esc(p.name)}" required></div>
+      <div><label>Valor da conta</label>
+        <div class="input-icon-wrap"><span class="input-icon">R$</span><input type="number" id="payValue" step="0.01" min="0" value="${p.value||0}"></div>
+      </div>
+      <div><label>Recorrência</label><select id="payRecurrence">
+        <option value="unico" ${p.recurrence==='unico'?'selected':''}>Único</option>
+        <option value="mensal" ${p.recurrence==='mensal'?'selected':''}>Mensal</option>
+      </select></div>
+      <div id="payDateWrap" class="row" style="display:contents;"></div>
+      <div id="payTermWrap" class="row" style="display:contents;"></div>
+      <div class="full row">
+        <button class="btn primary" type="submit">${isEdit?'Salvar':'Adicionar conta'}</button>
+        <button class="btn" type="button" id="cancelPayBtn">Cancelar</button>
+      </div>
+    </form>
+  `;
+  function renderDateField(){
+    const rec=document.getElementById('payRecurrence').value;
+    const wrap=document.getElementById('payDateWrap');
+    if(rec==='unico'){
+      wrap.innerHTML=`<div><label>Data de pagamento</label><input type="date" id="payDueDate" value="${p.dueDate||todayStr()}" required></div>`;
+    }else{
+      wrap.innerHTML=`
+        <div><label>Dia de vencimento (1-31)</label><input type="number" id="payDueDay" min="1" max="31" value="${p.dueDay||1}" required></div>
+        <div><label>Início (primeira cobrança)</label><input type="date" id="payStartDate" value="${p.startDate||todayStr()}" required></div>`;
+    }
+    renderTermField();
+  }
+  function renderTermField(){
+    const rec=document.getElementById('payRecurrence').value;
+    const wrap=document.getElementById('payTermWrap');
+    if(rec==='mensal'){
+      wrap.innerHTML=`
+        <div><label>Prazo de finalização</label><select id="payTermType">
+          <option value="indefinido" ${p.termType==='indefinido'?'selected':''}>Indefinido</option>
+          <option value="parcelas" ${p.termType==='parcelas'?'selected':''}>Número de parcelas</option>
+        </select></div>
+        <div id="payTermCountWrap"></div>`;
+      const renderCount=()=>{
+        const tt=document.getElementById('payTermType').value;
+        document.getElementById('payTermCountWrap').innerHTML = tt==='parcelas'
+          ? `<div><label>Quantidade de parcelas</label><input type="number" id="payTermCount" min="1" value="${p.termCount||12}" required></div>` : '';
+      };
+      document.getElementById('payTermType').addEventListener('change',renderCount);
+      renderCount();
+    }else{
+      wrap.innerHTML='';
+    }
+  }
+  document.getElementById('payRecurrence').addEventListener('change',renderDateField);
+  renderDateField();
+  document.getElementById('cancelPayBtn').addEventListener('click',()=>{ document.getElementById('payableFormWrap').innerHTML=''; });
+  document.getElementById('payableForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const rec=document.getElementById('payRecurrence').value;
+    const obj={ name:document.getElementById('payName').value.trim(), value:parseFloat(document.getElementById('payValue').value)||0, recurrence:rec, active:true };
+    if(!obj.name) return;
+    if(rec==='unico'){
+      obj.dueDate=document.getElementById('payDueDate').value;
+      obj.startDate=obj.dueDate;
+      obj.dueDay=null; obj.termType=null; obj.termCount=null;
+    }else{
+      obj.dueDay=parseInt(document.getElementById('payDueDay').value,10);
+      obj.startDate=document.getElementById('payStartDate').value;
+      obj.dueDate=null;
+      obj.termType=document.getElementById('payTermType').value;
+      obj.termCount=obj.termType==='parcelas'?parseInt(document.getElementById('payTermCount').value,10):null;
+    }
+    const pr = isEdit
+      ? db.collection('payables').doc(p.id).set(obj,{merge:true})
+      : db.collection('payables').add({...obj, createdBy:currentUser.uid, createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    pr.then(()=>{ document.getElementById('payableFormWrap').innerHTML=''; }).catch(err=>alert('Erro: '+err.message));
+  });
+}
+document.getElementById('newPayableBtn').addEventListener('click',()=>showPayableForm());
+function editPayable(id){
+  const p=state.payables.find(x=>x.id===id);
+  showPayableForm(p);
+}
+function deletePayable(id){
+  if(!confirm('Excluir esta conta a pagar?')) return;
+  db.collection('payables').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+}
+function setPayableOccurrence(payableId,mk,patch){
+  return db.collection('payableOccurrences').doc(`${mk}_${payableId}`).set({payableId,month:mk,...patch},{merge:true});
+}
+function togglePayablePaid(payableId,mk,currentStatus){
+  const newStatus = currentStatus==='pago'?'pendente':'pago';
+  const patch={status:newStatus};
+  patch.paidAt = newStatus==='pago' ? ts() : del();
+  setPayableOccurrence(payableId,mk,patch).catch(err=>alert('Erro: '+err.message));
+}
+function renderPayablesMonthList(){
+  const el=document.getElementById('payablesMonthList');
+  if(!el) return;
+  const mk=currentMonthKey();
+  const items=state.payables.filter(p=>p.active!==false && payableAppliesInMonth(p,mk));
+  if(items.length===0){ el.innerHTML='<div class="empty">Nenhuma conta a pagar neste mês.</div>'; return; }
+  items.sort((a,b)=>payableDueDateInMonth(a,mk).localeCompare(payableDueDateInMonth(b,mk)));
+  let totalMes=0, totalPago=0;
+  let html='<table><thead><tr><th>Conta</th><th>Valor</th><th>Vencimento</th><th>Recorrência</th><th>Status</th><th></th></tr></thead><tbody>';
+  items.forEach(p=>{
+    const occ=state.payableOccCurrent[p.id]||{status:'pendente'};
+    const due=payableDueDateInMonth(p,mk);
+    const paid=occ.status==='pago';
+    totalMes+=(p.value||0);
+    if(paid) totalPago+=(p.value||0);
+    html+=`<tr>
+      <td>${esc(p.name)}</td>
+      <td>💰 ${fmtBRL(p.value||0)}</td>
+      <td>${fmtDateFull(due)}</td>
+      <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
+      <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
+      <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'Marcar pendente':'Marcar pago'}</button></td>
+    </tr>`;
+  });
+  html+=`</tbody><tfoot><tr><td><strong>Total</strong></td><td><strong>${fmtBRL(totalMes)}</strong></td><td colspan="4">Pago: ${fmtBRL(totalPago)} · Pendente: ${fmtBRL(totalMes-totalPago)}</td></tr></tfoot></table>`;
+  el.innerHTML=html;
+}
+function renderPayablesList(){
+  const el=document.getElementById('payablesList');
+  if(!el) return;
+  if(state.payables.length===0){ el.innerHTML='<div class="empty">Nenhuma conta cadastrada ainda.</div>'; return; }
+  let html='<table><thead><tr><th>Conta</th><th>Valor</th><th>Recorrência</th><th>Pagamento</th><th>Prazo</th><th></th></tr></thead><tbody>';
+  state.payables.forEach(p=>{
+    let pagamento, prazo;
+    if(p.recurrence==='unico'){
+      pagamento=fmtDateFull(p.dueDate);
+      prazo='Parcela única';
+    }else{
+      pagamento=`Todo dia ${p.dueDay}`;
+      prazo = p.termType==='parcelas' ? `${p.termCount} parcelas (a partir de ${fmtDateFull(p.startDate)})` : `Indefinido (a partir de ${fmtDateFull(p.startDate)})`;
+    }
+    html+=`<tr>
+      <td>${esc(p.name)}</td>
+      <td>💰 ${fmtBRL(p.value||0)}</td>
+      <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
+      <td>${pagamento}</td>
+      <td>${prazo}</td>
+      <td class="row">
+        <button class="icon-btn" onclick="editPayable('${p.id}')">Editar</button>
+        <button class="icon-btn" onclick="deletePayable('${p.id}')">Excluir</button>
+      </td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+async function buildAndSavePayablesReport(mk){
+  const occSnap=await db.collection('payableOccurrences').where('month','==',mk).get();
+  const occByPayable={};
+  occSnap.forEach(d=>{ const data=d.data(); occByPayable[data.payableId]=data; });
+  const items=[];
+  state.payables.forEach(p=>{
+    if(!payableAppliesInMonth(p,mk)) return;
+    const occ=occByPayable[p.id]||{status:'pendente'};
+    items.push({name:p.name, value:p.value||0, dueDate:payableDueDateInMonth(p,mk), recurrence:p.recurrence, status:occ.status||'pendente'});
+  });
+  if(items.length===0) return;
+  const stats={total:items.length, pago:0, pendente:0, totalValue:0, pagoValue:0, pendenteValue:0};
+  items.forEach(it=>{
+    stats[it.status]=(stats[it.status]||0)+1;
+    stats.totalValue+=(it.value||0);
+    stats[it.status+'Value']=(stats[it.status+'Value']||0)+(it.value||0);
+  });
+  await db.collection('payablesArchive').doc(mk).set({
+    month:mk, generatedAt: firebase.firestore.FieldValue.serverTimestamp(), stats, items
+  });
+}
+async function archiveMissingPayablesReports(){
+  try{
+    const existingSnap=await db.collection('payablesArchive').get();
+    const existing=new Set(existingSnap.docs.map(d=>d.id));
+    const cur=currentMonthKey();
+    for(let i=1;i<=PAYABLES_LOOKBACK_MONTHS;i++){
+      const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-i);
+      const mk=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      if(mk>=cur || existing.has(mk)) continue;
+      await buildAndSavePayablesReport(mk);
+    }
+  }catch(err){ console.error('Erro ao arquivar relatórios de contas a pagar:',err); }
+}
+document.getElementById('genPayablesReportBtn').addEventListener('click',()=>{
+  buildAndSavePayablesReport(currentMonthKey())
+    .then(()=>alert('Relatório do mês gerado e arquivado.'))
+    .catch(err=>alert('Erro: '+err.message));
+});
+let expandedPayablesArchive=new Set();
+function togglePayablesArchiveDetail(id){
+  if(expandedPayablesArchive.has(id)) expandedPayablesArchive.delete(id);
+  else expandedPayablesArchive.add(id);
+  renderPayablesArchive();
+}
+function payablesArchiveDetailHtml(r){
+  const items=r.items||[];
+  if(items.length===0) return '<div class="empty">Nenhuma conta neste mês.</div>';
+  let html='<table><thead><tr><th>Conta</th><th>Valor</th><th>Vencimento</th><th>Recorrência</th><th>Status</th></tr></thead><tbody>';
+  items.forEach(it=>{
+    const paid=it.status==='pago';
+    html+=`<tr>
+      <td>${esc(it.name)}</td>
+      <td>💰 ${fmtBRL(it.value||0)}</td>
+      <td>${fmtDateFull(it.dueDate)}</td>
+      <td>${it.recurrence==='unico'?'Único':'Mensal'}</td>
+      <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  return html;
+}
+function renderPayablesArchive(){
+  const el=document.getElementById('payablesArchiveList');
+  if(!el) return;
+  if(!state.payablesArchive || state.payablesArchive.length===0){ el.innerHTML='<div class="empty">Nenhum relatório mensal arquivado ainda.</div>'; return; }
+  let html='<table><thead><tr><th>Mês</th><th>Contas</th><th>Valor total</th><th>Pagas</th><th>Pendentes</th><th></th></tr></thead><tbody>';
+  state.payablesArchive.slice().sort((a,b)=>b.month.localeCompare(a.month)).forEach(r=>{
+    const st=r.stats||{};
+    html+=`<tr>
+      <td>${fmtMonthBR(r.month)}</td>
+      <td>${st.total||0}</td>
+      <td>💰 ${fmtBRL(st.totalValue||0)}</td>
+      <td>${st.pago||0}</td>
+      <td>${st.pendente||0}</td>
+      <td><button class="icon-btn" onclick="togglePayablesArchiveDetail('${r.id}')">${expandedPayablesArchive.has(r.id)?'Ocultar':'Ver detalhes'}</button></td>
+    </tr>`;
+    if(expandedPayablesArchive.has(r.id)){
+      html+=`<tr><td colspan="6">${payablesArchiveDetailHtml(r)}</td></tr>`;
+    }
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+function renderPayables(){
+  renderPayablesMonthList();
+  renderPayablesList();
+  renderPayablesArchive();
+}
+
+/* ====================== Chat da equipe ====================== */
+const CHAT_LIMIT=200;
+let chatInitialized=false;
+let lastChatMsgId=null;
+function playChatSound(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator();
+    const g=ctx.createGain();
+    o.type='sine';
+    o.frequency.value=880;
+    g.gain.value=0.15;
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.35);
+    o.stop(ctx.currentTime+0.35);
+  }catch(e){}
+}
+function renderChat(msgs){
+  const el=document.getElementById('chatMessages');
+  if(!el) return;
+  const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  if(msgs.length===0){
+    el.innerHTML='<div class="empty">Nenhuma mensagem ainda. Diga olá!</div>';
+    chatInitialized=true;
+    return;
+  }
+  const last=msgs[msgs.length-1];
+  if(chatInitialized && last.id!==lastChatMsgId && last.uid!==currentUser.uid){
+    playChatSound();
+  }
+  lastChatMsgId=last.id;
+  el.innerHTML=msgs.map(m=>`
+    <div class="chat-msg ${m.uid===currentUser.uid?'mine':''}">
+      <div class="chat-meta">${esc(m.name)}${m.createdAt?' · '+fmtDateTime(m.createdAt):''}</div>
+      <div>${esc(m.text)}</div>
+    </div>`).join('');
+  if(wasNearBottom || !chatInitialized) el.scrollTop=el.scrollHeight;
+  chatInitialized=true;
+}
+document.getElementById('chatForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const input=document.getElementById('chatInput');
+  const text=input.value.trim();
+  if(!text) return;
+  input.value='';
+  db.collection('chatMessages').add({
+    text, uid:currentUser.uid, name:currentUser.name,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(err=>alert('Erro: '+err.message));
+});
+
+/* Videoconferência (Jitsi Meet embutido) */
+document.getElementById('startVideoBtn').addEventListener('click',()=>{
+  let room=document.getElementById('videoRoomName').value.trim();
+  if(!room){
+    room='sala-'+Math.random().toString(36).slice(2,8);
+    document.getElementById('videoRoomName').value=room;
+  }
+  room=room.replace(/[^a-zA-Z0-9-_]/g,'-');
+  const url=`https://meet.jit.si/${encodeURIComponent(room)}`;
+  document.getElementById('videoShareLink').value=url;
+  document.getElementById('videoShareWrap').style.display='block';
+  document.getElementById('videoFrameWrap').innerHTML=`<iframe src="${url}#config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay" style="width:100%;height:600px;border:0;border-radius:10px;"></iframe>`;
+});
+document.getElementById('copyVideoLinkBtn').addEventListener('click',()=>{
+  const input=document.getElementById('videoShareLink');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(()=>{
+    const btn=document.getElementById('copyVideoLinkBtn');
+    const orig=btn.textContent; btn.textContent='Copiado!';
+    setTimeout(()=>btn.textContent=orig,1500);
+  }).catch(()=>{});
+});
+
+/* PWA: registra o service worker para permitir instalação no celular
+   (ícone na tela inicial, abre em tela cheia). Os dados continuam
+   sincronizados em tempo real pelo Firestore, normalmente. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/sw.js').catch(err=>console.error('SW erro:',err));
+  });
+}
+</script>
+</body>
+</html>
