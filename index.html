@@ -227,6 +227,18 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .note-color-c4{background:var(--green-bg);}
 .note-color-c5{background:var(--amber-bg);}
 .note-color-c6{background:#fff;}
+/* ---- Tipo toggle ---- */
+.tipo-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:6px;width:fit-content;}
+.tipo-toggle button{background:var(--card);border:none;padding:8px 20px;cursor:pointer;color:var(--text2);font-size:.9rem;transition:background .15s,color .15s;}
+.tipo-toggle button.active{background:var(--navy,#1a2a4a);color:var(--gold);font-weight:700;}
+.tipo-toggle button:not(.active):hover{background:var(--gold-bg);}
+.cli-sec-header{color:var(--gold);font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:4px;margin-bottom:2px;}
+.hidden-group{display:none!important;}
+.contents-wrap{display:contents;}
+/* ---- Client section header ---- */
+.cli-section-header{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.9rem;color:var(--text1);margin:16px 0 6px;padding:0 2px;}
+.cli-section-header:first-child{margin-top:4px;}
+.cli-section-count{background:var(--gold);color:#000;border-radius:99px;font-size:.75rem;padding:1px 8px;font-weight:700;}
 /* ---- Client name list ---- */
 .client-name-list{display:flex;flex-direction:column;gap:2px;margin-top:8px;}
 .client-list-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:background .15s,border-color .15s;}
@@ -344,6 +356,26 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   </div>
   <div id="clientFormWrap"></div>
   <div id="clientsList"></div>
+</section>
+
+<section id="tab-boletos" class="section owner-only">
+  <div class="cards summary-cards" id="boletosStats"></div>
+  <div class="row" style="margin-bottom:14px;align-items:center;gap:10px;flex-wrap:wrap;">
+    <button class="btn" id="boletosMesAnterior">‹</button>
+    <span id="boletosMesLabel" style="font-weight:700;font-size:1rem;min-width:130px;text-align:center;"></span>
+    <button class="btn" id="boletosMesProximo">›</button>
+    <span style="flex:1"></span>
+    <div style="position:relative;min-width:200px;">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none;">🔍</span>
+      <input type="text" id="boletosSearch" placeholder="Buscar empresa..." style="padding:7px 12px 7px 30px;width:100%;box-sizing:border-box;" oninput="renderBoletos()">
+    </div>
+    <select id="boletosFiltro" onchange="renderBoletos()" style="padding:7px 10px;">
+      <option value="todos">Todos</option>
+      <option value="pendentes">Pendentes</option>
+      <option value="recebidos">Recebidos</option>
+    </select>
+  </div>
+  <div id="boletosList"></div>
 </section>
 
 <section id="tab-funil" class="section owner-only">
@@ -632,8 +664,10 @@ let state={
   cards:[],
   payables:[],
   payableOccCurrent:{},
-  payablesArchive:[]
+  payablesArchive:[],
+  boletosClientes:[]
 };
+let boletosViewMes=new Date().toISOString().slice(0,7);
 
 document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 
@@ -808,6 +842,11 @@ function initApp(){
       renderPayablesArchive();
     },err=>console.error(err)));
 
+    listeners.push(db.collection('boletosClientes').onSnapshot(snap=>{
+      state.boletosClientes=[]; snap.forEach(d=>state.boletosClientes.push({id:d.id,...d.data()}));
+      renderBoletos();
+    },err=>console.error(err)));
+
     archiveMissingPayablesReports();
   }
 
@@ -821,6 +860,7 @@ function setupNav(){
       <button data-tab="hoje" class="active">Hoje</button>
       <button data-tab="atividades">Atividades</button>
       <button data-tab="clientes">Clientes</button>
+      <button data-tab="boletos">Cobranças</button>
       <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="colaboradores">Colaboradores</button>
       <button data-tab="ponto">Ponto</button>
@@ -1691,29 +1731,61 @@ document.getElementById('exportPdfBtn').addEventListener('click',()=>{
 /* ====================== Clientes ====================== */
 function showClientForm(client){
   const isEdit=!!(client&&client.id);
-  client=client||{id:null,nome:'',cpf:'',telefone:'',email:'',dataNascimento:'',sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',rendaMensal:'',empresa:'',endereco:'',numeroProposta:'',plano:'',coberturas:'',valorPagamento:0,banco:'',diaVencimento:'',observacoesSaude:'',comissaoPercent:10,historico:[]};
+  client=client||{id:null,tipo:'PF',nome:'',cpf:'',cnpj:'',responsavel:'',cargo:'',telefone:'',email:'',dataNascimento:'',sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',segmento:'',rendaMensal:'',empresa:'',endereco:'',numeroProposta:'',plano:'',coberturas:'',valorPagamento:0,banco:'',diaVencimento:'',observacoesSaude:'',comissaoPercent:10,historico:[]};
+  const tipo=client.tipo||'PF';
+  const isPF=tipo==='PF';
   document.getElementById('clientFormWrap').innerHTML=`
     <form class="form-grid" id="clientForm">
-      <div class="full" style="color:var(--gold);font-weight:600;font-size:.95rem;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:2px;">📋 Dados Pessoais</div>
-      <div class="full"><label>Nome completo</label><input type="text" id="cliNome" value="${esc(client.nome)}" required></div>
-      <div><label>CPF</label><input type="text" id="cliCpf" value="${esc(client.cpf)}" placeholder="000.000.000-00"></div>
-      <div><label>Data de nascimento</label><input type="date" id="cliNasc" value="${client.dataNascimento||''}"></div>
-      <div><label>Sexo</label><select id="cliSexo"><option value="">—</option><option value="Masculino" ${client.sexo==='Masculino'?'selected':''}>Masculino</option><option value="Feminino" ${client.sexo==='Feminino'?'selected':''}>Feminino</option><option value="Outro" ${client.sexo==='Outro'?'selected':''}>Outro</option></select></div>
-      <div><label>Estado civil</label><select id="cliEstadoCivil"><option value="">—</option><option value="Solteiro(a)" ${client.estadoCivil==='Solteiro(a)'?'selected':''}>Solteiro(a)</option><option value="Casado(a)" ${client.estadoCivil==='Casado(a)'?'selected':''}>Casado(a)</option><option value="Divorciado(a)" ${client.estadoCivil==='Divorciado(a)'?'selected':''}>Divorciado(a)</option><option value="Viúvo(a)" ${client.estadoCivil==='Viúvo(a)'?'selected':''}>Viúvo(a)</option><option value="União estável" ${client.estadoCivil==='União estável'?'selected':''}>União estável</option></select></div>
-      <div><label>Nº de filhos</label><input type="number" id="cliNumFilhos" min="0" value="${client.numFilhos||''}"></div>
+      <!-- Tipo toggle -->
+      <div class="full">
+        <label>Tipo de cliente</label>
+        <div class="tipo-toggle" id="cliTipoToggle">
+          <button type="button" data-tipo="PF" class="${isPF?'active':''}">👤 Pessoa Física</button>
+          <button type="button" data-tipo="PJ" class="${!isPF?'active':''}">🏢 Pessoa Jurídica</button>
+        </div>
+        <input type="hidden" id="cliTipo" value="${tipo}">
+      </div>
+
+      <!-- Seção PF -->
+      <div class="full cli-sec-header" style="${!isPF?'display:none':''}" id="hdrPF">📋 Dados Pessoais (PF)</div>
+      <div id="pfFields" style="${!isPF?'display:contents':''}" class="${isPF?'contents-wrap':'hidden-group'}">
+        <div class="full"><label>Nome completo</label><input type="text" id="cliNome" value="${esc(client.nome)}" ${isPF?'required':''}></div>
+        <div><label>CPF</label><input type="text" id="cliCpf" value="${esc(client.cpf||'')}" placeholder="000.000.000-00"></div>
+        <div><label>Data de nascimento</label><input type="date" id="cliNasc" value="${client.dataNascimento||''}"></div>
+        <div><label>Sexo</label><select id="cliSexo"><option value="">—</option><option value="Masculino" ${client.sexo==='Masculino'?'selected':''}>Masculino</option><option value="Feminino" ${client.sexo==='Feminino'?'selected':''}>Feminino</option><option value="Outro" ${client.sexo==='Outro'?'selected':''}>Outro</option></select></div>
+        <div><label>Estado civil</label><select id="cliEstadoCivil"><option value="">—</option><option value="Solteiro(a)" ${client.estadoCivil==='Solteiro(a)'?'selected':''}>Solteiro(a)</option><option value="Casado(a)" ${client.estadoCivil==='Casado(a)'?'selected':''}>Casado(a)</option><option value="Divorciado(a)" ${client.estadoCivil==='Divorciado(a)'?'selected':''}>Divorciado(a)</option><option value="Viúvo(a)" ${client.estadoCivil==='Viúvo(a)'?'selected':''}>Viúvo(a)</option><option value="União estável" ${client.estadoCivil==='União estável'?'selected':''}>União estável</option></select></div>
+        <div><label>Nº de filhos</label><input type="number" id="cliNumFilhos" min="0" value="${client.numFilhos||''}"></div>
+      </div>
+
+      <!-- Seção PJ -->
+      <div class="full cli-sec-header" style="${isPF?'display:none':''}" id="hdrPJ">🏢 Dados da Empresa (PJ)</div>
+      <div id="pjFields" class="${!isPF?'contents-wrap':'hidden-group'}">
+        <div class="full"><label>Razão Social</label><input type="text" id="cliRazaoSocial" value="${esc(client.nome||'')}" ${!isPF?'required':''}></div>
+        <div><label>CNPJ</label><input type="text" id="cliCnpj" value="${esc(client.cnpj||'')}" placeholder="00.000.000/0001-00"></div>
+        <div><label>Segmento / Atividade</label><input type="text" id="cliSegmento" value="${esc(client.segmento||'')}" placeholder="Ex: Comércio, Saúde, TI..."></div>
+        <div><label>Responsável / Contato</label><input type="text" id="cliResponsavel" value="${esc(client.responsavel||'')}" placeholder="Nome do contato principal"></div>
+        <div><label>Cargo do responsável</label><input type="text" id="cliCargo" value="${esc(client.cargo||'')}" placeholder="Ex: Sócio, Diretor..."></div>
+        <div><label>CPF do responsável</label><input type="text" id="cliCpfResp" value="${esc(client.cpf||'')}" placeholder="000.000.000-00"></div>
+      </div>
+
+      <!-- Campos comuns -->
+      <div class="full cli-sec-header">📞 Contato & Endereço</div>
       <div><label>Telefone (com DDD)</label><input type="text" id="cliTelefone" value="${esc(client.telefone||'')}" placeholder="(00) 00000-0000"></div>
       <div><label>E-mail</label><input type="email" id="cliEmail" value="${esc(client.email||'')}"></div>
-      <div class="full"><label>Endereço</label><input type="text" id="cliEndereco" value="${esc(client.endereco)}"></div>
+      <div class="full"><label>Endereço</label><input type="text" id="cliEndereco" value="${esc(client.endereco||'')}"></div>
 
-      <div class="full" style="color:var(--gold);font-weight:600;font-size:.95rem;border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:8px;margin-bottom:2px;">💼 Perfil Profissional</div>
-      <div><label>Ocupação / Profissão</label><input type="text" id="cliOcupacao" value="${esc(client.ocupacao||'')}" placeholder="Ex: Procurador de Justiça"></div>
-      <div><label>Empresa / Órgão</label><input type="text" id="cliEmpresa" value="${esc(client.empresa||'')}" placeholder="Ex: Pref. Municipal"></div>
-      <div><label>Renda mensal bruta (R$)</label><input type="number" id="cliRendaMensal" step="0.01" min="0" value="${client.rendaMensal||''}"></div>
+      <!-- Perfil profissional (PF) -->
+      <div class="full cli-sec-header" id="hdrPerfilPF" style="${!isPF?'display:none':''}">💼 Perfil Profissional</div>
+      <div id="perfilPFFields" class="${isPF?'contents-wrap':'hidden-group'}">
+        <div><label>Ocupação / Profissão</label><input type="text" id="cliOcupacao" value="${esc(client.ocupacao||'')}" placeholder="Ex: Procurador de Justiça"></div>
+        <div><label>Empresa / Órgão</label><input type="text" id="cliEmpresa" value="${esc(client.empresa||'')}" placeholder="Ex: Pref. Municipal"></div>
+        <div><label>Renda mensal bruta (R$)</label><input type="number" id="cliRendaMensal" step="0.01" min="0" value="${client.rendaMensal||''}"></div>
+      </div>
 
-      <div class="full" style="color:var(--gold);font-weight:600;font-size:.95rem;border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:8px;margin-bottom:2px;">🛡️ Produto Contratado</div>
+      <div class="full cli-sec-header">🛡️ Produto Contratado</div>
       <div><label>Nº da proposta</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
       <div><label>Plano / Produto</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: Doenças Graves Premium"></div>
-      <div class="full"><label>Coberturas do seguro</label><textarea id="cliCoberturas" placeholder="Ex: Vida, Residencial, Auto...">${esc(client.coberturas)}</textarea></div>
+      <div class="full"><label>Coberturas do seguro</label><textarea id="cliCoberturas" placeholder="Ex: Vida, Residencial, Auto...">${esc(client.coberturas||'')}</textarea></div>
       <div><label>Valor de pagamento (R$)</label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}"></div>
       <div><label>Banco / Forma de pagamento</label><input type="text" id="cliBanco" value="${esc(client.banco||'')}" placeholder="Ex: Banco do Brasil Ag. 5964 CC 1307-2"></div>
       <div><label>Dia de vencimento</label><input type="text" id="cliDiaVenc" maxlength="2" value="${esc(client.diaVencimento||'')}" placeholder="05"></div>
@@ -1724,8 +1796,11 @@ function showClientForm(client){
         </div>
       </div>
 
-      <div class="full" style="color:var(--gold);font-weight:600;font-size:.95rem;border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:8px;margin-bottom:2px;">🏥 Saúde (DPS)</div>
-      <div class="full"><label>Observações de saúde</label><textarea id="cliSaude" placeholder="Doenças preexistentes, medicações, altura, peso...">${esc(client.observacoesSaude||'')}</textarea></div>
+      <!-- Saúde só para PF -->
+      <div class="full cli-sec-header" id="hdrSaude" style="${!isPF?'display:none':''}">🏥 Saúde (DPS)</div>
+      <div id="saudeField" class="${isPF?'contents-wrap':'hidden-group'}">
+        <div class="full"><label>Observações de saúde</label><textarea id="cliSaude" placeholder="Doenças preexistentes, medicações, altura, peso...">${esc(client.observacoesSaude||'')}</textarea></div>
+      </div>
 
       ${!isEdit && client.historico && client.historico.length?`<div class="full"><label>Histórico de contato (migrado do lead)</label><div class="hist-list">${historicoListHtml(client.historico)}</div></div>`:''}
       <div class="full row">
@@ -1734,6 +1809,43 @@ function showClientForm(client){
       </div>
     </form>
   `;
+  // Tipo toggle logic
+  document.querySelectorAll('#cliTipoToggle button').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const newTipo=btn.dataset.tipo;
+      if(newTipo===document.getElementById('cliTipo').value) return;
+      // collect current values before re-render
+      const cur={
+        id:client.id, tipo:newTipo,
+        nome:(document.getElementById('cliNome')||document.getElementById('cliRazaoSocial'))?.value||client.nome,
+        cpf:document.getElementById('cliCpf')?.value||document.getElementById('cliCpfResp')?.value||client.cpf||'',
+        cnpj:document.getElementById('cliCnpj')?.value||client.cnpj||'',
+        responsavel:document.getElementById('cliResponsavel')?.value||client.responsavel||'',
+        cargo:document.getElementById('cliCargo')?.value||client.cargo||'',
+        segmento:document.getElementById('cliSegmento')?.value||client.segmento||'',
+        telefone:document.getElementById('cliTelefone')?.value||'',
+        email:document.getElementById('cliEmail')?.value||'',
+        dataNascimento:document.getElementById('cliNasc')?.value||'',
+        sexo:document.getElementById('cliSexo')?.value||'',
+        estadoCivil:document.getElementById('cliEstadoCivil')?.value||'',
+        numFilhos:parseInt(document.getElementById('cliNumFilhos')?.value)||0,
+        ocupacao:document.getElementById('cliOcupacao')?.value||'',
+        empresa:document.getElementById('cliEmpresa')?.value||'',
+        rendaMensal:parseFloat(document.getElementById('cliRendaMensal')?.value)||0,
+        endereco:document.getElementById('cliEndereco')?.value||'',
+        numeroProposta:document.getElementById('cliNumeroProposta')?.value||'',
+        plano:document.getElementById('cliPlano')?.value||'',
+        coberturas:document.getElementById('cliCoberturas')?.value||'',
+        valorPagamento:parseFloat(document.getElementById('cliValor')?.value)||0,
+        banco:document.getElementById('cliBanco')?.value||'',
+        diaVencimento:document.getElementById('cliDiaVenc')?.value||'',
+        observacoesSaude:document.getElementById('cliSaude')?.value||'',
+        comissaoPercent:selectedPct,
+        historico:client.historico||[]
+      };
+      showClientForm(cur);
+    });
+  });
   let selectedPct=client.comissaoPercent||10;
   document.querySelectorAll('#cliPctGroup button').forEach(b=>{
     b.addEventListener('click',()=>{
@@ -1745,19 +1857,26 @@ function showClientForm(client){
   document.getElementById('cancelClientBtn').addEventListener('click',cancelClientForm);
   document.getElementById('clientForm').addEventListener('submit',e=>{
     e.preventDefault();
+    const tipoVal=document.getElementById('cliTipo').value;
+    const isPFsub=tipoVal==='PF';
     const valorPagamento=parseFloat(document.getElementById('cliValor').value)||0;
     const obj={
-      nome: document.getElementById('cliNome').value.trim(),
-      cpf: document.getElementById('cliCpf').value.trim(),
+      tipo: tipoVal,
+      nome: isPFsub ? document.getElementById('cliNome').value.trim() : document.getElementById('cliRazaoSocial').value.trim(),
+      cpf: isPFsub ? document.getElementById('cliCpf').value.trim() : (document.getElementById('cliCpfResp')?.value.trim()||''),
+      cnpj: !isPFsub ? document.getElementById('cliCnpj').value.trim() : '',
+      responsavel: !isPFsub ? document.getElementById('cliResponsavel').value.trim() : '',
+      cargo: !isPFsub ? document.getElementById('cliCargo').value.trim() : '',
+      segmento: !isPFsub ? document.getElementById('cliSegmento').value.trim() : '',
       telefone: document.getElementById('cliTelefone').value.trim(),
       email: document.getElementById('cliEmail').value.trim(),
-      dataNascimento: document.getElementById('cliNasc').value,
-      sexo: document.getElementById('cliSexo').value,
-      estadoCivil: document.getElementById('cliEstadoCivil').value,
-      numFilhos: parseInt(document.getElementById('cliNumFilhos').value)||0,
-      ocupacao: document.getElementById('cliOcupacao').value.trim(),
-      empresa: document.getElementById('cliEmpresa').value.trim(),
-      rendaMensal: parseFloat(document.getElementById('cliRendaMensal').value)||0,
+      dataNascimento: isPFsub ? document.getElementById('cliNasc').value : '',
+      sexo: isPFsub ? document.getElementById('cliSexo').value : '',
+      estadoCivil: isPFsub ? document.getElementById('cliEstadoCivil').value : '',
+      numFilhos: isPFsub ? parseInt(document.getElementById('cliNumFilhos').value)||0 : 0,
+      ocupacao: isPFsub ? document.getElementById('cliOcupacao').value.trim() : '',
+      empresa: isPFsub ? document.getElementById('cliEmpresa').value.trim() : '',
+      rendaMensal: isPFsub ? parseFloat(document.getElementById('cliRendaMensal').value)||0 : 0,
       endereco: document.getElementById('cliEndereco').value.trim(),
       numeroProposta: document.getElementById('cliNumeroProposta').value.trim(),
       plano: document.getElementById('cliPlano').value.trim(),
@@ -1765,7 +1884,7 @@ function showClientForm(client){
       valorPagamento,
       banco: document.getElementById('cliBanco').value.trim(),
       diaVencimento: document.getElementById('cliDiaVenc').value.trim(),
-      observacoesSaude: document.getElementById('cliSaude').value.trim(),
+      observacoesSaude: isPFsub ? document.getElementById('cliSaude').value.trim() : '',
       comissaoPercent: selectedPct,
       comissaoValor: +(valorPagamento*selectedPct/100).toFixed(2),
       historico: client.historico||[]
@@ -1827,75 +1946,87 @@ function renderClients(){
     listEl.innerHTML=`<div class="empty">Nenhum cliente encontrado para "<strong>${esc(clientSearchQuery)}</strong>".</div>`;
     return;
   }
-  // ---- Lista de nomes ----
+  // ---- Separar PF e PJ ----
   const sorted = filtered.slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
-  let html='<div class="client-name-list">';
-  sorted.forEach(c=>{
-    const isOpen = selectedClientId===c.id;
-    const initials = (c.nome||'?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('');
-    const sub=[c.cpf,c.telefone].filter(Boolean).join(' · ');
-    html+=`
-    <div class="client-list-item${isOpen?' open':''}" onclick="selectClient('${c.id}')">
-      <div class="cli-avatar">${initials}</div>
-      <div class="cli-name-block">
-        <div class="cli-name">${esc(c.nome)}</div>
-        ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
-      </div>
-      <div class="cli-chevron">${isOpen?'▲':'▼'}</div>
-    </div>`;
-    if(isOpen){
-      const plano=[c.plano,c.coberturas].filter(Boolean).join(' — ');
-      html+=`<div class="client-detail-panel">
-        <div class="cdp-grid">
-          <div class="cdp-section">
+  const pfList = sorted.filter(c=>(c.tipo||'PF')==='PF');
+  const pjList = sorted.filter(c=>c.tipo==='PJ');
+
+  function buildClientBlock(list, sectionLabel, icon){
+    if(!list.length) return '';
+    let h=`<div class="cli-section-header">${icon} ${sectionLabel} <span class="cli-section-count">${list.length}</span></div>`;
+    h+='<div class="client-name-list">';
+    list.forEach(c=>{
+      const isOpen=selectedClientId===c.id;
+      const isPFc=(c.tipo||'PF')==='PF';
+      const initials=(c.nome||'?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+      const sub=isPFc ? [c.cpf,c.telefone].filter(Boolean).join(' · ')
+                      : [c.cnpj,c.telefone].filter(Boolean).join(' · ');
+      h+=`<div class="client-list-item${isOpen?' open':''}" onclick="selectClient('${c.id}')">
+        <div class="cli-avatar">${initials}</div>
+        <div class="cli-name-block">
+          <div class="cli-name">${esc(c.nome)}</div>
+          ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
+        </div>
+        <div class="cli-chevron">${isOpen?'▲':'▼'}</div>
+      </div>`;
+      if(isOpen){
+        const plano=[c.plano,c.coberturas].filter(Boolean).join(' — ');
+        const waTel=c.telefone?`${esc(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;margin-left:4px;">WhatsApp ↗</a>`:'';
+        const mailLink=c.email?`${esc(c.email)} <a href="mailto:${esc(c.email)}" style="color:var(--gold);text-decoration:none;margin-left:4px;">Enviar ↗</a>`:'';
+        h+=`<div class="client-detail-panel"><div class="cdp-grid">`;
+        if(isPFc){
+          h+=`<div class="cdp-section">
             <div class="cdp-title">👤 Dados Pessoais</div>
-            ${row('Nome',c.nome)}
-            ${row('CPF',c.cpf)}
-            ${row('Nascimento',fmtDateFull(c.dataNascimento))}
-            ${row('Sexo',c.sexo)}
-            ${row('Estado civil',c.estadoCivil)}
-            ${row('Filhos',c.numFilhos||c.numFilhos===0?c.numFilhos:'')}
-            ${row('Telefone',c.telefone?`${esc(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;margin-left:4px;">WhatsApp ↗</a>`:'')}
-            ${row('E-mail',c.email?`${esc(c.email)} <a href="mailto:${esc(c.email)}" style="color:var(--gold);text-decoration:none;margin-left:4px;">Enviar ↗</a>`:'')}
-            ${row('Endereço',c.endereco)}
+            ${row('Nome',c.nome)}${row('CPF',c.cpf)}${row('Nascimento',fmtDateFull(c.dataNascimento))}
+            ${row('Sexo',c.sexo)}${row('Estado civil',c.estadoCivil)}${row('Filhos',c.numFilhos>=0&&c.numFilhos!==''?c.numFilhos:'')}
           </div>
           <div class="cdp-section">
             <div class="cdp-title">💼 Perfil Profissional</div>
-            ${row('Ocupação',c.ocupacao)}
-            ${row('Empresa',c.empresa)}
-            ${row('Renda mensal',c.rendaMensal?fmtBRL(c.rendaMensal):'')}
+            ${row('Ocupação',c.ocupacao)}${row('Empresa',c.empresa)}${row('Renda mensal',c.rendaMensal?fmtBRL(c.rendaMensal):'')}
+          </div>`;
+        } else {
+          h+=`<div class="cdp-section">
+            <div class="cdp-title">🏢 Dados da Empresa</div>
+            ${row('Razão Social',c.nome)}${row('CNPJ',c.cnpj)}${row('Segmento',c.segmento)}
           </div>
           <div class="cdp-section">
-            <div class="cdp-title">🛡️ Produto Contratado</div>
-            ${row('Nº proposta',c.numeroProposta)}
-            ${row('Plano',plano)}
-            ${row('Contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
-            ${row('Comissão',(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor)+')')}
-            ${row('Banco / Pagamento',c.banco)}
-            ${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
+            <div class="cdp-title">👤 Responsável</div>
+            ${row('Nome',c.responsavel)}${row('Cargo',c.cargo)}${row('CPF',c.cpf)}
+          </div>`;
+        }
+        h+=`<div class="cdp-section">
+          <div class="cdp-title">📞 Contato & Endereço</div>
+          ${row('Telefone',waTel)}${row('E-mail',mailLink)}${row('Endereço',c.endereco)}
+        </div>
+        <div class="cdp-section">
+          <div class="cdp-title">🛡️ Produto Contratado</div>
+          ${row('Nº proposta',c.numeroProposta)}${row('Plano',plano)}
+          ${row('Contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
+          ${row('Comissão',(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor)+')')}
+          ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
+        </div>
+        ${isPFc&&c.observacoesSaude?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Saúde (DPS)</div><div class="cdp-value">${esc(c.observacoesSaude)}</div></div>`:''}
+        <div class="cdp-section cdp-full">
+          <div class="cdp-title">📋 Histórico de Contato (${(c.historico||[]).length})</div>
+          <div class="hist-list">${historicoListHtml(c.historico)}</div>
+          <div class="row" style="margin-top:8px;">
+            <input type="text" id="cliHistInput-${c.id}" placeholder="Novo registro de contato..." style="flex:1;" onkeydown="if(event.key==='Enter'){addClientHistorico('${c.id}')}">
+            <button class="btn" onclick="addClientHistorico('${c.id}')">Adicionar</button>
           </div>
-          ${c.observacoesSaude?`<div class="cdp-section cdp-full">
-            <div class="cdp-title">🏥 Saúde (DPS)</div>
-            <div class="cdp-value">${esc(c.observacoesSaude)}</div>
-          </div>`:''}
-          <div class="cdp-section cdp-full">
-            <div class="cdp-title">📋 Histórico de Contato (${(c.historico||[]).length})</div>
-            <div class="hist-list">${historicoListHtml(c.historico)}</div>
-            <div class="row" style="margin-top:8px;">
-              <input type="text" id="cliHistInput-${c.id}" placeholder="Novo registro de contato..." style="flex:1;" onkeydown="if(event.key==='Enter'){addClientHistorico('${c.id}')}">
-              <button class="btn" onclick="addClientHistorico('${c.id}')">Adicionar</button>
-            </div>
-          </div>
+        </div>
         </div>
         <div class="cdp-actions row">
           <button class="btn primary" onclick="editClient('${c.id}');event.stopPropagation()">✏️ Editar</button>
           <button class="btn" onclick="convertClientToLead('${c.id}');event.stopPropagation()">🔄 Converter em lead</button>
           <button class="btn" style="color:var(--danger,#c0392b);border-color:var(--danger,#c0392b);" onclick="deleteClient('${c.id}');event.stopPropagation()">🗑️ Excluir</button>
-        </div>
-      </div>`;
-    }
-  });
-  html+='</div>';
+        </div></div>`;
+      }
+    });
+    h+='</div>';
+    return h;
+  }
+
+  let html = buildClientBlock(pfList,'Pessoa Física','👤') + buildClientBlock(pjList,'Pessoa Jurídica','🏢');
   listEl.innerHTML=html;
 }
 function row(label,val){
@@ -1929,6 +2060,109 @@ function addClientHistorico(id){
   db.collection('clients').doc(id).set({historico},{merge:true}).catch(err=>alert('Erro: '+err.message));
 }
 document.getElementById('newClientBtn').addEventListener('click',()=>showClientForm());
+
+/* ====================== Cobranças (Boletos) ====================== */
+function renderBoletos(){
+  const labelEl=document.getElementById('boletosMesLabel');
+  const listEl=document.getElementById('boletosList');
+  const statsEl=document.getElementById('boletosStats');
+  if(!labelEl||!listEl||!statsEl) return;
+
+  // Format label e.g. "Junho 2026"
+  const [year,mon]=boletosViewMes.split('-');
+  const dt=new Date(+year,+mon-1,1);
+  labelEl.textContent=dt.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+  const q=(document.getElementById('boletosSearch')||{value:''}).value.trim().toLowerCase();
+  const filtro=(document.getElementById('boletosFiltro')||{value:'todos'}).value;
+
+  let list=state.boletosClientes.filter(c=>{
+    if(!q) return true;
+    return (c.nome||'').toLowerCase().includes(q)||(c.cnpj||'').includes(q)||(c.cpf||'').includes(q);
+  });
+
+  // Apply status filter
+  list=list.filter(c=>{
+    const rec=!!(c.boletosStatus&&c.boletosStatus[boletosViewMes]);
+    if(filtro==='recebidos') return rec;
+    if(filtro==='pendentes') return !rec;
+    return true;
+  });
+
+  // Sort: pendentes primeiro, depois por nome
+  list.sort((a,b)=>{
+    const ra=!!(a.boletosStatus&&a.boletosStatus[boletosViewMes]);
+    const rb=!!(b.boletosStatus&&b.boletosStatus[boletosViewMes]);
+    if(ra!==rb) return ra?1:-1;
+    return (a.nome||'').localeCompare(b.nome||'','pt-BR');
+  });
+
+  // Stats
+  const total=state.boletosClientes.length;
+  const recebidos=state.boletosClientes.filter(c=>!!(c.boletosStatus&&c.boletosStatus[boletosViewMes])).length;
+  const pendentes=total-recebidos;
+  statsEl.innerHTML=`
+    <div class="card" style="padding:14px 18px;display:flex;flex-direction:column;gap:2px;min-width:120px;">
+      <div style="font-size:.75rem;color:var(--text2);font-weight:600;text-transform:uppercase;">Total</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--text);">${total}</div>
+    </div>
+    <div class="card" style="padding:14px 18px;display:flex;flex-direction:column;gap:2px;min-width:120px;">
+      <div style="font-size:.75rem;color:var(--green);font-weight:600;text-transform:uppercase;">✅ Recebidos</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--green);">${recebidos}</div>
+    </div>
+    <div class="card" style="padding:14px 18px;display:flex;flex-direction:column;gap:2px;min-width:120px;">
+      <div style="font-size:.75rem;color:var(--amber);font-weight:600;text-transform:uppercase;">⏳ Pendentes</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--amber);">${pendentes}</div>
+    </div>`;
+
+  if(list.length===0){
+    listEl.innerHTML=`<div class="empty">${q?'Nenhuma empresa encontrada para "'+esc(q)+'"':'Nenhum cliente de cobrança cadastrado.'}</div>`;
+    return;
+  }
+
+  const rows=list.map(c=>{
+    const recebido=!!(c.boletosStatus&&c.boletosStatus[boletosViewMes]);
+    const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    const sub=c.cnpj?`CNPJ ${c.cnpj}`:(c.cpf?`CPF ${c.cpf}`:'');
+    return `<div class="client-list-item" style="cursor:default;gap:12px;">
+      <div class="cli-avatar" style="background:${recebido?'var(--green)':'var(--navy,#1a2a4a)'};">${initials}</div>
+      <div class="cli-name-block" style="flex:1;min-width:0;">
+        <div class="cli-name">${esc(c.nome||'—')}</div>
+        ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
+        <input type="checkbox" ${recebido?'checked':''} onchange="toggleBoleto('${c.id}','${boletosViewMes}')"
+          style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
+        <span style="font-size:.85rem;color:${recebido?'var(--green)':'var(--text2)'};">${recebido?'Recebido':'Pendente'}</span>
+      </label>
+    </div>`;
+  }).join('');
+
+  listEl.innerHTML=`<div class="client-name-list">${rows}</div>`;
+}
+
+function toggleBoleto(id,mes){
+  const c=state.boletosClientes.find(x=>x.id===id);
+  if(!c) return;
+  const current=!!(c.boletosStatus&&c.boletosStatus[mes]);
+  const newVal=!current;
+  db.collection('boletosClientes').doc(id).set(
+    {boletosStatus:{[mes]:newVal}},{merge:true}
+  ).catch(err=>alert('Erro: '+err.message));
+}
+
+document.getElementById('boletosMesAnterior').addEventListener('click',()=>{
+  const [y,m]=boletosViewMes.split('-').map(Number);
+  const d=new Date(y,m-2,1);
+  boletosViewMes=d.toISOString().slice(0,7);
+  renderBoletos();
+});
+document.getElementById('boletosMesProximo').addEventListener('click',()=>{
+  const [y,m]=boletosViewMes.split('-').map(Number);
+  const d=new Date(y,m,1);
+  boletosViewMes=d.toISOString().slice(0,7);
+  renderBoletos();
+});
 
 /* ====================== Funil de Vendas ====================== */
 function showLeadForm(lead){

@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    // Perfis dos usuários (nome, e-mail, função)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      // Criação: só o próprio usuário pode criar seu perfil, e sempre como 'collaborator'
+      // (a administradora promove depois pelo Console ou pelo próprio app)
+      allow create: if isSignedIn() && request.auth.uid == userId
+                     && request.resource.data.role == 'collaborator';
+      allow update: if isSignedIn() && (request.auth.uid == userId || isOwner());
+      allow delete: if isOwner();
+    }
+
+    // Atividades cadastradas (somente a administradora cria/edita/exclui)
+    // Excecao: qualquer usuario autenticado pode atualizar apenas o campo "notes" (observacoes)
+    match /activities/{id} {
+      allow read: if isSignedIn();
+      allow create, delete: if isOwner();
+      allow update: if isOwner() ||
+        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes']));
+    }
+
+    // Ocorrências diárias das atividades (status, timer, redirecionamento)
+    match /occurrences/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Registros de ponto (entrada/saída)
+    match /timeLogs/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Cadastro de clientes - leitura/escrita para qualquer usuário autenticado
+    match /clients/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Funil de vendas (leads/oportunidades) - apenas administradora
+    match /leads/{id} {
+      allow read, write: if isOwner();
+    }
+
+    // Links úteis - todos podem ver, só a administradora gerencia
+    match /links/{id} {
+      allow read: if isSignedIn();
+      allow write: if isOwner();
+    }
+
+    // Arquivo de relatórios diários - apenas administradora
+    match /dailyReports/{id} {
+      allow read, write: if isOwner();
+    }
+
+    // Cards (quadro de notas) - todos podem ver e gerenciar
+    match /cards/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Contas a pagar (cadastro) - apenas administradora
+    match /payables/{id} {
+      allow read, write: if isOwner();
+    }
+
+    // Ocorrências mensais de contas a pagar (status pago/pendente) - apenas administradora
+    match /payableOccurrences/{id} {
+      allow read, write: if isOwner();
+    }
+
+    // Arquivo de relatórios mensais de contas a pagar - apenas administradora
+    match /payablesArchive/{id} {
+      allow read, write: if isOwner();
+    }
+
+    // Clientes de cobrança (importados via Excel) - apenas administradora
+    match /boletosClientes/{id} {
+      allow read, write: if isOwner();
+    }
+
+    // Chat entre colaboradores - todos autenticados podem ler e enviar mensagens
+    match /chatMessages/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isOwner() || (isSignedIn() && resource.data.uid == request.auth.uid);
+    }
+  }
+}
