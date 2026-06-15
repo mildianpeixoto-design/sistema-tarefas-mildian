@@ -314,8 +314,13 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 
 <section id="tab-clientes" class="section">
   <div class="cards summary-cards" id="clientesStats"></div>
-  <div class="row" style="margin-bottom:12px;">
+  <div class="row" style="margin-bottom:12px;gap:10px;flex-wrap:wrap;">
     <button class="btn primary" id="newClientBtn">+ Novo cliente</button>
+    <div style="position:relative;flex:1;min-width:220px;max-width:420px;">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none;">🔍</span>
+      <input type="text" id="clientSearch" placeholder="Buscar por nome, CPF/CNPJ ou telefone..." style="width:100%;padding:8px 12px 8px 32px;box-sizing:border-box;" oninput="filterClients(this.value)">
+    </div>
+    <span id="clientSearchCount" style="color:var(--text-muted);font-size:.88rem;align-self:center;white-space:nowrap;"></span>
   </div>
   <div id="clientFormWrap"></div>
   <div id="clientsList"></div>
@@ -584,6 +589,7 @@ let expandedComments=new Set();
 let expandedArquivo=new Set();
 let expandedLeadHist=new Set();
 let expandedClientHist=new Set();
+let clientSearchQuery='';
 let expandedActDetail=new Set();
 let expandedHojeGroups=new Set();
 let expandedReschedule=new Set();
@@ -1759,6 +1765,14 @@ function deleteClient(id){
   if(!confirm('Excluir este cliente?')) return;
   db.collection('clients').doc(id).delete().catch(err=>alert('Erro: '+err.message));
 }
+function filterClients(q){
+  clientSearchQuery=q.trim().toLowerCase();
+  // preserve the search box value and re-render
+  renderClients();
+  // restore focus on search box
+  const box=document.getElementById('clientSearch');
+  if(box && document.activeElement!==box){ box.focus(); box.setSelectionRange(box.value.length,box.value.length); }
+}
 function renderClients(){
   const total=state.clients.length;
   const somaValor=state.clients.reduce((s,c)=>s+(c.valorPagamento||0),0);
@@ -1768,13 +1782,32 @@ function renderClients(){
     <div class="card"><div class="label">Soma valor de pagamentos</div><div class="value">${fmtBRL(somaValor)}</div></div>
     <div class="card"><div class="label">Total de comissão</div><div class="value">${fmtBRL(somaComissao)}</div></div>
   `;
+  // sync search box value (in case renderClients is called externally)
+  const searchBox=document.getElementById('clientSearch');
+  if(searchBox && searchBox.value!==clientSearchQuery && document.activeElement!==searchBox) searchBox.value=clientSearchQuery;
+  // filter
+  const q=clientSearchQuery;
+  const filtered = q
+    ? state.clients.filter(c=>{
+        const haystack=[c.nome,c.cpf,c.telefone].join(' ').toLowerCase().replace(/\D/g,' ');
+        const needle=q.replace(/\D/g,' ');
+        return haystack.includes(q) || (needle.trim() && haystack.includes(needle.trim()));
+      })
+    : state.clients;
+  // update count label
+  const countEl=document.getElementById('clientSearchCount');
+  if(countEl) countEl.textContent = q ? `${filtered.length} de ${total} cliente${total!==1?'s':''}` : '';
   const listEl=document.getElementById('clientsList');
   if(total===0){
     listEl.innerHTML='<div class="empty">Nenhum cliente cadastrado ainda.</div>';
     return;
   }
+  if(filtered.length===0){
+    listEl.innerHTML=`<div class="empty">Nenhum cliente encontrado para "<strong>${esc(clientSearchQuery)}</strong>".</div>`;
+    return;
+  }
   let html='<table><thead><tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th>Nascimento</th><th>Ocupação</th><th>Plano / Coberturas</th><th>Nº Proposta</th><th>Valor pagamento</th><th>Comissão</th><th>Saúde</th><th></th></tr></thead><tbody>';
-  state.clients.slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(c=>{
+  filtered.slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(c=>{
     const planoDisplay=[c.plano,c.coberturas].filter(Boolean).join(' | ');
     const saudeDisplay=c.observacoesSaude?`<span title="${esc(c.observacoesSaude)}" style="cursor:help;">🏥 Ver</span>`:'';
     html+=`<tr>
