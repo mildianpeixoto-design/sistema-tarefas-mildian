@@ -1748,8 +1748,8 @@ function renderClients(){
     html+=`<tr>
       <td>${esc(c.nome)}</td>
       <td>${esc(c.cpf||'')}</td>
-      <td>${esc(c.telefone||'')}</td>
-      <td>${esc(c.email||'')}</td>
+      <td>${c.telefone?`${esc(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:11px;margin-left:4px;text-decoration:none;" title="WhatsApp">WA↗</a>`:''}</td>
+      <td>${c.email?`${esc(c.email)} <a href="mailto:${esc(c.email)}" style="color:var(--gold);font-size:11px;margin-left:4px;text-decoration:none;" title="E-mail">✉↗</a>`:''}</td>
       <td>${fmtDateFull(c.dataNascimento)}</td>
       <td>${esc(c.endereco||'')}</td>
       <td>${esc(c.coberturas||'')}</td>
@@ -1797,7 +1797,7 @@ document.getElementById('newClientBtn').addEventListener('click',()=>showClientF
 /* ====================== Funil de Vendas ====================== */
 function showLeadForm(lead){
   const isEdit=!!(lead&&lead.id);
-  lead=lead||{id:null,nome:'',telefone:'',email:'',valorEstimado:0,etapa:'lead',historico:[]};
+  lead=lead||{id:null,nome:'',telefone:'',email:'',valorEstimado:0,etapa:'lead',indicadoPor:'',historico:[]};
   document.getElementById('leadFormWrap').innerHTML=`
     <form class="form-grid" id="leadForm">
       <div class="full"><label>Nome / Empresa</label><input type="text" id="leadNome" value="${esc(lead.nome)}" required></div>
@@ -1808,6 +1808,7 @@ function showLeadForm(lead){
         ${STAGE_ORDER.map(s=>`<option value="${s}" ${lead.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
       </select></div>
       <div><label>Próximo contato</label><input type="date" id="leadProximoContato" value="${esc(lead.proximoContato||'')}"></div>
+      <div class="full"><label>Indicado por</label><input type="text" id="leadIndicadoPor" value="${esc(lead.indicadoPor||'')}" placeholder="Nome de quem indicou (opcional)"></div>
       ${!isEdit?`<div class="full"><label>Observação inicial (opcional)</label><textarea id="leadObsInicial" placeholder="Será registrada no histórico com a data de hoje"></textarea></div>`:''}
       <div class="full row">
         <button class="btn primary" type="submit">${isEdit?'Salvar':'Adicionar lead'}</button>
@@ -1825,6 +1826,7 @@ function showLeadForm(lead){
       valorEstimado: parseFloat(document.getElementById('leadValor').value)||0,
       etapa: document.getElementById('leadEtapa').value,
       proximoContato: document.getElementById('leadProximoContato').value||null,
+      indicadoPor: document.getElementById('leadIndicadoPor').value.trim()||'',
       historico: lead.historico||[]
     };
     if(!obj.nome) return;
@@ -1888,8 +1890,9 @@ function renderFunil(){
       html+=`<div class="kanban-card">
         <div class="kc-title">${esc(l.nome)}</div>
         ${l.valorEstimado?`<div class="kc-value">${fmtBRL(l.valorEstimado)}</div>`:''}
-        ${l.telefone?`<div class="muted">📞 ${esc(l.telefone)}</div>`:''}
-        ${l.email?`<div class="muted">✉ ${esc(l.email)}</div>`:''}
+        ${l.indicadoPor?`<div class="muted">🤝 Indicado por: ${esc(l.indicadoPor)}</div>`:''}
+        ${l.telefone?`<div class="muted" style="display:flex;align-items:center;gap:6px;">📞 ${esc(l.telefone)} <a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:12px;text-decoration:none;" title="Abrir WhatsApp">WhatsApp ↗</a></div>`:''}
+        ${l.email?`<div class="muted" style="display:flex;align-items:center;gap:6px;">✉ ${esc(l.email)} <a href="mailto:${esc(l.email)}" style="font-size:12px;color:var(--gold);text-decoration:none;" title="Enviar e-mail">E-mail ↗</a></div>`:''}
         ${(!l.telefone&&!l.email&&l.contato)?`<div class="muted">${esc(l.contato)}</div>`:''}
         ${(!l.historico&&l.observacoes)?`<div class="muted">${esc(l.observacoes)}</div>`:''}
         ${l.proximoContato?(()=>{
