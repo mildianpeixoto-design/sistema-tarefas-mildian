@@ -395,6 +395,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 </section>
 
 <section id="tab-video" class="section">
+  <p style="color:var(--text-muted);font-size:.92rem;margin-bottom:12px;">A sala abre em uma nova aba — sem limite de tempo e sem precisar de login.</p>
   <div class="form-grid" style="margin-bottom:12px;">
     <div>
       <label>Nome da sala</label>
@@ -411,7 +412,6 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       <button class="btn" id="copyVideoLinkBtn">Copiar link</button>
     </div>
   </div>
-  <div id="videoFrameWrap"></div>
 </section>
 
 </main>
@@ -2562,7 +2562,7 @@ document.getElementById('chatForm').addEventListener('submit',e=>{
   }).catch(err=>alert('Erro: '+err.message));
 });
 
-/* Videoconferência (Jitsi Meet embutido) */
+/* Videoconferência — abre Jitsi em nova aba (sem limite de tempo) */
 document.getElementById('startVideoBtn').addEventListener('click',()=>{
   let room=document.getElementById('videoRoomName').value.trim();
   if(!room){
@@ -2573,7 +2573,7 @@ document.getElementById('startVideoBtn').addEventListener('click',()=>{
   const url=`https://meet.jit.si/${encodeURIComponent(room)}`;
   document.getElementById('videoShareLink').value=url;
   document.getElementById('videoShareWrap').style.display='block';
-  document.getElementById('videoFrameWrap').innerHTML=`<iframe src="${url}#config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay" style="width:100%;height:600px;border:0;border-radius:10px;"></iframe>`;
+  window.open(url,'_blank','noopener');
 });
 document.getElementById('copyVideoLinkBtn').addEventListener('click',()=>{
   const input=document.getElementById('videoShareLink');
