@@ -227,6 +227,26 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .note-color-c4{background:var(--green-bg);}
 .note-color-c5{background:var(--amber-bg);}
 .note-color-c6{background:#fff;}
+/* ---- Client name list ---- */
+.client-name-list{display:flex;flex-direction:column;gap:2px;margin-top:8px;}
+.client-list-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:background .15s,border-color .15s;}
+.client-list-item:hover{background:var(--gold-bg);border-color:var(--gold);}
+.client-list-item.open{background:var(--gold-bg);border-color:var(--gold);border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom:none;}
+.cli-avatar{width:38px;height:38px;border-radius:50%;background:var(--navy,#1a2a4a);color:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.88rem;flex-shrink:0;}
+.cli-name-block{flex:1;min-width:0;}
+.cli-name{font-weight:600;font-size:.97rem;color:var(--text1);}
+.cli-sub{font-size:.8rem;color:var(--text-muted,var(--text2));margin-top:2px;}
+.cli-chevron{color:var(--gold);font-size:.8rem;flex-shrink:0;}
+/* ---- Client detail panel ---- */
+.client-detail-panel{background:var(--card);border:1px solid var(--gold);border-top:none;border-radius:0 0 8px 8px;padding:18px 16px 14px;}
+.cdp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:14px;}
+.cdp-full{grid-column:1/-1;}
+.cdp-section{display:flex;flex-direction:column;gap:4px;}
+.cdp-title{font-weight:700;font-size:.82rem;color:var(--gold);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:4px;}
+.cdp-row{display:flex;gap:8px;font-size:.88rem;}
+.cdp-label{color:var(--text-muted,var(--text2));min-width:110px;flex-shrink:0;}
+.cdp-value{color:var(--text1);flex:1;}
+.cdp-actions{gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;margin-top:4px;}
 </style>
 </head>
 <body>
@@ -590,6 +610,7 @@ let expandedArquivo=new Set();
 let expandedLeadHist=new Set();
 let expandedClientHist=new Set();
 let clientSearchQuery='';
+let selectedClientId=null;
 let expandedActDetail=new Set();
 let expandedHojeGroups=new Set();
 let expandedReschedule=new Set();
@@ -1806,50 +1827,91 @@ function renderClients(){
     listEl.innerHTML=`<div class="empty">Nenhum cliente encontrado para "<strong>${esc(clientSearchQuery)}</strong>".</div>`;
     return;
   }
-  let html='<table><thead><tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th>Nascimento</th><th>Ocupação</th><th>Plano / Coberturas</th><th>Nº Proposta</th><th>Valor pagamento</th><th>Comissão</th><th>Saúde</th><th></th></tr></thead><tbody>';
-  filtered.slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(c=>{
-    const planoDisplay=[c.plano,c.coberturas].filter(Boolean).join(' | ');
-    const saudeDisplay=c.observacoesSaude?`<span title="${esc(c.observacoesSaude)}" style="cursor:help;">🏥 Ver</span>`:'';
-    html+=`<tr>
-      <td>
-        <div>${esc(c.nome)}</div>
-        ${c.estadoCivil||c.sexo?`<div style="font-size:11px;color:var(--text-muted)">${[c.sexo,c.estadoCivil,c.numFilhos?c.numFilhos+' filho(s)':''].filter(Boolean).join(' · ')}</div>`:''}
-        ${c.empresa||c.rendaMensal?`<div style="font-size:11px;color:var(--text-muted)">${[c.empresa,c.rendaMensal?'R$'+c.rendaMensal.toLocaleString('pt-BR'):''].filter(Boolean).join(' · ')}</div>`:''}
-      </td>
-      <td>${esc(c.cpf||'')}</td>
-      <td>${c.telefone?`${esc(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:11px;margin-left:4px;text-decoration:none;" title="WhatsApp">WA↗</a>`:''}</td>
-      <td>${c.email?`${esc(c.email)} <a href="mailto:${esc(c.email)}" style="color:var(--gold);font-size:11px;margin-left:4px;text-decoration:none;" title="E-mail">✉↗</a>`:''}</td>
-      <td>${fmtDateFull(c.dataNascimento)}</td>
-      <td>${esc(c.ocupacao||'')}</td>
-      <td>${esc(planoDisplay)}</td>
-      <td>${esc(c.numeroProposta||'')}</td>
-      <td>
-        ${fmtBRL(c.valorPagamento)}
-        ${c.banco?`<div style="font-size:11px;color:var(--text-muted)">${esc(c.banco)}${c.diaVencimento?' · Dia '+c.diaVencimento:''}</div>`:''}
-      </td>
-      <td>${c.comissaoPercent||0}% (${fmtBRL(c.comissaoValor)})</td>
-      <td>${saudeDisplay}</td>
-      <td class="row">
-        <button class="icon-btn" onclick="editClient('${c.id}')">Editar</button>
-        <button class="icon-btn" onclick="deleteClient('${c.id}')">Excluir</button>
-        <button class="icon-btn" onclick="convertClientToLead('${c.id}')">Converter em lead</button>
-        <button class="icon-btn" onclick="toggleClientHist('${c.id}')">${expandedClientHist.has(c.id)?'Ocultar histórico':'Histórico'} (${(c.historico||[]).length})</button>
-      </td>
-    </tr>`;
-    if(expandedClientHist.has(c.id)){
-      html+=`<tr><td colspan="12">
-        <div class="hist-list">
-          ${historicoListHtml(c.historico)}
-          <div class="row" style="margin-top:6px;">
-            <input type="text" id="cliHistInput-${c.id}" placeholder="Novo registro de contato..." style="flex:1;" onkeydown="if(event.key==='Enter'){addClientHistorico('${c.id}')}">
-            <button class="btn" onclick="addClientHistorico('${c.id}')">Adicionar</button>
+  // ---- Lista de nomes ----
+  const sorted = filtered.slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+  let html='<div class="client-name-list">';
+  sorted.forEach(c=>{
+    const isOpen = selectedClientId===c.id;
+    const initials = (c.nome||'?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+    const sub=[c.cpf,c.telefone].filter(Boolean).join(' · ');
+    html+=`
+    <div class="client-list-item${isOpen?' open':''}" onclick="selectClient('${c.id}')">
+      <div class="cli-avatar">${initials}</div>
+      <div class="cli-name-block">
+        <div class="cli-name">${esc(c.nome)}</div>
+        ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
+      </div>
+      <div class="cli-chevron">${isOpen?'▲':'▼'}</div>
+    </div>`;
+    if(isOpen){
+      const plano=[c.plano,c.coberturas].filter(Boolean).join(' — ');
+      html+=`<div class="client-detail-panel">
+        <div class="cdp-grid">
+          <div class="cdp-section">
+            <div class="cdp-title">👤 Dados Pessoais</div>
+            ${row('Nome',c.nome)}
+            ${row('CPF',c.cpf)}
+            ${row('Nascimento',fmtDateFull(c.dataNascimento))}
+            ${row('Sexo',c.sexo)}
+            ${row('Estado civil',c.estadoCivil)}
+            ${row('Filhos',c.numFilhos||c.numFilhos===0?c.numFilhos:'')}
+            ${row('Telefone',c.telefone?`${esc(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;margin-left:4px;">WhatsApp ↗</a>`:'')}
+            ${row('E-mail',c.email?`${esc(c.email)} <a href="mailto:${esc(c.email)}" style="color:var(--gold);text-decoration:none;margin-left:4px;">Enviar ↗</a>`:'')}
+            ${row('Endereço',c.endereco)}
+          </div>
+          <div class="cdp-section">
+            <div class="cdp-title">💼 Perfil Profissional</div>
+            ${row('Ocupação',c.ocupacao)}
+            ${row('Empresa',c.empresa)}
+            ${row('Renda mensal',c.rendaMensal?fmtBRL(c.rendaMensal):'')}
+          </div>
+          <div class="cdp-section">
+            <div class="cdp-title">🛡️ Produto Contratado</div>
+            ${row('Nº proposta',c.numeroProposta)}
+            ${row('Plano',plano)}
+            ${row('Contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
+            ${row('Comissão',(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor)+')')}
+            ${row('Banco / Pagamento',c.banco)}
+            ${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
+          </div>
+          ${c.observacoesSaude?`<div class="cdp-section cdp-full">
+            <div class="cdp-title">🏥 Saúde (DPS)</div>
+            <div class="cdp-value">${esc(c.observacoesSaude)}</div>
+          </div>`:''}
+          <div class="cdp-section cdp-full">
+            <div class="cdp-title">📋 Histórico de Contato (${(c.historico||[]).length})</div>
+            <div class="hist-list">${historicoListHtml(c.historico)}</div>
+            <div class="row" style="margin-top:8px;">
+              <input type="text" id="cliHistInput-${c.id}" placeholder="Novo registro de contato..." style="flex:1;" onkeydown="if(event.key==='Enter'){addClientHistorico('${c.id}')}">
+              <button class="btn" onclick="addClientHistorico('${c.id}')">Adicionar</button>
+            </div>
           </div>
         </div>
-      </td></tr>`;
+        <div class="cdp-actions row">
+          <button class="btn primary" onclick="editClient('${c.id}');event.stopPropagation()">✏️ Editar</button>
+          <button class="btn" onclick="convertClientToLead('${c.id}');event.stopPropagation()">🔄 Converter em lead</button>
+          <button class="btn" style="color:var(--danger,#c0392b);border-color:var(--danger,#c0392b);" onclick="deleteClient('${c.id}');event.stopPropagation()">🗑️ Excluir</button>
+        </div>
+      </div>`;
     }
   });
-  html+='</tbody></table>';
+  html+='</div>';
   listEl.innerHTML=html;
+}
+function row(label,val){
+  if(val===''||val===null||val===undefined) return '';
+  return `<div class="cdp-row"><span class="cdp-label">${label}</span><span class="cdp-value">${val}</span></div>`;
+}
+function selectClient(id){
+  selectedClientId = selectedClientId===id ? null : id;
+  renderClients();
+  if(selectedClientId){
+    // scroll panel into view
+    setTimeout(()=>{
+      const el=document.querySelector('.client-detail-panel');
+      if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'});
+    },50);
+  }
 }
 function toggleClientHist(id){
   if(expandedClientHist.has(id)) expandedClientHist.delete(id);
