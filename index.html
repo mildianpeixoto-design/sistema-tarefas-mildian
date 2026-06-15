@@ -360,6 +360,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 
 <section id="tab-boletos" class="section owner-only">
   <div class="cards summary-cards" id="boletosStats"></div>
+  <div id="boletoFormWrap"></div>
   <div class="row" style="margin-bottom:14px;align-items:center;gap:10px;flex-wrap:wrap;">
     <button class="btn" id="boletosMesAnterior">‹</button>
     <span id="boletosMesLabel" style="font-weight:700;font-size:1rem;min-width:130px;text-align:center;"></span>
@@ -374,6 +375,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       <option value="pendentes">Pendentes</option>
       <option value="recebidos">Recebidos</option>
     </select>
+    <button class="btn btn-primary" id="novaBoletoBtn">+ Nova cobrança</button>
   </div>
   <div id="boletosList"></div>
 </section>
@@ -668,6 +670,7 @@ let state={
   boletosClientes:[]
 };
 let boletosViewMes=new Date().toISOString().slice(0,7);
+let selectedBoletoId=null;
 
 document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 
@@ -2068,7 +2071,6 @@ function renderBoletos(){
   const statsEl=document.getElementById('boletosStats');
   if(!labelEl||!listEl||!statsEl) return;
 
-  // Format label e.g. "Junho 2026"
   const [year,mon]=boletosViewMes.split('-');
   const dt=new Date(+year,+mon-1,1);
   labelEl.textContent=dt.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
@@ -2078,10 +2080,12 @@ function renderBoletos(){
 
   let list=state.boletosClientes.filter(c=>{
     if(!q) return true;
-    return (c.nome||'').toLowerCase().includes(q)||(c.cnpj||'').includes(q)||(c.cpf||'').includes(q);
+    return (c.nome||'').toLowerCase().includes(q)
+      ||(c.contato||'').toLowerCase().includes(q)
+      ||(c.telefone||'').includes(q)
+      ||(c.email||'').toLowerCase().includes(q);
   });
 
-  // Apply status filter
   list=list.filter(c=>{
     const rec=!!(c.boletosStatus&&c.boletosStatus[boletosViewMes]);
     if(filtro==='recebidos') return rec;
@@ -2089,7 +2093,6 @@ function renderBoletos(){
     return true;
   });
 
-  // Sort: pendentes primeiro, depois por nome
   list.sort((a,b)=>{
     const ra=!!(a.boletosStatus&&a.boletosStatus[boletosViewMes]);
     const rb=!!(b.boletosStatus&&b.boletosStatus[boletosViewMes]);
@@ -2097,7 +2100,6 @@ function renderBoletos(){
     return (a.nome||'').localeCompare(b.nome||'','pt-BR');
   });
 
-  // Stats
   const total=state.boletosClientes.length;
   const recebidos=state.boletosClientes.filter(c=>!!(c.boletosStatus&&c.boletosStatus[boletosViewMes])).length;
   const pendentes=total-recebidos;
@@ -2116,51 +2118,116 @@ function renderBoletos(){
     </div>`;
 
   if(list.length===0){
-    listEl.innerHTML=`<div class="empty">${q?'Nenhuma empresa encontrada para "'+esc(q)+'"':'Nenhum cliente de cobrança cadastrado.'}</div>`;
+    listEl.innerHTML=`<div class="empty">${q?'Nenhuma empresa encontrada para "'+esc(q)+'"':'Nenhum cliente de cobrança cadastrado. Clique em "+ Nova cobrança" para adicionar.'}</div>`;
     return;
   }
 
   const rows=list.map(c=>{
     const recebido=!!(c.boletosStatus&&c.boletosStatus[boletosViewMes]);
+    const isOpen=selectedBoletoId===c.id;
     const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
-    const sub=c.cnpj?`CNPJ ${c.cnpj}`:(c.cpf?`CPF ${c.cpf}`:'');
-    return `<div class="client-list-item" style="cursor:default;gap:12px;">
-      <div class="cli-avatar" style="background:${recebido?'var(--green)':'var(--navy,#1a2a4a)'};">${initials}</div>
-      <div class="cli-name-block" style="flex:1;min-width:0;">
-        <div class="cli-name">${esc(c.nome||'—')}</div>
-        ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
+    const sub=[c.contato?`Contato: ${c.contato}`:'', c.diaVencimento?`Venc. dia ${c.diaVencimento}`:''].filter(Boolean).join(' · ');
+
+    let detail='';
+    if(isOpen){
+      detail=`<div class="client-detail-panel">
+        <div class="cdp-grid">
+          <div class="cdp-section">
+            <div class="cdp-title">Dados</div>
+            ${c.contato?`<div class="cdp-row"><span class="cdp-label">Contato</span><span class="cdp-value">${esc(c.contato)}</span></div>`:''}
+            ${c.telefone?`<div class="cdp-row"><span class="cdp-label">Telefone</span><span class="cdp-value">${esc(c.telefone)}</span></div>`:''}
+            ${c.email?`<div class="cdp-row"><span class="cdp-label">E-mail</span><span class="cdp-value">${esc(c.email)}</span></div>`:''}
+            ${c.diaVencimento?`<div class="cdp-row"><span class="cdp-label">Vencimento</span><span class="cdp-value">Dia ${esc(c.diaVencimento)}</span></div>`:''}
+          </div>
+        </div>
+        <div class="cdp-actions row">
+          <button class="btn btn-primary" onclick="showBoletoForm(state.boletosClientes.find(x=>x.id==='${c.id}'))">✏️ Editar</button>
+          <button class="btn" style="color:var(--red);" onclick="if(confirm('Remover este cliente de cobrança?')) db.collection('boletosClientes').doc('${c.id}').delete()">🗑️ Remover</button>
+        </div>
+      </div>`;
+    }
+
+    return `<div>
+      <div class="client-list-item${isOpen?' open':''}" onclick="selectBoleto('${c.id}')">
+        <div class="cli-avatar" style="background:${recebido?'var(--green)':'var(--navy,#1a2a4a)'};">${initials}</div>
+        <div class="cli-name-block" style="flex:1;min-width:0;">
+          <div class="cli-name">${esc(c.nome||'—')}</div>
+          ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;" onclick="event.stopPropagation()">
+          <input type="checkbox" ${recebido?'checked':''} onchange="toggleBoleto('${c.id}','${boletosViewMes}')"
+            style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
+          <span style="font-size:.85rem;color:${recebido?'var(--green)':'var(--text2)'};">${recebido?'Recebido':'Pendente'}</span>
+        </label>
+        <span class="cli-chevron">${isOpen?'▲':'▼'}</span>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
-        <input type="checkbox" ${recebido?'checked':''} onchange="toggleBoleto('${c.id}','${boletosViewMes}')"
-          style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
-        <span style="font-size:.85rem;color:${recebido?'var(--green)':'var(--text2)'};">${recebido?'Recebido':'Pendente'}</span>
-      </label>
+      ${detail}
     </div>`;
   }).join('');
 
   listEl.innerHTML=`<div class="client-name-list">${rows}</div>`;
 }
 
+function selectBoleto(id){
+  selectedBoletoId = selectedBoletoId===id ? null : id;
+  renderBoletos();
+}
+
 function toggleBoleto(id,mes){
   const c=state.boletosClientes.find(x=>x.id===id);
   if(!c) return;
   const current=!!(c.boletosStatus&&c.boletosStatus[mes]);
-  const newVal=!current;
   db.collection('boletosClientes').doc(id).set(
-    {boletosStatus:{[mes]:newVal}},{merge:true}
+    {boletosStatus:{[mes]:!current}},{merge:true}
   ).catch(err=>alert('Erro: '+err.message));
 }
 
+function showBoletoForm(c){
+  c=c||{id:null,nome:'',contato:'',telefone:'',email:'',diaVencimento:''};
+  const isEdit=!!c.id;
+  document.getElementById('boletoFormWrap').innerHTML=`
+    <div class="card" style="margin-bottom:16px;padding:18px 16px;">
+      <div style="font-weight:700;font-size:1rem;margin-bottom:14px;">${isEdit?'Editar cobrança':'Nova cobrança'}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+        <div><label class="form-label">Empresa / Nome *</label><input id="bcNome" class="form-control" value="${esc(c.nome||'')}"></div>
+        <div><label class="form-label">Nome do contato</label><input id="bcContato" class="form-control" value="${esc(c.contato||'')}"></div>
+        <div><label class="form-label">Telefone</label><input id="bcTelefone" class="form-control" value="${esc(c.telefone||'')}"></div>
+        <div><label class="form-label">E-mail</label><input id="bcEmail" class="form-control" value="${esc(c.email||'')}"></div>
+        <div><label class="form-label">Dia de vencimento</label><input id="bcDia" class="form-control" placeholder="Ex: 10" value="${esc(c.diaVencimento||'')}"></div>
+      </div>
+      <div class="row" style="margin-top:14px;gap:8px;">
+        <button class="btn btn-primary" onclick="saveBoletoForm('${c.id||''}')">💾 Salvar</button>
+        <button class="btn" onclick="document.getElementById('boletoFormWrap').innerHTML=''">Cancelar</button>
+      </div>
+    </div>`;
+  document.getElementById('boletoFormWrap').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function saveBoletoForm(id){
+  const nome=document.getElementById('bcNome').value.trim();
+  if(!nome){alert('Informe o nome da empresa.');return;}
+  const data={
+    nome,
+    contato: document.getElementById('bcContato').value.trim(),
+    telefone: document.getElementById('bcTelefone').value.trim(),
+    email: document.getElementById('bcEmail').value.trim(),
+    diaVencimento: document.getElementById('bcDia').value.trim()
+  };
+  const ref = id ? db.collection('boletosClientes').doc(id) : db.collection('boletosClientes').doc();
+  ref.set(data,{merge:true}).then(()=>{
+    document.getElementById('boletoFormWrap').innerHTML='';
+  }).catch(err=>alert('Erro: '+err.message));
+}
+
+document.getElementById('novaBoletoBtn').addEventListener('click',()=>showBoletoForm());
 document.getElementById('boletosMesAnterior').addEventListener('click',()=>{
   const [y,m]=boletosViewMes.split('-').map(Number);
-  const d=new Date(y,m-2,1);
-  boletosViewMes=d.toISOString().slice(0,7);
+  boletosViewMes=new Date(y,m-2,1).toISOString().slice(0,7);
   renderBoletos();
 });
 document.getElementById('boletosMesProximo').addEventListener('click',()=>{
   const [y,m]=boletosViewMes.split('-').map(Number);
-  const d=new Date(y,m,1);
-  boletosViewMes=d.toISOString().slice(0,7);
+  boletosViewMes=new Date(y,m,1).toISOString().slice(0,7);
   renderBoletos();
 });
 
