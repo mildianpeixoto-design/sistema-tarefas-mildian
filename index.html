@@ -2864,8 +2864,9 @@ function renderPayablesList(){
   const el=document.getElementById('payablesList');
   if(!el) return;
   if(state.payables.length===0){ el.innerHTML='<div class="empty">Nenhuma conta cadastrada ainda.</div>'; return; }
+  const sortedPayables=[...state.payables].sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR',{sensitivity:'base'}));
   let html='<table><thead><tr><th>Conta</th><th>Valor</th><th>Recorrência</th><th>Pagamento</th><th>Prazo</th><th></th></tr></thead><tbody>';
-  state.payables.forEach(p=>{
+  sortedPayables.forEach(p=>{
     let pagamento, prazo;
     if(p.recurrence==='unico'){
       pagamento=fmtDateFull(p.dueDate);
