@@ -2254,6 +2254,17 @@ function showLeadForm(lead){
         <button class="btn" type="button" id="cancelLeadBtn">Cancelar</button>
       </div>
     </form>
+    ${isEdit?`
+    <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;">
+      <div style="font-weight:600;margin-bottom:8px;">📝 Anotações (${(lead.historico||[]).length})</div>
+      <div id="leadFormHistList" class="hist-list" style="margin-bottom:10px;">
+        ${(lead.historico&&lead.historico.length)?historicoListHtml(lead.historico):'<div class="muted" style="font-size:12px;">Nenhuma anotação ainda.</div>'}
+      </div>
+      <div class="row">
+        <input type="text" id="leadFormHistInput" placeholder="Nova anotação..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadAnnotationFromForm('${lead.id}')}">
+        <button class="btn" onclick="addLeadAnnotationFromForm('${lead.id}')">Salvar</button>
+      </div>
+    </div>`:''}
   `;
   document.getElementById('cancelLeadBtn').addEventListener('click',cancelLeadForm);
   document.getElementById('leadForm').addEventListener('submit',e=>{
@@ -2283,6 +2294,24 @@ function cancelLeadForm(){ document.getElementById('leadFormWrap').innerHTML='';
 function editLead(id){
   const l=state.leads.find(x=>x.id===id);
   if(l) showLeadForm(l);
+}
+function addLeadAnnotationFromForm(id){
+  const input=document.getElementById('leadFormHistInput');
+  if(!input) return;
+  const text=input.value.trim();
+  if(!text) return;
+  const l=state.leads.find(x=>x.id===id);
+  const historico=((l&&l.historico)||[]).concat([{texto:text,at:ts(),uid:currentUser.uid,name:currentUser.name}]);
+  input.value='';
+  db.collection('leads').doc(id).set({historico},{merge:true})
+    .then(()=>{
+      // Atualiza só a lista de anotações no formulário sem fechar o form
+      const listEl=document.getElementById('leadFormHistList');
+      if(listEl) listEl.innerHTML=historicoListHtml(historico);
+      const title=document.querySelector('#leadFormWrap [style*="Anotações"]');
+      if(title) title.textContent=`📝 Anotações (${historico.length})`;
+    })
+    .catch(err=>alert('Erro: '+err.message));
 }
 function deleteLead(id){
   if(!confirm('Excluir este lead?')) return;
