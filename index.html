@@ -2248,7 +2248,7 @@ function showLeadForm(lead){
       </select></div>
       <div><label>Próximo contato</label><input type="date" id="leadProximoContato" value="${esc(lead.proximoContato||'')}"></div>
       <div class="full"><label>Indicado por</label><input type="text" id="leadIndicadoPor" value="${esc(lead.indicadoPor||'')}" placeholder="Nome de quem indicou (opcional)"></div>
-      ${!isEdit?`<div class="full"><label>Observação inicial (opcional)</label><textarea id="leadObsInicial" placeholder="Será registrada no histórico com a data de hoje"></textarea></div>`:''}
+      ${!isEdit?`<div class="full"><label>Anotação inicial (opcional)</label><textarea id="leadObsInicial" placeholder="Será registrada nas anotações com a data de hoje"></textarea></div>`:''}
       <div class="full row">
         <button class="btn primary" type="submit">${isEdit?'Salvar':'Adicionar lead'}</button>
         <button class="btn" type="button" id="cancelLeadBtn">Cancelar</button>
@@ -2348,13 +2348,13 @@ function renderFunil(){
           <button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>
           ${stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
         </div>
-        <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">${expandedLeadHist.has(l.id)?'Ocultar histórico':'Histórico'} (${(l.historico||[]).length})</button>
+        <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
         ${expandedLeadHist.has(l.id)?`
-          <div class="hist-list">
-            ${historicoListHtml(l.historico)}
+          <div class="hist-list" style="margin-top:6px;">
+            ${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}
             <div class="row" style="margin-top:6px;">
-              <input type="text" id="leadHistInput-${l.id}" placeholder="Novo registro de contato..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadHistorico('${l.id}')}">
-              <button class="btn" onclick="addLeadHistorico('${l.id}')">Adicionar</button>
+              <input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadHistorico('${l.id}')}">
+              <button class="btn" onclick="addLeadHistorico('${l.id}')">Salvar</button>
             </div>
           </div>
         `:''}
