@@ -1214,6 +1214,7 @@ function renderHoje(){
   const stats={total:0,finalizada:0,pendente:0,redirecionada:0};
   const groups={};
 
+  // Tarefas de hoje
   state.activities.forEach(act=>{
     if(!activityAppliesOn(act,ds)) return;
     const occ=state.occToday[act.id]||{status:'pendente',timeSpent:0,timerStart:null,redirectedTo:null};
@@ -1222,7 +1223,20 @@ function renderHoje(){
     stats.total++;
     stats[occ.status]=(stats[occ.status]||0)+1;
     if(!groups[effAssignee]) groups[effAssignee]=[];
-    groups[effAssignee].push({act,occ});
+    groups[effAssignee].push({act,occ,isOverdue:false,date:ds});
+  });
+
+  // Tarefas atrasadas — adicionadas ao grupo do responsável, marcadas em vermelho
+  computeOverdue().forEach(({act,occ,date,assignee})=>{
+    if(!isOwner && assignee!==currentUser.uid) return;
+    if(!groups[assignee]) groups[assignee]=[];
+    groups[assignee].push({act,occ,isOverdue:true,date});
+  });
+
+  // Contagem de atrasadas por pessoa
+  const overduePerUser={};
+  Object.entries(groups).forEach(([uid,items])=>{
+    overduePerUser[uid]=items.filter(x=>x.isOverdue).length;
   });
 
   let cardsHtml=`
@@ -1257,57 +1271,59 @@ function renderHoje(){
       html+='</div>';
     }
   }
-  const overdue=computeOverdue();
 
-  if(stats.total===0 && overdue.length===0){
+  const totalTudo=Object.values(groups).reduce((s,its)=>s+its.length,0);
+  if(totalTudo===0){
     html+='<div class="empty">Nenhuma atividade programada para hoje.</div>';
   }
 
-  /* Ícones clicáveis: Atrasadas + um por colaborador com tarefas hoje */
-  const hojeGroupsWithItems=[];
-  if(overdue.length>0) hojeGroupsWithItems.push('overdue');
-  state.users.forEach(u=>{ if((groups[u.id]||[]).length>0) hojeGroupsWithItems.push(u.id); });
-
-  if(hojeGroupsWithItems.length>0){
+  /* Ícones clicáveis: um por colaborador (inclui atrasadas no mesmo card) */
+  const usersWithItems=state.users.filter(u=>(groups[u.id]||[]).length>0);
+  if(usersWithItems.length>0){
     html+='<div class="hoje-icon-grid">';
-    if(overdue.length>0){
-      const active=expandedHojeGroups.has('overdue')?' active':'';
-      html+=`<div class="hoje-icon-card overdue${active}" onclick="toggleHojeGroup('overdue')">
-        <div class="hoje-icon">⚠</div>
-        <div class="hoje-icon-label">Atrasadas</div>
-        <div class="hoje-icon-count">${overdue.length}</div>
-      </div>`;
-    }
-    state.users.forEach(u=>{
+    usersWithItems.forEach(u=>{
       const items=groups[u.id]||[];
-      if(items.length===0) return;
       const active=expandedHojeGroups.has(u.id)?' active':'';
+      const nOverdue=overduePerUser[u.id]||0;
       html+=`<div class="hoje-icon-card${active}" onclick="toggleHojeGroup('${u.id}')">
         <span class="avatar lg" style="background:${avatarColor(u.id)}">${esc(initials(u.name))}</span>
         <div class="hoje-icon-label">${esc(u.name)}</div>
         <div class="hoje-icon-count">${items.length}</div>
+        ${nOverdue>0?`<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:2px;">⚠ ${nOverdue} atrasada${nOverdue>1?'s':''}</div>`:''}
       </div>`;
     });
     html+='</div>';
   }
 
-  if(overdue.length>0 && expandedHojeGroups.has('overdue')){
-    html+=`<div class="group overdue"><h3>⚠ Atrasadas (${overdue.length})</h3>`;
-    overdue.forEach(({act,occ,date,assignee,redirectedFromMe})=>{
-      html+=`<div class="activity">
-        <div class="activity-top">
-          <div>
-            <span class="activity-title">${esc(act.title)}</span>
+  /* Grupos por colaborador — atrasadas primeiro em vermelho, depois as de hoje */
+  state.users.forEach(u=>{
+    const items=groups[u.id]||[];
+    if(items.length===0) return;
+    if(!expandedHojeGroups.has(u.id)) return;
+
+    const overdueItems=items.filter(x=>x.isOverdue).sort((a,b)=>a.date.localeCompare(b.date));
+    const todayItems=items.filter(x=>!x.isOverdue).sort((a,b)=>prioRank(a.act.priority)-prioRank(b.act.priority));
+    const nOverdue=overdueItems.length;
+
+    html+=`<div class="group"><h3>${avatarHtml(u.id)} ${esc(u.name)} <span class="muted">(${items.length})</span>${nOverdue>0?` <span class="badge" style="background:var(--red-bg);color:var(--red);">⚠ ${nOverdue} atrasada${nOverdue>1?'s':''}</span>`:''}</h3>`;
+    html+='<div class="activity-grid">';
+
+    /* Tarefas atrasadas com borda vermelha */
+    overdueItems.forEach(({act,occ,date})=>{
+      html+=`<div class="activity compact" style="border:2px solid var(--red);border-left:5px solid var(--red);">
+        <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:4px;">⚠ ATRASADA · ${fmtDateBR(date)}</div>
+        <div class="act-head">
+          <span class="act-icon ${occ.status}">${ACT_ICONS[occ.status]}</span>
+          <div style="flex:1;min-width:0;">
+            <span class="activity-title">${esc(act.title)}</span><br>
             <span class="badge ${act.priority}">${PRIORITY_LABELS[act.priority]}</span>
             <span class="badge ${occ.status}">${STATUS_LABELS[occ.status]}</span>
-            <span class="muted"> · ${fmtDateBR(date)}</span>
-            ${isOwner?`<span class="muted"> · ${esc(userName(assignee))}</span>`:''}
-            ${redirectedFromMe?`<span class="muted"> · Redirecionada para ${esc(userName(occ.redirectedTo))}</span>`:''}
           </div>
         </div>
+        ${act.description?`<div class="activity-desc">${esc(act.description)}</div>`:''}
         ${act.cliente?`<div class="cliente-tag">Cliente/Apólice: ${esc(act.cliente)}</div>`:''}
         <div class="activity-controls">
-          <button class="btn" onclick="markOverdueDone('${act.id}','${date}')">Marcar como finalizada</button>
+          <button class="btn" onclick="markOverdueDone('${act.id}','${date}')">✓ Finalizar</button>
           <button class="btn" onclick="toggleRescheduleForm('${date}_${act.id}')">Reagendar</button>
           ${isOwner?`<button class="btn" onclick="showActivityForm(state.activities.find(a=>a.id==='${act.id}'))">✏️ Editar</button>`:''}
         </div>
@@ -1317,17 +1333,10 @@ function renderHoje(){
         </div>`:''}
       </div>`;
     });
-    html+='</div>';
-  }
 
-  state.users.forEach(u=>{
-    const items=groups[u.id]||[];
-    if(items.length===0) return;
-    if(!expandedHojeGroups.has(u.id)) return;
-    items.sort((a,b)=>prioRank(a.act.priority)-prioRank(b.act.priority));
-    html+=`<div class="group"><h3>${avatarHtml(u.id)} ${esc(u.name)} <span class="muted">(${items.length})</span></h3>`;
-    html+='<div class="activity-grid">';
-    items.forEach(({act,occ})=>{ html+=renderActivityCard(act,occ); });
+    /* Tarefas de hoje */
+    todayItems.forEach(({act,occ})=>{ html+=renderActivityCard(act,occ); });
+
     html+='</div></div>';
   });
 
@@ -3059,9 +3068,10 @@ function _getAudioCtx(){
 }
 document.addEventListener('click',()=>{ try{ _getAudioCtx(); }catch(e){} },{passive:true});
 document.addEventListener('touchstart',()=>{ try{ _getAudioCtx(); }catch(e){} },{passive:true});
-function playChatSound(){
+async function playChatSound(){
   try{
     const ctx=_getAudioCtx();
+    if(ctx.state==='suspended') await ctx.resume();
     const o=ctx.createOscillator();
     const g=ctx.createGain();
     o.type='sine';
