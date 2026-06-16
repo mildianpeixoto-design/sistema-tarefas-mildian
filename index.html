@@ -671,6 +671,8 @@ let state={
 };
 let boletosViewMes=new Date().toISOString().slice(0,7);
 let selectedBoletoId=null;
+let payablesSortCol='nome';
+let payablesSortDir=1; // 1=asc, -1=desc
 
 document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 
@@ -2860,13 +2862,45 @@ function renderPayablesMonthList(){
   </div>`;
   el.innerHTML=html;
 }
+function sortPayablesList(col){
+  if(payablesSortCol===col){ payablesSortDir*=-1; }
+  else{ payablesSortCol=col; payablesSortDir=1; }
+  renderPayablesList();
+}
 function renderPayablesList(){
   const el=document.getElementById('payablesList');
   if(!el) return;
   if(state.payables.length===0){ el.innerHTML='<div class="empty">Nenhuma conta cadastrada ainda.</div>'; return; }
-  const sortedPayables=[...state.payables].sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR',{sensitivity:'base'}));
-  let html='<table><thead><tr><th>Conta</th><th>Valor</th><th>Recorrência</th><th>Pagamento</th><th>Prazo</th><th></th></tr></thead><tbody>';
-  sortedPayables.forEach(p=>{
+  // Ordem de recorrência: diaria < semanal < quinzenal < mensal < unico
+  const recurOrder={diaria:0,semanal:1,quinzenal:2,mensal:3,unico:4};
+  // Ordem de prazo: unico(0) < parcelas(1) < indefinido(2)
+  function prazoPeso(p){ if(p.recurrence==='unico') return 0; if(p.termType==='parcelas') return 1; return 2; }
+  // Pagamento: para unico usa dueDate, para recorrente usa dueDay como "000X" para comparar
+  function pagamentoSort(p){ return p.recurrence==='unico' ? (p.dueDate||'9999') : String(p.dueDay||99).padStart(2,'0'); }
+  const sorted=[...state.payables].sort((a,b)=>{
+    let r=0;
+    if(payablesSortCol==='nome') r=(a.name||'').localeCompare(b.name||'','pt-BR',{sensitivity:'base'});
+    else if(payablesSortCol==='valor') r=(a.value||0)-(b.value||0);
+    else if(payablesSortCol==='recorrencia') r=(recurOrder[a.recurrence]??9)-(recurOrder[b.recurrence]??9);
+    else if(payablesSortCol==='pagamento') r=pagamentoSort(a).localeCompare(pagamentoSort(b));
+    else if(payablesSortCol==='prazo') r=prazoPeso(a)-prazoPeso(b) || (a.termCount||0)-(b.termCount||0);
+    return r*payablesSortDir;
+  });
+  function thHtml(col,label){
+    const active=payablesSortCol===col;
+    const arrow=active?(payablesSortDir===1?' ↑':' ↓'):'';
+    return `<th onclick="sortPayablesList('${col}')" style="cursor:pointer;user-select:none;white-space:nowrap;">${label}${arrow}</th>`;
+  }
+  let html=`<table><thead><tr>
+    ${thHtml('nome','Conta')}
+    ${thHtml('valor','Valor')}
+    ${thHtml('recorrencia','Recorrência')}
+    ${thHtml('pagamento','Pagamento')}
+    ${thHtml('prazo','Prazo')}
+    <th></th>
+  </tr></thead><tbody>`;
+  const RECUR_TEXT={diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal',mensal:'Mensal',unico:'Único'};
+  sorted.forEach(p=>{
     let pagamento, prazo;
     if(p.recurrence==='unico'){
       pagamento=fmtDateFull(p.dueDate);
@@ -2878,7 +2912,7 @@ function renderPayablesList(){
     html+=`<tr>
       <td>${esc(p.name)}</td>
       <td>💰 ${fmtBRL(p.value||0)}</td>
-      <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
+      <td>${RECUR_TEXT[p.recurrence]||p.recurrence||'—'}</td>
       <td>${pagamento}</td>
       <td>${prazo}</td>
       <td class="row">
