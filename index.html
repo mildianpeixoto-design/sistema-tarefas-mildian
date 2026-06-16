@@ -358,7 +358,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div id="clientsList"></div>
 </section>
 
-<section id="tab-boletos" class="section owner-only">
+<section id="tab-boletos" class="section">
   <div class="cards summary-cards" id="boletosStats"></div>
   <div id="boletoFormWrap"></div>
   <div class="row" style="margin-bottom:14px;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -375,13 +375,13 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       <option value="pendentes">Pendentes</option>
       <option value="recebidos">Recebidos</option>
     </select>
-    <button class="btn btn-primary" id="novaBoletoBtn">+ Nova cobrança</button>
+    <button class="btn btn-primary owner-only" id="novaBoletoBtn">+ Nova cobrança</button>
   </div>
   <div id="boletosList"></div>
 </section>
 
-<section id="tab-funil" class="section owner-only">
-  <div class="row" style="margin-bottom:12px;">
+<section id="tab-funil" class="section">
+  <div class="row owner-only" style="margin-bottom:12px;">
     <button class="btn primary" id="newLeadBtn">+ Novo lead</button>
   </div>
   <div id="leadFormWrap"></div>
@@ -817,15 +817,20 @@ function initApp(){
     renderHoje();
   },err=>console.error(err)));
 
+  listeners.push(db.collection('leads').onSnapshot(snap=>{
+    state.leads=[]; snap.forEach(d=>state.leads.push({id:d.id,...d.data()}));
+    renderFunil();
+    renderHoje();
+  },err=>console.error(err)));
+
+  listeners.push(db.collection('boletosClientes').onSnapshot(snap=>{
+    state.boletosClientes=[]; snap.forEach(d=>state.boletosClientes.push({id:d.id,...d.data()}));
+    renderBoletos();
+  },err=>console.error(err)));
+
   if(currentUser.role==='owner'){
     document.getElementById('reportDate').value=todayStr();
     subscribeReport(todayStr());
-
-    listeners.push(db.collection('leads').onSnapshot(snap=>{
-      state.leads=[]; snap.forEach(d=>state.leads.push({id:d.id,...d.data()}));
-      renderFunil();
-      renderHoje();
-    },err=>console.error(err)));
 
     listeners.push(db.collection('dailyReports').onSnapshot(snap=>{
       state.dailyReports=[]; snap.forEach(d=>state.dailyReports.push({id:d.id,...d.data()}));
@@ -845,11 +850,6 @@ function initApp(){
     listeners.push(db.collection('payablesArchive').onSnapshot(snap=>{
       state.payablesArchive=[]; snap.forEach(d=>state.payablesArchive.push({id:d.id,...d.data()}));
       renderPayablesArchive();
-    },err=>console.error(err)));
-
-    listeners.push(db.collection('boletosClientes').onSnapshot(snap=>{
-      state.boletosClientes=[]; snap.forEach(d=>state.boletosClientes.push({id:d.id,...d.data()}));
-      renderBoletos();
     },err=>console.error(err)));
 
     archiveMissingPayablesReports();
@@ -881,6 +881,8 @@ function setupNav(){
       <button data-tab="hoje" class="active">Minhas tarefas</button>
       <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
+      <button data-tab="boletos">Cobranças</button>
+      <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="links">Links</button>
       <button data-tab="ponto">Meu ponto</button>
       <button data-tab="video">Videoconferência</button>
@@ -1307,6 +1309,7 @@ function renderHoje(){
         <div class="activity-controls">
           <button class="btn" onclick="markOverdueDone('${act.id}','${date}')">Marcar como finalizada</button>
           <button class="btn" onclick="toggleRescheduleForm('${date}_${act.id}')">Reagendar</button>
+          ${isOwner?`<button class="btn" onclick="showActivityForm(state.activities.find(a=>a.id==='${act.id}'))">✏️ Editar</button>`:''}
         </div>
         ${expandedReschedule.has(`${date}_${act.id}`)?`<div class="row" style="margin-top:6px;">
           <input type="date" id="reschedule-${date}_${act.id}" value="${todayStr()}">
@@ -2142,10 +2145,10 @@ function renderBoletos(){
             ${c.diaVencimento?`<div class="cdp-row"><span class="cdp-label">Vencimento</span><span class="cdp-value">Dia ${esc(c.diaVencimento)}</span></div>`:''}
           </div>
         </div>
-        <div class="cdp-actions row">
+        ${currentUser.role==='owner'?`<div class="cdp-actions row">
           <button class="btn btn-primary" onclick="showBoletoForm(state.boletosClientes.find(x=>x.id==='${c.id}'))">✏️ Editar</button>
           <button class="btn" style="color:var(--red);" onclick="if(confirm('Remover este cliente de cobrança?')) db.collection('boletosClientes').doc('${c.id}').delete()">🗑️ Remover</button>
-        </div>
+        </div>`:''}
       </div>`;
     }
 
@@ -2372,11 +2375,11 @@ function renderFunil(){
         <select onchange="moveLead('${l.id}',this.value)">
           ${STAGE_ORDER.map(s=>`<option value="${s}" ${l.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
         </select>
-        <div class="row">
+        ${currentUser.role==='owner'?`<div class="row">
           <button class="icon-btn" onclick="editLead('${l.id}')">Editar</button>
           <button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>
           ${stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
-        </div>
+        </div>`:''}
         <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
         ${expandedLeadHist.has(l.id)?`
           <div class="hist-list" style="margin-top:6px;">
@@ -3047,19 +3050,28 @@ function renderPayables(){
 const CHAT_LIMIT=200;
 let chatInitialized=false;
 let lastChatMsgId=null;
+let _audioCtx=null;
+// Desbloqueia AudioContext no primeiro toque/clique (exigido por navegadores modernos)
+function _getAudioCtx(){
+  if(!_audioCtx) _audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(_audioCtx.state==='suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+document.addEventListener('click',()=>{ try{ _getAudioCtx(); }catch(e){} },{passive:true});
+document.addEventListener('touchstart',()=>{ try{ _getAudioCtx(); }catch(e){} },{passive:true});
 function playChatSound(){
   try{
-    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const ctx=_getAudioCtx();
     const o=ctx.createOscillator();
     const g=ctx.createGain();
     o.type='sine';
     o.frequency.value=880;
-    g.gain.value=0.15;
+    g.gain.value=0.18;
     o.connect(g); g.connect(ctx.destination);
     o.start();
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.35);
-    o.stop(ctx.currentTime+0.35);
-  }catch(e){}
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.4);
+    o.stop(ctx.currentTime+0.4);
+  }catch(e){ console.warn('Chat sound error:',e); }
 }
 function renderChat(msgs){
   const el=document.getElementById('chatMessages');
