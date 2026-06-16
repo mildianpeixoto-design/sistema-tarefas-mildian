@@ -861,26 +861,26 @@ function setupNav(){
   if(currentUser.role==='owner'){
     nav.innerHTML=`
       <button data-tab="hoje" class="active">Hoje</button>
+      <button data-tab="arquivo">Arquivo</button>
       <button data-tab="atividades">Atividades</button>
+      <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
-      <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="colaboradores">Colaboradores</button>
+      <button data-tab="contas">Contas a Pagar</button>
+      <button data-tab="funil">Funil de Vendas</button>
+      <button data-tab="links">Links</button>
       <button data-tab="ponto">Ponto</button>
       <button data-tab="relatorios">Relatórios</button>
-      <button data-tab="arquivo">Arquivo</button>
-      <button data-tab="contas">Contas a Pagar</button>
-      <button data-tab="links">Links</button>
-      <button data-tab="cards">Cards</button>
       <button data-tab="video">Videoconferência</button>
     `;
   }else{
     nav.innerHTML=`
       <button data-tab="hoje" class="active">Minhas tarefas</button>
-      <button data-tab="clientes">Clientes</button>
-      <button data-tab="ponto">Meu ponto</button>
-      <button data-tab="links">Links</button>
       <button data-tab="cards">Cards</button>
+      <button data-tab="clientes">Clientes</button>
+      <button data-tab="links">Links</button>
+      <button data-tab="ponto">Meu ponto</button>
       <button data-tab="video">Videoconferência</button>
     `;
   }
@@ -2810,25 +2810,54 @@ function renderPayablesMonthList(){
   const mk=currentMonthKey();
   const items=state.payables.filter(p=>p.active!==false && payableAppliesInMonth(p,mk));
   if(items.length===0){ el.innerHTML='<div class="empty">Nenhuma conta a pagar neste mês.</div>'; return; }
-  items.sort((a,b)=>payableDueDateInMonth(a,mk).localeCompare(payableDueDateInMonth(b,mk)));
-  let totalMes=0, totalPago=0;
-  let html='<table><thead><tr><th>Conta</th><th>Valor</th><th>Vencimento</th><th>Recorrência</th><th>Status</th><th></th></tr></thead><tbody>';
-  items.forEach(p=>{
-    const occ=state.payableOccCurrent[p.id]||{status:'pendente'};
-    const due=payableDueDateInMonth(p,mk);
-    const paid=occ.status==='pago';
-    totalMes+=(p.value||0);
-    if(paid) totalPago+=(p.value||0);
-    html+=`<tr>
-      <td>${esc(p.name)}</td>
-      <td>💰 ${fmtBRL(p.value||0)}</td>
-      <td>${fmtDateFull(due)}</td>
-      <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
-      <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
-      <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'Marcar pendente':'Marcar pago'}</button></td>
-    </tr>`;
+
+  // Ordenar: por data de vencimento, depois alfabético dentro do mesmo dia
+  items.sort((a,b)=>{
+    const da=payableDueDateInMonth(a,mk);
+    const db=payableDueDateInMonth(b,mk);
+    if(da!==db) return da.localeCompare(db);
+    return (a.name||'').localeCompare(b.name||'','pt-BR');
   });
-  html+=`</tbody><tfoot><tr><td><strong>Total</strong></td><td><strong>${fmtBRL(totalMes)}</strong></td><td colspan="4">Pago: ${fmtBRL(totalPago)} · Pendente: ${fmtBRL(totalMes-totalPago)}</td></tr></tfoot></table>`;
+
+  // Agrupar por dia de vencimento
+  const grupos={};
+  let totalMes=0, totalPago=0;
+  items.forEach(p=>{
+    const due=payableDueDateInMonth(p,mk);
+    if(!grupos[due]) grupos[due]=[];
+    grupos[due].push(p);
+    totalMes+=(p.value||0);
+    const occ=state.payableOccCurrent[p.id]||{status:'pendente'};
+    if(occ.status==='pago') totalPago+=(p.value||0);
+  });
+
+  let html='';
+  Object.keys(grupos).sort().forEach(due=>{
+    const dia=due.slice(-2).replace(/^0/,'');
+    const nomeMes=new Date(due+'T12:00:00').toLocaleDateString('pt-BR',{month:'long'});
+    const subtotal=grupos[due].reduce((s,p)=>s+(p.value||0),0);
+    html+=`<div style="margin-bottom:18px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:6px 0;border-bottom:2px solid var(--gold);">
+        <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Dia ${dia} de ${nomeMes}</span>
+        <span style="font-size:.8rem;color:var(--text2);margin-left:auto;">${fmtBRL(subtotal)}</span>
+      </div>
+      <table><thead><tr><th>Conta</th><th>Valor</th><th>Recorrência</th><th>Status</th><th></th></tr></thead><tbody>`;
+    grupos[due].forEach(p=>{
+      const occ=state.payableOccCurrent[p.id]||{status:'pendente'};
+      const paid=occ.status==='pago';
+      html+=`<tr>
+        <td>${esc(p.name)}</td>
+        <td>💰 ${fmtBRL(p.value||0)}</td>
+        <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
+        <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
+        <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'Marcar pendente':'Marcar pago'}</button></td>
+      </tr>`;
+    });
+    html+=`</tbody></table></div>`;
+  });
+  html+=`<div style="padding:10px 0;border-top:2px solid var(--border);font-size:.9rem;color:var(--text2);">
+    <strong>Total do mês: ${fmtBRL(totalMes)}</strong> · Pago: ${fmtBRL(totalPago)} · Pendente: ${fmtBRL(totalMes-totalPago)}
+  </div>`;
   el.innerHTML=html;
 }
 function renderPayablesList(){
