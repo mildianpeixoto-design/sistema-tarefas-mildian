@@ -1277,8 +1277,17 @@ function renderHoje(){
     html+='<div class="empty">Nenhuma atividade programada para hoje.</div>';
   }
 
+  /* Lista de usuários para exibição — para colaboradores garante que o próprio
+     usuário esteja sempre presente, mesmo que state.users ainda esteja vazio
+     (pode ocorrer se as regras do Firestore ainda não foram atualizadas no Console) */
+  const effectiveUsers = isOwner
+    ? state.users
+    : (state.users.some(u=>u.id===currentUser.uid)
+        ? state.users
+        : [...state.users, {id:currentUser.uid, name:currentUser.name}]);
+
   /* Ícones clicáveis: um por colaborador (inclui atrasadas no mesmo card) */
-  const usersWithItems=state.users.filter(u=>(groups[u.id]||[]).length>0);
+  const usersWithItems=effectiveUsers.filter(u=>(groups[u.id]||[]).length>0);
   if(usersWithItems.length>0){
     html+='<div class="hoje-icon-grid">';
     usersWithItems.forEach(u=>{
@@ -1296,7 +1305,7 @@ function renderHoje(){
   }
 
   /* Grupos por colaborador — atrasadas primeiro em vermelho, depois as de hoje */
-  state.users.forEach(u=>{
+  effectiveUsers.forEach(u=>{
     const items=groups[u.id]||[];
     if(items.length===0) return;
     if(!expandedHojeGroups.has(u.id)) return;
