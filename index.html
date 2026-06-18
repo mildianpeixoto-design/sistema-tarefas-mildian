@@ -161,6 +161,10 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 @media (max-width:600px){.charts-grid{grid-template-columns:1fr;}}
 /* Comissão - botões de percentual */
 .pct-group{display:flex;gap:6px;flex-wrap:wrap;}
+.coberturas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px;margin-top:6px;}
+.seguro-check{display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 10px;border-radius:6px;background:var(--bg2);cursor:pointer;border:1px solid var(--border);}
+.seguro-check:hover{background:var(--hover);}
+.seguro-check input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:var(--gold);flex-shrink:0;}
 .pct-group button{border:1px solid var(--border);background:#fff;border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;color:var(--text2);}
 .pct-group button.active{background:var(--gradient);color:#fff;border-color:transparent;}
 .pct-group input[type=hidden]{display:none;}
@@ -642,6 +646,15 @@ function getContatosPendentes(){
 
 /* ====================== Constantes: Clientes e Funil ====================== */
 const COMMISSION_OPTIONS=[10,15,20,25,30,35,40];
+const SEGUROS_LIST=[
+  'PGBL PRIVATE 1808','PGBL VIDA TODA 1800','VGBL PRIVATE 1809','VGBL VIDA TODA 1801',
+  'Morte por acidente 1501','Renda por invalidez 2009','IPA com majoração 2278',
+  'IPA com majoração + IFPD 2279','Diária por incapacidade temporária por acidente 2330',
+  'Dit + MQC 7 dias 2397','Dit + MAC + IPAM 10 dias 2398','Dit + MQC 10 dias 2399',
+  'SAF essencial individual 3057','SAF essencial familiar 3058',
+  'SAF essencial familiar + pais 3060','SAF essencial familiar + pais e sogros 3061',
+  'SAF Plus individual 3062','SAF Plus familiar 3063'
+];
 const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',perdido:'Perdida'};
 const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','perdido'];
 
@@ -1823,7 +1836,12 @@ function showClientForm(client){
       <div class="full cli-sec-header">🛡️ Produto Contratado</div>
       <div><label>Nº da proposta</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
       <div><label>Plano / Produto</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: Doenças Graves Premium"></div>
-      <div class="full"><label>Coberturas do seguro</label><textarea id="cliCoberturas" placeholder="Ex: Vida, Residencial, Auto...">${esc(client.coberturas||'')}</textarea></div>
+      <div class="full">
+        <label>Coberturas / Produtos contratados</label>
+        <div class="coberturas-grid">
+          ${SEGUROS_LIST.map(s=>`<label class="seguro-check"><input type="checkbox" name="cobertura" value="${esc(s)}" ${(client.coberturas||'').includes(s)?'checked':''}> ${esc(s)}</label>`).join('')}
+        </div>
+      </div>
       <div><label>Valor de pagamento (R$)</label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}"></div>
       <div><label>Banco / Forma de pagamento</label><input type="text" id="cliBanco" value="${esc(client.banco||'')}" placeholder="Ex: Banco do Brasil Ag. 5964 CC 1307-2"></div>
       <div><label>Dia de vencimento</label><input type="text" id="cliDiaVenc" maxlength="2" value="${esc(client.diaVencimento||'')}" placeholder="05"></div>
@@ -1873,7 +1891,7 @@ function showClientForm(client){
         endereco:document.getElementById('cliEndereco')?.value||'',
         numeroProposta:document.getElementById('cliNumeroProposta')?.value||'',
         plano:document.getElementById('cliPlano')?.value||'',
-        coberturas:document.getElementById('cliCoberturas')?.value||'',
+        coberturas:Array.from(document.querySelectorAll('input[name="cobertura"]:checked')).map(cb=>cb.value).join(', '),
         valorPagamento:parseFloat(document.getElementById('cliValor')?.value)||0,
         banco:document.getElementById('cliBanco')?.value||'',
         diaVencimento:document.getElementById('cliDiaVenc')?.value||'',
@@ -1918,7 +1936,7 @@ function showClientForm(client){
       endereco: document.getElementById('cliEndereco').value.trim(),
       numeroProposta: document.getElementById('cliNumeroProposta').value.trim(),
       plano: document.getElementById('cliPlano').value.trim(),
-      coberturas: document.getElementById('cliCoberturas').value.trim(),
+      coberturas: Array.from(document.querySelectorAll('input[name="cobertura"]:checked')).map(cb=>cb.value).join(', '),
       valorPagamento,
       banco: document.getElementById('cliBanco').value.trim(),
       diaVencimento: document.getElementById('cliDiaVenc').value.trim(),
