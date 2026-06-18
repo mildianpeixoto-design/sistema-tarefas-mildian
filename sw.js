@@ -4,7 +4,7 @@
    aqui (o próprio SDK do Firestore já cuida do cache/offline deles),
    então a sincronização em tempo real com o computador continua igual. */
 
-const CACHE_VERSION = 'ge-v1';
+const CACHE_VERSION = 'ge-v2';
 const SHELL_FILES = [
   '/',
   '/index.html',
