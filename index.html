@@ -862,7 +862,6 @@ function setupNav(){
   const nav=document.getElementById('mainNav');
   if(currentUser.role==='owner'){
     nav.innerHTML=`
-      <button data-tab="hoje" class="active">Hoje</button>
       <button data-tab="arquivo">Arquivo</button>
       <button data-tab="atividades">Atividades</button>
       <button data-tab="cards">Cards</button>
@@ -871,6 +870,7 @@ function setupNav(){
       <button data-tab="colaboradores">Colaboradores</button>
       <button data-tab="contas">Contas a Pagar</button>
       <button data-tab="funil">Funil de Vendas</button>
+      <button data-tab="hoje" class="active">Hoje</button>
       <button data-tab="links">Links</button>
       <button data-tab="ponto">Ponto</button>
       <button data-tab="relatorios">Relatórios</button>
@@ -878,13 +878,13 @@ function setupNav(){
     `;
   }else{
     nav.innerHTML=`
-      <button data-tab="hoje" class="active">Minhas tarefas</button>
       <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
       <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="links">Links</button>
       <button data-tab="ponto">Meu ponto</button>
+      <button data-tab="hoje" class="active">Minhas tarefas</button>
       <button data-tab="video">Videoconferência</button>
     `;
   }
