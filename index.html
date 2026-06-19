@@ -1918,6 +1918,9 @@ function showClientForm(client){
   document.getElementById('cancelClientBtn').addEventListener('click',cancelClientForm);
   document.getElementById('clientForm').addEventListener('submit',e=>{
     e.preventDefault();
+    const submitBtn=e.target.querySelector('button[type="submit"]');
+    if(submitBtn.disabled) return; // evita duplicidade por duplo clique/Enter
+    submitBtn.disabled=true;
     const tipoVal=document.getElementById('cliTipo').value;
     const isPFsub=tipoVal==='PF';
     const valorPagamento=parseFloat(document.getElementById('cliValor').value)||0;
@@ -1950,11 +1953,11 @@ function showClientForm(client){
       comissaoValor: +(valorPagamento*selectedPct/100).toFixed(2),
       historico: client.historico||[]
     };
-    if(!obj.nome) return;
+    if(!obj.nome){ submitBtn.disabled=false; return; }
     const p = isEdit
       ? db.collection('clients').doc(client.id).set(obj,{merge:true})
       : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
-    p.then(()=>cancelClientForm()).catch(err=>alert('Erro: '+err.message));
+    p.then(()=>cancelClientForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
 function cancelClientForm(){ document.getElementById('clientFormWrap').innerHTML=''; }
@@ -2325,6 +2328,9 @@ function showLeadForm(lead){
   document.getElementById('cancelLeadBtn').addEventListener('click',cancelLeadForm);
   document.getElementById('leadForm').addEventListener('submit',e=>{
     e.preventDefault();
+    const submitBtn=e.target.querySelector('button[type="submit"]');
+    if(submitBtn.disabled) return; // evita duplicidade por duplo clique/Enter
+    submitBtn.disabled=true;
     const obj={
       nome: document.getElementById('leadNome').value.trim(),
       telefone: document.getElementById('leadTelefone').value.trim(),
@@ -2335,7 +2341,7 @@ function showLeadForm(lead){
       indicadoPor: document.getElementById('leadIndicadoPor').value.trim()||'',
       historico: lead.historico||[]
     };
-    if(!obj.nome) return;
+    if(!obj.nome){ submitBtn.disabled=false; return; }
     if(!isEdit){
       const obsInicial=document.getElementById('leadObsInicial').value.trim();
       if(obsInicial) obj.historico=[{texto:obsInicial,at:ts(),uid:currentUser.uid,name:currentUser.name}];
@@ -2343,7 +2349,7 @@ function showLeadForm(lead){
     const p = isEdit
       ? db.collection('leads').doc(lead.id).set(obj,{merge:true})
       : db.collection('leads').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
-    p.then(()=>cancelLeadForm()).catch(err=>alert('Erro: '+err.message));
+    p.then(()=>cancelLeadForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
 function cancelLeadForm(){ document.getElementById('leadFormWrap').innerHTML=''; }
