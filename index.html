@@ -643,6 +643,9 @@ function getContatosPendentes(){
   const ds=todayStr();
   return (state.leads||[]).filter(l=>l.proximoContato && l.proximoContato<=ds);
 }
+function markContatoFeito(id){
+  db.collection('leads').doc(id).update({proximoContato:null}).catch(err=>alert('Erro: '+err.message));
+}
 
 /* ====================== Constantes: Clientes e Funil ====================== */
 const COMMISSION_OPTIONS=[10,15,20,25,30,35,40];
@@ -1291,7 +1294,9 @@ function renderHoje(){
       });
       contatos.forEach(l=>{
         const overdueC=l.proximoContato<todayStr();
-        html+=`<div class="alert-card contact"><h4>📞 ${overdueC?'Contato atrasado':'Contato hoje'}</h4>${esc(l.nome||l.name||'')} <span class="muted">· ${fmtDateBR(l.proximoContato)}</span></div>`;
+        html+=`<div class="alert-card contact"><h4>📞 ${overdueC?'Contato atrasado':'Contato hoje'}</h4>${esc(l.nome||l.name||'')} <span class="muted">· ${fmtDateBR(l.proximoContato)}</span>
+          <div><button class="icon-btn" onclick="markContatoFeito('${l.id}')">✓ Contato feito</button></div>
+        </div>`;
       });
       html+='</div>';
     }
