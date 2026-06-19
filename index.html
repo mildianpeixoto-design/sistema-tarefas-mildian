@@ -1925,12 +1925,15 @@ function showClientForm(client){
   });
 
   // ---- Lista de produtos (cada um com cobertura, valor e comissão próprios) ----
+  // Migração de cadastros antigos: só considera um fragmento de "coberturas" como
+  // produto válido se ele corresponder exatamente a um item do SEGUROS_LIST — evita
+  // quebrar texto livre (que pode conter vírgulas de valores em R$, ex: "100.000,00").
   let produtos = (client.produtos && client.produtos.length)
     ? JSON.parse(JSON.stringify(client.produtos))
-    : ((client.coberturas||'').split(',').map(s=>s.trim()).filter(Boolean).map(cob=>({
+    : (client.coberturas||'').split(',').map(s=>s.trim()).filter(s=>SEGUROS_LIST.includes(s)).map(cob=>({
         cobertura:cob, valorPagamento:client.valorPagamento||0, comissaoPercent:client.comissaoPercent||10, nota:''
-      })));
-  if(produtos.length===0) produtos=[{cobertura:'',valorPagamento:0,comissaoPercent:10,nota:''}];
+      }));
+  if(produtos.length===0) produtos=[{cobertura:'',valorPagamento:client.valorPagamento||0,comissaoPercent:client.comissaoPercent||10,nota:''}];
 
   function updateValorTotal(){
     const total=produtos.reduce((s,p)=>s+(parseFloat(p.valorPagamento)||0),0);
