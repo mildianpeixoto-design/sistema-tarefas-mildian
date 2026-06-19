@@ -168,6 +168,15 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .pct-group button{border:1px solid var(--border);background:#fff;border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;color:var(--text2);}
 .pct-group button.active{background:var(--gradient);color:#fff;border-color:transparent;}
 .pct-group input[type=hidden]{display:none;}
+/* Produtos contratados - lista dinâmica no formulário de cliente */
+.produto-row{display:grid;grid-template-columns:2fr 1fr 1fr 1.4fr auto;gap:6px;margin-bottom:6px;align-items:center;}
+@media (max-width:700px){.produto-row{grid-template-columns:1fr;}}
+.produto-row select,.produto-row input{width:100%;padding:7px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;}
+.produto-row .prod-remove{background:none;border:1px solid var(--border);border-radius:6px;color:var(--red,#c0392b);padding:6px 10px;cursor:pointer;}
+.produtos-list-view{display:flex;flex-direction:column;gap:6px;margin:4px 0;}
+.produto-view-item{border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;background:var(--bg2);}
+.produto-view-item .pvi-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:600;}
+.produto-view-item .pvi-nota{color:var(--gold);font-size:12px;margin-top:3px;}
 /* Funil de vendas - kanban */
 .kanban{display:grid;grid-template-columns:repeat(6,minmax(180px,1fr));gap:10px;overflow-x:auto;}
 @media (max-width:1100px){.kanban{grid-template-columns:repeat(6,220px);}}
@@ -650,7 +659,7 @@ function markContatoFeito(id){
 }
 
 /* ====================== Constantes: Clientes e Funil ====================== */
-const COMMISSION_OPTIONS=[10,15,20,25,30,35,40];
+const COMMISSION_OPTIONS=[5,6,9,10,12,14,14.16,15,17,20,25,29,30,33.33,35,40,50,70,100,150,200];
 const SEGUROS_LIST=[
   'PGBL PRIVATE 1808','PGBL VIDA TODA 1800','VGBL PRIVATE 1809','VGBL VIDA TODA 1801',
   'Morte por acidente 1501','Renda por invalidez 2009','IPA com majoração 2278',
@@ -658,7 +667,19 @@ const SEGUROS_LIST=[
   'Dit + MQC 7 dias 2397','Dit + MAC + IPAM 10 dias 2398','Dit + MQC 10 dias 2399',
   'SAF essencial individual 3057','SAF essencial familiar 3058',
   'SAF essencial familiar + pais 3060','SAF essencial familiar + pais e sogros 3061',
-  'SAF Plus individual 3062','SAF Plus familiar 3063'
+  'SAF Plus individual 3062','SAF Plus familiar 3063',
+  '(nome a definir) 1113','(nome a definir) 1504','(nome a definir) 1505','(nome a definir) 1537','(nome a definir) 1538','(nome a definir) 1546',
+  '(nome a definir) 1548','(nome a definir) 1561','(nome a definir) 1567','(nome a definir) 1570','(nome a definir) 1581','(nome a definir) 1583',
+  '(nome a definir) 1628','(nome a definir) 1660','(nome a definir) 1780','(nome a definir) 1782','(nome a definir) 1784','(nome a definir) 1947',
+  '(nome a definir) 1950','(nome a definir) 1953','(nome a definir) 2025','(nome a definir) 2026','(nome a definir) 2027','(nome a definir) 2028',
+  '(nome a definir) 2037','(nome a definir) 2113','(nome a definir) 2114','(nome a definir) 2117','(nome a definir) 2230','(nome a definir) 2231',
+  '(nome a definir) 2232','(nome a definir) 2234','(nome a definir) 2299','(nome a definir) 2301','(nome a definir) 2322','(nome a definir) 2342',
+  '(nome a definir) 2390','(nome a definir) 2395','(nome a definir) 2396','(nome a definir) 2400','(nome a definir) 2406','(nome a definir) 2413',
+  '(nome a definir) 2414','(nome a definir) 2418','(nome a definir) 2419','(nome a definir) 2420','(nome a definir) 2421','(nome a definir) 2427',
+  '(nome a definir) 2430','(nome a definir) 2444','(nome a definir) 2445','(nome a definir) 2595','(nome a definir) 2694','(nome a definir) 2696',
+  '(nome a definir) 2697','(nome a definir) 2795','(nome a definir) 2800','(nome a definir) 3067','(nome a definir) 3073','(nome a definir) 3079',
+  '(nome a definir) 3080','(nome a definir) 3082','(nome a definir) 3108','(nome a definir) 3117','(nome a definir) 3501','(nome a definir) 3503',
+  '(nome a definir) 3509','(nome a definir) 3511','(nome a definir) 3514','(nome a definir) 3531','(nome a definir) 3532'
 ];
 const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',perdido:'Perdida'};
 const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','perdido'];
@@ -1840,24 +1861,18 @@ function showClientForm(client){
         <div><label>Renda mensal bruta (R$)</label><input type="number" id="cliRendaMensal" step="0.01" min="0" value="${client.rendaMensal||''}"></div>
       </div>
 
-      <div class="full cli-sec-header">🛡️ Produto Contratado</div>
-      <div><label>Nº da proposta</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
-      <div><label>Plano / Produto</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: Doenças Graves Premium"></div>
+      <div class="full cli-sec-header">🛡️ Produtos Contratados</div>
+      <div><label>Nº da proposta (principal)</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
+      <div><label>Plano (observação geral, opcional)</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: Doenças Graves Premium"></div>
       <div class="full">
-        <label>Coberturas / Produtos contratados</label>
-        <div class="coberturas-grid">
-          ${SEGUROS_LIST.map(s=>`<label class="seguro-check"><input type="checkbox" name="cobertura" value="${esc(s)}" ${(client.coberturas||'').includes(s)?'checked':''}> ${esc(s)}</label>`).join('')}
-        </div>
+        <label>Produtos / coberturas (cada um com seu valor e comissão)</label>
+        <datalist id="commOptionsList">${COMMISSION_OPTIONS.map(p=>`<option value="${p}">`).join('')}</datalist>
+        <div id="produtosList"></div>
+        <button type="button" class="btn" id="addProdutoBtn" style="margin-top:6px;">+ Adicionar produto</button>
       </div>
-      <div><label>Valor de pagamento (R$)</label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}"></div>
+      <div><label>Valor total de pagamento (R$) <span class="muted" style="font-weight:400;">— soma automática</span></label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}" readonly style="background:var(--bg2);"></div>
       <div><label>Banco / Forma de pagamento</label><input type="text" id="cliBanco" value="${esc(client.banco||'')}" placeholder="Ex: Banco do Brasil Ag. 5964 CC 1307-2"></div>
       <div><label>Dia de vencimento</label><input type="text" id="cliDiaVenc" maxlength="2" value="${esc(client.diaVencimento||'')}" placeholder="05"></div>
-      <div class="full">
-        <label>Comissão</label>
-        <div class="pct-group" id="cliPctGroup">
-          ${COMMISSION_OPTIONS.map(p=>`<button type="button" data-pct="${p}" class="${client.comissaoPercent===p?'active':''}">${p}%</button>`).join('')}
-        </div>
-      </div>
 
       <!-- Saúde só para PF -->
       <div class="full cli-sec-header" id="hdrSaude" style="${!isPF?'display:none':''}">🏥 Saúde (DPS)</div>
@@ -1898,25 +1913,63 @@ function showClientForm(client){
         endereco:document.getElementById('cliEndereco')?.value||'',
         numeroProposta:document.getElementById('cliNumeroProposta')?.value||'',
         plano:document.getElementById('cliPlano')?.value||'',
-        coberturas:Array.from(document.querySelectorAll('input[name="cobertura"]:checked')).map(cb=>cb.value).join(', '),
+        produtos:produtos,
         valorPagamento:parseFloat(document.getElementById('cliValor')?.value)||0,
         banco:document.getElementById('cliBanco')?.value||'',
         diaVencimento:document.getElementById('cliDiaVenc')?.value||'',
         observacoesSaude:document.getElementById('cliSaude')?.value||'',
-        comissaoPercent:selectedPct,
         historico:client.historico||[]
       };
       showClientForm(cur);
     });
   });
-  let selectedPct=client.comissaoPercent||10;
-  document.querySelectorAll('#cliPctGroup button').forEach(b=>{
-    b.addEventListener('click',()=>{
-      selectedPct=+b.dataset.pct;
-      document.querySelectorAll('#cliPctGroup button').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
+
+  // ---- Lista de produtos (cada um com cobertura, valor e comissão próprios) ----
+  let produtos = (client.produtos && client.produtos.length)
+    ? JSON.parse(JSON.stringify(client.produtos))
+    : ((client.coberturas||'').split(',').map(s=>s.trim()).filter(Boolean).map(cob=>({
+        cobertura:cob, valorPagamento:client.valorPagamento||0, comissaoPercent:client.comissaoPercent||10, nota:''
+      })));
+  if(produtos.length===0) produtos=[{cobertura:'',valorPagamento:0,comissaoPercent:10,nota:''}];
+
+  function updateValorTotal(){
+    const total=produtos.reduce((s,p)=>s+(parseFloat(p.valorPagamento)||0),0);
+    const el=document.getElementById('cliValor');
+    if(el) el.value=total.toFixed(2);
+  }
+  function renderProdutosRows(){
+    const wrap=document.getElementById('produtosList');
+    if(!wrap) return;
+    wrap.innerHTML=produtos.map((p,i)=>`
+      <div class="produto-row" data-idx="${i}">
+        <select class="prod-cobertura">
+          <option value="">— selecione a cobertura —</option>
+          ${SEGUROS_LIST.map(s=>`<option value="${esc(s)}" ${p.cobertura===s?'selected':''}>${esc(s)}</option>`).join('')}
+        </select>
+        <input type="number" class="prod-valor" step="0.01" min="0" placeholder="Valor R$" value="${p.valorPagamento||0}">
+        <input type="number" class="prod-comissao" step="0.01" min="0" placeholder="Comissão %" list="commOptionsList" value="${p.comissaoPercent||0}">
+        <input type="text" class="prod-nota" placeholder="Nota (opcional)" value="${esc(p.nota||'')}">
+        <button type="button" class="icon-btn prod-remove" title="Remover produto">✕</button>
+      </div>`).join('');
+    updateValorTotal();
+    wrap.querySelectorAll('.produto-row').forEach(rowEl=>{
+      const idx=+rowEl.dataset.idx;
+      rowEl.querySelector('.prod-cobertura').addEventListener('change',e=>{ produtos[idx].cobertura=e.target.value; });
+      rowEl.querySelector('.prod-valor').addEventListener('input',e=>{ produtos[idx].valorPagamento=parseFloat(e.target.value)||0; updateValorTotal(); });
+      rowEl.querySelector('.prod-comissao').addEventListener('input',e=>{ produtos[idx].comissaoPercent=parseFloat(e.target.value)||0; });
+      rowEl.querySelector('.prod-nota').addEventListener('input',e=>{ produtos[idx].nota=e.target.value; });
+      rowEl.querySelector('.prod-remove').addEventListener('click',()=>{
+        produtos.splice(idx,1);
+        if(produtos.length===0) produtos=[{cobertura:'',valorPagamento:0,comissaoPercent:10,nota:''}];
+        renderProdutosRows();
+      });
     });
+  }
+  document.getElementById('addProdutoBtn').addEventListener('click',()=>{
+    produtos.push({cobertura:'',valorPagamento:0,comissaoPercent:10,nota:''});
+    renderProdutosRows();
   });
+  renderProdutosRows();
   document.getElementById('cancelClientBtn').addEventListener('click',cancelClientForm);
   document.getElementById('clientForm').addEventListener('submit',e=>{
     e.preventDefault();
@@ -1946,13 +1999,18 @@ function showClientForm(client){
       endereco: document.getElementById('cliEndereco').value.trim(),
       numeroProposta: document.getElementById('cliNumeroProposta').value.trim(),
       plano: document.getElementById('cliPlano').value.trim(),
-      coberturas: Array.from(document.querySelectorAll('input[name="cobertura"]:checked')).map(cb=>cb.value).join(', '),
+      produtos: produtos.filter(p=>p.cobertura||p.valorPagamento).map(p=>({
+        cobertura:p.cobertura||'', valorPagamento:parseFloat(p.valorPagamento)||0,
+        comissaoPercent:parseFloat(p.comissaoPercent)||0,
+        comissaoValor:+((parseFloat(p.valorPagamento)||0)*(parseFloat(p.comissaoPercent)||0)/100).toFixed(2),
+        nota:p.nota||''
+      })),
+      coberturas: produtos.filter(p=>p.cobertura).map(p=>p.cobertura).join(', '),
       valorPagamento,
       banco: document.getElementById('cliBanco').value.trim(),
       diaVencimento: document.getElementById('cliDiaVenc').value.trim(),
       observacoesSaude: isPFsub ? document.getElementById('cliSaude').value.trim() : '',
-      comissaoPercent: selectedPct,
-      comissaoValor: +(valorPagamento*selectedPct/100).toFixed(2),
+      comissaoValor: +produtos.reduce((s,p)=>s+((parseFloat(p.valorPagamento)||0)*(parseFloat(p.comissaoPercent)||0)/100),0).toFixed(2),
       historico: client.historico||[]
     };
     if(!obj.nome){ submitBtn.disabled=false; return; }
@@ -2064,11 +2122,17 @@ function renderClients(){
           <div class="cdp-title">📞 Contato & Endereço</div>
           ${row('Telefone',waTel)}${row('E-mail',mailLink)}${row('Endereço',c.endereco)}
         </div>
-        <div class="cdp-section">
-          <div class="cdp-title">🛡️ Produto Contratado</div>
-          ${row('Nº proposta',c.numeroProposta)}${row('Plano',plano)}
-          ${row('Contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
-          ${row('Comissão',(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor)+')')}
+        <div class="cdp-section cdp-full">
+          <div class="cdp-title">🛡️ Produtos Contratados</div>
+          ${row('Nº proposta',c.numeroProposta)}
+          ${(!c.produtos||!c.produtos.length)?row('Plano',plano):''}
+          ${(c.produtos&&c.produtos.length)?`<div class="produtos-list-view">${c.produtos.map(p=>`
+            <div class="produto-view-item">
+              <div class="pvi-top"><span>${esc(p.cobertura||'(sem cobertura definida)')}</span><span>${fmtBRL(p.valorPagamento||0)}/mês · ${p.comissaoPercent||0}% (${fmtBRL(p.comissaoValor||0)})</span></div>
+              ${p.nota?`<div class="pvi-nota">⚠ ${esc(p.nota)}</div>`:''}
+            </div>`).join('')}</div>`:''}
+          ${row('Total mensal',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
+          ${row('Comissão total',(c.produtos&&c.produtos.length)?fmtBRL(c.comissaoValor||0):(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor)+')')}
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
         </div>
         ${isPFc&&c.observacoesSaude?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Saúde (DPS)</div><div class="cdp-value">${esc(c.observacoesSaude)}</div></div>`:''}
