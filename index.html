@@ -340,7 +340,9 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       <div id="hojeGroups"></div>
     </div>
     <aside class="home-chat">
-      <h3 class="home-chat-title">💬 Chat da equipe</h3>
+      <h3 class="home-chat-title">💬 Chat da equipe
+        <button type="button" id="notifBtn" class="icon-btn" style="font-size:11px;float:right;" title="Ativar notificações do navegador para novas mensagens">🔔 Ativar notificações</button>
+      </h3>
       <div class="chat-wrap">
         <div id="chatMessages" class="chat-messages"></div>
         <form id="chatForm" class="chat-form">
@@ -3110,29 +3112,94 @@ const CHAT_LIMIT=200;
 let chatInitialized=false;
 let lastChatMsgId=null;
 let _audioCtx=null;
-// Desbloqueia AudioContext no primeiro toque/clique (exigido por navegadores modernos)
+const _origTitle=document.title;
+let _titleFlashTimer=null;
+let _unreadChat=0;
+
+// Desbloqueia AudioContext o mais cedo possível e em qualquer interação
+// (cliques, toques e teclas) — exigido pelos navegadores para permitir áudio.
 function _getAudioCtx(){
   if(!_audioCtx) _audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-  if(_audioCtx.state==='suspended') _audioCtx.resume();
+  if(_audioCtx.state==='suspended') _audioCtx.resume().catch(()=>{});
   return _audioCtx;
 }
-document.addEventListener('click',()=>{ try{ _getAudioCtx(); }catch(e){} },{passive:true});
-document.addEventListener('touchstart',()=>{ try{ _getAudioCtx(); }catch(e){} },{passive:true});
+['click','touchstart','touchend','keydown','pointerdown'].forEach(evt=>{
+  document.addEventListener(evt,()=>{ try{ _getAudioCtx(); }catch(e){} },{passive:true});
+});
+// Tenta desbloquear assim que o app inicializa também (alguns navegadores
+// permitem resume() em resposta a qualquer evento de input recente).
+window.addEventListener('load',()=>{ try{ _getAudioCtx(); }catch(e){} });
+
 async function playChatSound(){
   try{
     const ctx=_getAudioCtx();
     if(ctx.state==='suspended') await ctx.resume();
-    const o=ctx.createOscillator();
-    const g=ctx.createGain();
-    o.type='sine';
-    o.frequency.value=880;
-    g.gain.value=0.18;
-    o.connect(g); g.connect(ctx.destination);
-    o.start();
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.4);
-    o.stop(ctx.currentTime+0.4);
+    // Toca dois tons (campainha) bem mais audível que um único bip curto.
+    const tones=[[880,0],[660,0.16]];
+    tones.forEach(([freq,delay])=>{
+      const o=ctx.createOscillator();
+      const g=ctx.createGain();
+      o.type='sine';
+      o.frequency.value=freq;
+      const t0=ctx.currentTime+delay;
+      g.gain.setValueAtTime(0.0001,t0);
+      g.gain.exponentialRampToValueAtTime(0.5,t0+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+0.35);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t0);
+      o.stop(t0+0.36);
+    });
   }catch(e){ console.warn('Chat sound error:',e); }
 }
+
+// Pisca o título da aba e dispara notificação do navegador quando chega
+// mensagem nova e a aba não está em foco (garante que o colaborador percebe
+// mesmo se o som não tocar, por bloqueio de autoplay do navegador/celular).
+function _flashTitleStart(senderName,text){
+  _unreadChat++;
+  if(_titleFlashTimer) return;
+  let on=false;
+  _titleFlashTimer=setInterval(()=>{
+    document.title = on ? _origTitle : `🔴 (${_unreadChat}) Nova mensagem!`;
+    on=!on;
+  },1000);
+}
+function _flashTitleStop(){
+  if(_titleFlashTimer){ clearInterval(_titleFlashTimer); _titleFlashTimer=null; }
+  document.title=_origTitle;
+  _unreadChat=0;
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) _flashTitleStop(); });
+window.addEventListener('focus',_flashTitleStop);
+
+function _notifyNewChatMessage(senderName,text){
+  playChatSound();
+  if(document.hidden || !document.hasFocus()){
+    _flashTitleStart(senderName,text);
+    if('Notification' in window && Notification.permission==='granted'){
+      try{
+        const n=new Notification(`💬 ${senderName}`,{body:text,tag:'chat-msg',renotify:true});
+        n.onclick=()=>{ window.focus(); n.close(); };
+      }catch(e){ console.warn('Notification error:',e); }
+    }
+  }
+}
+
+function updateNotifBtn(){
+  const btn=document.getElementById('notifBtn');
+  if(!btn) return;
+  if(!('Notification' in window)){ btn.style.display='none'; return; }
+  if(Notification.permission==='granted'){ btn.textContent='🔔 Notificações ativadas'; btn.disabled=true; }
+  else if(Notification.permission==='denied'){ btn.textContent='🔕 Notificações bloqueadas'; btn.disabled=true; }
+  else { btn.textContent='🔔 Ativar notificações'; btn.disabled=false; }
+}
+document.getElementById('notifBtn')?.addEventListener('click',()=>{
+  if('Notification' in window){
+    Notification.requestPermission().then(updateNotifBtn);
+  }
+});
+updateNotifBtn();
+
 function renderChat(msgs){
   const el=document.getElementById('chatMessages');
   if(!el) return;
@@ -3144,7 +3211,7 @@ function renderChat(msgs){
   }
   const last=msgs[msgs.length-1];
   if(chatInitialized && last.id!==lastChatMsgId && last.uid!==currentUser.uid){
-    playChatSound();
+    _notifyNewChatMessage(last.name,last.text);
   }
   lastChatMsgId=last.id;
   el.innerHTML=msgs.map(m=>`
@@ -3195,7 +3262,7 @@ document.getElementById('copyVideoLinkBtn').addEventListener('click',()=>{
    sincronizados em tempo real pelo Firestore, normalmente. */
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('/sw.js').catch(err=>console.error('SW erro:',err));
+    navigator.serviceWorker.register('./sw.js').catch(err=>console.error('SW erro:',err));
   });
 }
 </script>
