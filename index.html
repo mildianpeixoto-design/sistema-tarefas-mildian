@@ -2056,9 +2056,14 @@ function renderClients(){
   const q=clientSearchQuery;
   const filtered = q
     ? state.clients.filter(c=>{
-        const haystack=[c.nome,c.cpf,c.telefone].join(' ').toLowerCase().replace(/\D/g,' ');
-        const needle=q.replace(/\D/g,' ');
-        return haystack.includes(q) || (needle.trim() && haystack.includes(needle.trim()));
+        const textHaystack=[c.nome,c.cpf,c.cnpj,c.telefone].filter(Boolean).join(' ').toLowerCase();
+        if(textHaystack.includes(q)) return true;
+        const digitsQuery=q.replace(/\D/g,'');
+        if(digitsQuery){
+          const digitsHaystack=[c.cpf,c.cnpj,c.telefone].filter(Boolean).join(' ').replace(/\D/g,'');
+          if(digitsHaystack.includes(digitsQuery)) return true;
+        }
+        return false;
       })
     : state.clients;
   // update count label
