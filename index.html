@@ -696,6 +696,7 @@ let expandedLeadHist=new Set();
 let expandedClientHist=new Set();
 let clientSearchQuery='';
 let selectedClientId=null;
+let editingClientId=null;
 let expandedActDetail=new Set();
 let expandedHojeGroups=new Set();
 let expandedReschedule=new Set();
@@ -1808,12 +1809,18 @@ document.getElementById('exportPdfBtn').addEventListener('click',()=>{
 });
 
 /* ====================== Clientes ====================== */
-function showClientForm(client){
+function showClientForm(client, containerId){
+  containerId = containerId || 'clientFormWrap';
+  const isInline = containerId !== 'clientFormWrap';
+  function closeThisForm(){
+    if(isInline){ editingClientId=null; renderClients(); }
+    else { document.getElementById('clientFormWrap').innerHTML=''; }
+  }
   const isEdit=!!(client&&client.id);
   client=client||{id:null,tipo:'PF',nome:'',cpf:'',cnpj:'',responsavel:'',cargo:'',telefone:'',email:'',dataNascimento:'',sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',segmento:'',rendaMensal:'',empresa:'',endereco:'',numeroProposta:'',plano:'',coberturas:'',valorPagamento:0,banco:'',diaVencimento:'',observacoesSaude:'',comissaoPercent:10,historico:[]};
   const tipo=client.tipo||'PF';
   const isPF=tipo==='PF';
-  document.getElementById('clientFormWrap').innerHTML=`
+  document.getElementById(containerId).innerHTML=`
     <form class="form-grid" id="clientForm">
       <!-- Tipo toggle -->
       <div class="full">
@@ -1920,7 +1927,7 @@ function showClientForm(client){
         observacoesSaude:document.getElementById('cliSaude')?.value||'',
         historico:client.historico||[]
       };
-      showClientForm(cur);
+      showClientForm(cur, containerId);
     });
   });
 
@@ -1973,7 +1980,7 @@ function showClientForm(client){
     renderProdutosRows();
   });
   renderProdutosRows();
-  document.getElementById('cancelClientBtn').addEventListener('click',cancelClientForm);
+  document.getElementById('cancelClientBtn').addEventListener('click',closeThisForm);
   document.getElementById('clientForm').addEventListener('submit',e=>{
     e.preventDefault();
     const submitBtn=e.target.querySelector('button[type="submit"]');
@@ -2020,13 +2027,22 @@ function showClientForm(client){
     const p = isEdit
       ? db.collection('clients').doc(client.id).set(obj,{merge:true})
       : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
-    p.then(()=>cancelClientForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
+    p.then(()=>closeThisForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
 function cancelClientForm(){ document.getElementById('clientFormWrap').innerHTML=''; }
 function editClient(id){
   const c=state.clients.find(x=>x.id===id);
-  if(c) showClientForm(c);
+  if(!c) return;
+  const topWrap=document.getElementById('clientFormWrap');
+  if(topWrap) topWrap.innerHTML=''; // fecha o formulário de "novo cliente" se estiver aberto
+  selectedClientId=id; // garante que o painel do cliente esteja aberto
+  editingClientId=id;
+  renderClients();
+  setTimeout(()=>{
+    const el=document.getElementById('clientEditWrap-'+id);
+    if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'});
+  },50);
 }
 function deleteClient(id){
   if(!confirm('Excluir este cliente?')) return;
@@ -2101,7 +2117,9 @@ function renderClients(){
         </div>
         <div class="cli-chevron">${isOpen?'▲':'▼'}</div>
       </div>`;
-      if(isOpen){
+      if(isOpen && editingClientId===c.id){
+        h+=`<div class="client-detail-panel"><div id="clientEditWrap-${c.id}"></div></div>`;
+      } else if(isOpen){
         const plano=[c.plano,c.coberturas].filter(Boolean).join(' — ');
         const waTel=c.telefone?`${esc(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;margin-left:4px;">WhatsApp ↗</a>`:'';
         const mailLink=c.email?`${esc(c.email)} <a href="mailto:${esc(c.email)}" style="color:var(--gold);text-decoration:none;margin-left:4px;">Enviar ↗</a>`:'';
@@ -2166,6 +2184,14 @@ function renderClients(){
 
   let html = buildClientBlock(pfList,'Pessoa Física','👤') + buildClientBlock(pjList,'Pessoa Jurídica','🏢');
   listEl.innerHTML=html;
+  // Se um cliente está sendo editado, injeta o formulário dentro do próprio
+  // painel dele (em vez de no topo da lista).
+  if(editingClientId){
+    const editTarget=state.clients.find(x=>x.id===editingClientId);
+    const wrap=document.getElementById('clientEditWrap-'+editingClientId);
+    if(editTarget && wrap) showClientForm(editTarget, 'clientEditWrap-'+editingClientId);
+    else editingClientId=null;
+  }
 }
 function row(label,val){
   if(val===''||val===null||val===undefined) return '';
@@ -2173,6 +2199,7 @@ function row(label,val){
 }
 function selectClient(id){
   selectedClientId = selectedClientId===id ? null : id;
+  editingClientId=null;
   renderClients();
   if(selectedClientId){
     // scroll panel into view
@@ -2197,7 +2224,10 @@ function addClientHistorico(id){
   input.value='';
   db.collection('clients').doc(id).set({historico},{merge:true}).catch(err=>alert('Erro: '+err.message));
 }
-document.getElementById('newClientBtn').addEventListener('click',()=>showClientForm());
+document.getElementById('newClientBtn').addEventListener('click',()=>{
+  if(editingClientId){ editingClientId=null; renderClients(); }
+  showClientForm();
+});
 
 /* ====================== Cobranças (Boletos) ====================== */
 function renderBoletos(){
