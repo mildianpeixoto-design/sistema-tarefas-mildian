@@ -177,6 +177,11 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .produto-view-item{border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;background:var(--bg2);}
 .produto-view-item .pvi-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:600;}
 .produto-view-item .pvi-nota{color:var(--gold);font-size:12px;margin-top:3px;}
+/* Dados Incompletos */
+.pendencia-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;flex-wrap:wrap;}
+.pendencia-nome{font-weight:600;}
+.pendencia-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.pendencia-badge{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;}
 /* Funil de vendas - kanban */
 .kanban{display:grid;grid-template-columns:repeat(6,minmax(180px,1fr));gap:10px;overflow-x:auto;}
 @media (max-width:1100px){.kanban{grid-template-columns:repeat(6,220px);}}
@@ -464,6 +469,12 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <h3>Relatórios mensais arquivados</h3>
   <p class="muted">Arquivados automaticamente ao acessar o sistema (meses anteriores) ou manualmente pelo botão acima (mês atual).</p>
   <div id="payablesArchiveList"></div>
+</section>
+
+<section id="tab-pendencias" class="section owner-only">
+  <div class="cards summary-cards" id="pendenciasStats"></div>
+  <p class="muted" style="margin-bottom:12px;">Clientes com campos importantes em branco (telefone, e-mail, endereço, etc.) ou com produtos cujo nome do seguro ainda não foi definido. Clique em "Editar" para completar o cadastro.</p>
+  <div id="pendenciasList"></div>
 </section>
 
 <section id="tab-links" class="section">
@@ -867,6 +878,7 @@ function initApp(){
     state.clients=[]; snap.forEach(d=>state.clients.push({id:d.id,...d.data()}));
     renderClients();
     renderHoje();
+    renderPendencias();
   },err=>console.error(err)));
 
   listeners.push(db.collection('leads').onSnapshot(snap=>{
@@ -921,6 +933,7 @@ function setupNav(){
       <button data-tab="boletos">Cobranças</button>
       <button data-tab="colaboradores">Colaboradores</button>
       <button data-tab="contas">Contas a Pagar</button>
+      <button data-tab="pendencias">Dados Incompletos</button>
       <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="hoje" class="active">Hoje</button>
       <button data-tab="links">Links</button>
@@ -2193,6 +2206,57 @@ function renderClients(){
     else editingClientId=null;
   }
 }
+
+/* ====================== Dados Incompletos ====================== */
+function getClientPendencias(c){
+  const issues=[];
+  if(!c.telefone) issues.push('Telefone');
+  if(!c.email) issues.push('E-mail');
+  if(!c.endereco) issues.push('Endereço');
+  const isPFc=(c.tipo||'PF')==='PF';
+  if(isPFc){
+    if(!c.dataNascimento) issues.push('Data de nascimento');
+  } else {
+    if(!c.responsavel) issues.push('Responsável');
+  }
+  const semNomeNums=[...new Set((c.produtos||[]).filter(p=>(p.cobertura||'').startsWith('(nome a definir)')).map(p=>p.numero))];
+  if(semNomeNums.length) issues.push(`Produto sem nome (nº ${semNomeNums.join(', ')})`);
+  if(!c.produtos || !c.produtos.length) issues.push('Nenhum produto cadastrado');
+  return issues;
+}
+function renderPendencias(){
+  const statsEl=document.getElementById('pendenciasStats');
+  const listEl=document.getElementById('pendenciasList');
+  if(!statsEl || !listEl) return;
+  const withIssues=state.clients.map(c=>({c,issues:getClientPendencias(c)})).filter(x=>x.issues.length>0);
+  const produtosSemNomeSet=new Set();
+  state.clients.forEach(c=>(c.produtos||[]).forEach(p=>{ if((p.cobertura||'').startsWith('(nome a definir)')) produtosSemNomeSet.add(p.numero); }));
+  statsEl.innerHTML=`
+    <div class="card"><div class="label">Clientes com dados incompletos</div><div class="value">${withIssues.length}</div></div>
+    <div class="card"><div class="label">Total de clientes</div><div class="value">${state.clients.length}</div></div>
+    <div class="card"><div class="label">Produtos sem nome definido</div><div class="value">${produtosSemNomeSet.size}</div></div>
+  `;
+  if(withIssues.length===0){
+    listEl.innerHTML='<div class="empty">Nenhuma pendência encontrada. Todos os clientes estão com os dados completos! 🎉</div>';
+    return;
+  }
+  const sorted=withIssues.slice().sort((a,b)=>(a.c.nome||'').localeCompare(b.c.nome||''));
+  listEl.innerHTML=sorted.map(({c,issues})=>{
+    const sub=(c.tipo==='PJ'?c.cnpj:c.cpf)||'';
+    return `<div class="pendencia-item">
+      <div class="pendencia-info">
+        <div class="pendencia-nome">${esc(c.nome)} ${sub?`<span class="muted">· ${esc(sub)}</span>`:''}</div>
+        <div class="pendencia-badges">${issues.map(i=>`<span class="pendencia-badge">${esc(i)}</span>`).join('')}</div>
+      </div>
+      <button class="btn primary" onclick="goEditClientFromPendencias('${c.id}')">✏️ Editar</button>
+    </div>`;
+  }).join('');
+}
+function goEditClientFromPendencias(id){
+  switchTab('clientes');
+  editClient(id);
+}
+
 function row(label,val){
   if(val===''||val===null||val===undefined) return '';
   return `<div class="cdp-row"><span class="cdp-label">${label}</span><span class="cdp-value">${val}</span></div>`;
