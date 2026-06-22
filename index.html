@@ -350,6 +350,9 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 <section id="tab-hoje" class="section active">
   <div class="home-layout">
     <div class="home-main">
+      <div class="row" style="margin-bottom:10px;">
+        <button class="btn primary" onclick="switchTab('ponto')">🕐 Ponto</button>
+      </div>
       <div class="cards" id="hojeStats"></div>
       <div id="hojeGroups"></div>
     </div>
@@ -946,7 +949,6 @@ function setupNav(){
       <button data-tab="pendencias">Dados Incompletos</button>
       <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="links">Links</button>
-      <button data-tab="ponto">Ponto</button>
       <button data-tab="relatorios">Relatórios</button>
       <button data-tab="video">Videoconferência</button>
     `;
@@ -959,7 +961,6 @@ function setupNav(){
       <button data-tab="boletos">Cobranças</button>
       <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="links">Links</button>
-      <button data-tab="ponto">Meu ponto</button>
       <button data-tab="video">Videoconferência</button>
     `;
   }
