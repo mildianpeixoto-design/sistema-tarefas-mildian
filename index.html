@@ -114,6 +114,8 @@ button.btn.primary{background:var(--gradient);color:#fff;border-color:transparen
 button.btn.primary:hover{filter:brightness(1.08);}
 .timer{font-variant-numeric:tabular-nums;font-weight:600;min-width:64px;display:inline-block;}
 form.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
+form.form-grid.lead-compact-form{grid-template-columns:1fr;min-width:0;}
+form.form-grid.lead-compact-form input,form.form-grid.lead-compact-form select,form.form-grid.lead-compact-form textarea{width:100%;box-sizing:border-box;min-width:0;}
 form.form-grid .full{grid-column:1/-1;}
 form.form-grid label{font-size:12px;color:var(--text2);display:block;margin-bottom:4px;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
@@ -2674,7 +2676,7 @@ function showLeadForm(lead,containerId){
     else{ container.innerHTML=''; }
   }
   container.innerHTML=`
-    <form class="form-grid" id="leadForm">
+    <form class="form-grid${isInline?' lead-compact-form':''}" id="leadForm" style="${isInline?'max-width:100%;':''}">
       <div class="full"><label>Nome / Empresa</label><input type="text" id="leadNome" value="${esc(lead.nome)}" required></div>
       <div><label>Telefone (com DDD)</label><input type="text" id="leadTelefone" value="${esc(lead.telefone||lead.contato||'')}" placeholder="(00) 00000-0000"></div>
       <div><label>E-mail</label><input type="email" id="leadEmail" value="${esc(lead.email||'')}"></div>
