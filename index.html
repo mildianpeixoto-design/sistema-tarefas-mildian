@@ -85,8 +85,10 @@ nav button.active{color:#fff;border-left-color:var(--gold);background:rgba(255,2
 .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
 .card .label{font-size:11px;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;}
 .card .value{font-size:22px;font-weight:600;color:var(--accent);}
-.card.clickable{cursor:pointer;transition:border-color .15s,box-shadow .15s;}
-.card.clickable:hover{border-color:var(--gold);}
+.card.clickable{cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s;background:#fbf3da;border-color:#e8d9a8;}
+.card.clickable .label{color:#9c803a;}
+.card.clickable .value{color:#c19a2e;}
+.card.clickable:hover{border-color:var(--gold);background:#f7ecc9;}
 .card.active-filter{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-bg);}
 .group{margin-bottom:20px;}
 .group h3{font-size:14px;font-weight:600;margin:0 0 8px;display:flex;align-items:center;gap:8px;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;}
@@ -757,6 +759,7 @@ let boletosViewMes=new Date().toISOString().slice(0,7);
 let selectedBoletoId=null;
 let payablesSortCol='nome';
 let payablesSortDir=1; // 1=asc, -1=desc
+let editingPayableId=null;
 
 document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 
@@ -958,10 +961,8 @@ function setupNav(){
       <button data-tab="colaboradores">Colaboradores</button>
       <button data-tab="contas">Contas a Pagar</button>
       <button data-tab="pendencias">Dados Incompletos</button>
-      <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="links">Links</button>
       <button data-tab="relatorios">Relatórios</button>
-      <button data-tab="video">Videoconferência</button>
     `;
   }else{
     nav.innerHTML=`
@@ -970,9 +971,7 @@ function setupNav(){
       <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
-      <button data-tab="funil">Funil de Vendas</button>
       <button data-tab="links">Links</button>
-      <button data-tab="video">Videoconferência</button>
     `;
   }
   nav.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab,b)));
@@ -1405,6 +1404,8 @@ function renderHoje(){
     cardsHtml+=`<div class="card clickable" onclick="switchTab('ponto')"><div class="label">Minhas horas hoje</div><div class="value">${fmtHoursMin(logTotalSeconds(state.logsToday[currentUser.uid]))}</div></div>`;
   }
   cardsHtml+=`<div class="card clickable" onclick="switchTab('ponto')"><div class="label">🕐 Ponto</div><div class="value">Ver</div></div>`;
+  cardsHtml+=`<div class="card clickable" onclick="switchTab('funil')"><div class="label">📊 Funil de Vendas</div><div class="value">Ver</div></div>`;
+  cardsHtml+=`<div class="card clickable" onclick="switchTab('video')"><div class="label">🎥 Videoconferência</div><div class="value">Ver</div></div>`;
   document.getElementById('hojeStats').innerHTML=cardsHtml;
 
   let html='';
@@ -3169,10 +3170,18 @@ function payableDueDateInMonth(p,mk){
   const day=Math.min(p.dueDay||1,lastDay);
   return `${mk}-${String(day).padStart(2,'0')}`;
 }
-function showPayableForm(p){
+function showPayableForm(p,containerId){
+  containerId=containerId||'payableFormWrap';
+  const isInline = containerId!=='payableFormWrap';
   const isEdit=!!p;
   p=p||{id:null,name:'',value:0,recurrence:'unico',dueDate:todayStr(),dueDay:1,startDate:todayStr(),termType:'indefinido',termCount:12};
-  document.getElementById('payableFormWrap').innerHTML=`
+  const container=document.getElementById(containerId);
+  if(!container) return;
+  function closeThisForm(){
+    if(isInline){ editingPayableId=null; renderPayablesList(); }
+    else{ container.innerHTML=''; }
+  }
+  container.innerHTML=`
     <form class="form-grid" id="payableForm">
       <div class="full"><label>Nome da conta</label><input type="text" id="payName" value="${esc(p.name)}" required></div>
       <div><label>Valor da conta</label>
@@ -3225,7 +3234,7 @@ function showPayableForm(p){
   }
   document.getElementById('payRecurrence').addEventListener('change',renderDateField);
   renderDateField();
-  document.getElementById('cancelPayBtn').addEventListener('click',()=>{ document.getElementById('payableFormWrap').innerHTML=''; });
+  document.getElementById('cancelPayBtn').addEventListener('click',closeThisForm);
   document.getElementById('payableForm').addEventListener('submit',e=>{
     e.preventDefault();
     const rec=document.getElementById('payRecurrence').value;
@@ -3245,13 +3254,14 @@ function showPayableForm(p){
     const pr = isEdit
       ? db.collection('payables').doc(p.id).set(obj,{merge:true})
       : db.collection('payables').add({...obj, createdBy:currentUser.uid, createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-    pr.then(()=>{ document.getElementById('payableFormWrap').innerHTML=''; }).catch(err=>alert('Erro: '+err.message));
+    pr.then(()=>{ closeThisForm(); }).catch(err=>alert('Erro: '+err.message));
   });
 }
-document.getElementById('newPayableBtn').addEventListener('click',()=>showPayableForm());
+document.getElementById('newPayableBtn').addEventListener('click',()=>{ editingPayableId=null; renderPayablesList(); showPayableForm(); });
 function editPayable(id){
-  const p=state.payables.find(x=>x.id===id);
-  showPayableForm(p);
+  document.getElementById('payableFormWrap').innerHTML='';
+  editingPayableId=id;
+  renderPayablesList();
 }
 function deletePayable(id){
   if(!confirm('Excluir esta conta a pagar?')) return;
@@ -3380,9 +3390,17 @@ function renderPayablesList(){
         <button class="icon-btn" onclick="deletePayable('${p.id}')">Excluir</button>
       </td>
     </tr>`;
+    if(editingPayableId===p.id){
+      html+=`<tr><td colspan="6" style="background:var(--bg2);padding:14px;"><div id="payableEditWrap-${p.id}"></div></td></tr>`;
+    }
   });
   html+='</tbody></table>';
   el.innerHTML=html;
+  if(editingPayableId){
+    const target=state.payables.find(x=>x.id===editingPayableId);
+    const wrap=document.getElementById('payableEditWrap-'+editingPayableId);
+    if(target && wrap) showPayableForm(target,'payableEditWrap-'+editingPayableId);
+  }
 }
 async function buildAndSavePayablesReport(mk){
   const occSnap=await db.collection('payableOccurrences').where('month','==',mk).get();
