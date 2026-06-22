@@ -725,6 +725,7 @@ let overdueUnsubs=[];  // listeners das atividades atrasadas
 let expandedComments=new Set();
 let expandedArquivo=new Set();
 let expandedLeadHist=new Set();
+let expandedLeadCard=new Set();
 let expandedClientHist=new Set();
 let clientSearchQuery='';
 let selectedClientId=null;
@@ -2661,10 +2662,18 @@ document.getElementById('boletosMesProximo').addEventListener('click',()=>{
 });
 
 /* ====================== Funil de Vendas ====================== */
-function showLeadForm(lead){
+function showLeadForm(lead,containerId){
+  containerId=containerId||'leadFormWrap';
+  const isInline = containerId!=='leadFormWrap';
   const isEdit=!!(lead&&lead.id);
   lead=lead||{id:null,nome:'',telefone:'',email:'',valorEstimado:0,etapa:'lead',indicadoPor:'',historico:[]};
-  document.getElementById('leadFormWrap').innerHTML=`
+  const container=document.getElementById(containerId);
+  if(!container) return;
+  function closeThisForm(){
+    if(isInline){ expandedLeadCard.delete(lead.id); renderFunil(); }
+    else{ container.innerHTML=''; }
+  }
+  container.innerHTML=`
     <form class="form-grid" id="leadForm">
       <div class="full"><label>Nome / Empresa</label><input type="text" id="leadNome" value="${esc(lead.nome)}" required></div>
       <div><label>Telefone (com DDD)</label><input type="text" id="leadTelefone" value="${esc(lead.telefone||lead.contato||'')}" placeholder="(00) 00000-0000"></div>
@@ -2693,7 +2702,7 @@ function showLeadForm(lead){
       </div>
     </div>`:''}
   `;
-  document.getElementById('cancelLeadBtn').addEventListener('click',cancelLeadForm);
+  document.getElementById('cancelLeadBtn').addEventListener('click',closeThisForm);
   document.getElementById('leadForm').addEventListener('submit',e=>{
     e.preventDefault();
     const submitBtn=e.target.querySelector('button[type="submit"]');
@@ -2717,13 +2726,17 @@ function showLeadForm(lead){
     const p = isEdit
       ? db.collection('leads').doc(lead.id).set(obj,{merge:true})
       : db.collection('leads').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
-    p.then(()=>cancelLeadForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
+    p.then(()=>closeThisForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
-function cancelLeadForm(){ document.getElementById('leadFormWrap').innerHTML=''; }
 function editLead(id){
   const l=state.leads.find(x=>x.id===id);
   if(l) showLeadForm(l);
+}
+function toggleLeadCard(id){
+  if(expandedLeadCard.has(id)) expandedLeadCard.delete(id);
+  else expandedLeadCard.add(id);
+  renderFunil();
 }
 function addLeadAnnotationFromForm(id){
   const input=document.getElementById('leadFormHistInput');
@@ -2781,47 +2794,67 @@ function addLeadHistorico(id){
 }
 function renderFunil(){
   let html='';
+  const isOwner=currentUser.role==='owner';
   STAGE_ORDER.forEach(stage=>{
     const items=state.leads.filter(l=>l.etapa===stage);
     html+=`<div class="kanban-col"><h4>${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
     items.forEach(l=>{
+      const isExpanded=expandedLeadCard.has(l.id);
+      const toggleLabel = isExpanded ? 'Fechar ▲' : (isOwner?'Editar ▼':'Ver mais ▼');
       html+=`<div class="kanban-card">
-        <div class="kc-title">${esc(l.nome)}</div>
-        ${l.valorEstimado?`<div class="kc-value">${fmtBRL(l.valorEstimado)}</div>`:''}
-        ${l.indicadoPor?`<div class="muted">🤝 Indicado por: ${esc(l.indicadoPor)}</div>`:''}
-        ${l.telefone?`<div class="muted" style="display:flex;align-items:center;gap:6px;">📞 ${esc(l.telefone)} <a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:12px;text-decoration:none;" title="Abrir WhatsApp">WhatsApp ↗</a></div>`:''}
-        ${l.email?`<div class="muted" style="display:flex;align-items:center;gap:6px;">✉ ${esc(l.email)} <a href="mailto:${esc(l.email)}" style="font-size:12px;color:var(--gold);text-decoration:none;" title="Enviar e-mail">E-mail ↗</a></div>`:''}
-        ${(!l.telefone&&!l.email&&l.contato)?`<div class="muted">${esc(l.contato)}</div>`:''}
-        ${(!l.historico&&l.observacoes)?`<div class="muted">${esc(l.observacoes)}</div>`:''}
-        ${l.proximoContato?(()=>{
-          const ds=todayStr();
-          const cls=l.proximoContato<ds?'overdue':(l.proximoContato===ds?'due':'future');
-          const lbl=l.proximoContato<ds?'Contato atrasado':(l.proximoContato===ds?'Contato hoje':'Próximo contato');
-          return `<div class="kc-next ${cls}">📅 ${lbl}: ${fmtDateBR(l.proximoContato)}</div>`;
-        })():''}
-        <select onchange="moveLead('${l.id}',this.value)">
-          ${STAGE_ORDER.map(s=>`<option value="${s}" ${l.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
-        </select>
-        ${currentUser.role==='owner'?`<div class="row">
-          <button class="icon-btn" onclick="editLead('${l.id}')">Editar</button>
-          <button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>
-          ${stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
-        </div>`:''}
-        <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
-        ${expandedLeadHist.has(l.id)?`
-          <div class="hist-list" style="margin-top:6px;">
-            ${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}
-            <div class="row" style="margin-top:6px;">
-              <input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadHistorico('${l.id}')}">
-              <button class="btn" onclick="addLeadHistorico('${l.id}')">Salvar</button>
+        <div class="kc-compact-row" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div class="kc-title" style="margin:0;">${esc(l.nome)}</div>
+          <button class="icon-btn" onclick="toggleLeadCard('${l.id}')">${toggleLabel}</button>
+        </div>
+        ${isExpanded?`
+        <div style="margin-top:8px;">
+          ${l.valorEstimado?`<div class="kc-value">${fmtBRL(l.valorEstimado)}</div>`:''}
+          ${l.indicadoPor?`<div class="muted">🤝 Indicado por: ${esc(l.indicadoPor)}</div>`:''}
+          ${l.telefone?`<div class="muted" style="display:flex;align-items:center;gap:6px;">📞 ${esc(l.telefone)} <a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:12px;text-decoration:none;" title="Abrir WhatsApp">WhatsApp ↗</a></div>`:''}
+          ${l.email?`<div class="muted" style="display:flex;align-items:center;gap:6px;">✉ ${esc(l.email)} <a href="mailto:${esc(l.email)}" style="font-size:12px;color:var(--gold);text-decoration:none;" title="Enviar e-mail">E-mail ↗</a></div>`:''}
+          ${(!l.telefone&&!l.email&&l.contato)?`<div class="muted">${esc(l.contato)}</div>`:''}
+          ${(!l.historico&&l.observacoes)?`<div class="muted">${esc(l.observacoes)}</div>`:''}
+          ${l.proximoContato?(()=>{
+            const ds=todayStr();
+            const cls=l.proximoContato<ds?'overdue':(l.proximoContato===ds?'due':'future');
+            const lbl=l.proximoContato<ds?'Contato atrasado':(l.proximoContato===ds?'Contato hoje':'Próximo contato');
+            return `<div class="kc-next ${cls}">📅 ${lbl}: ${fmtDateBR(l.proximoContato)}</div>`;
+          })():''}
+          ${isOwner?`
+            <div id="leadEditWrap-${l.id}" style="margin-top:8px;"></div>
+            <div class="row" style="margin-top:8px;">
+              <button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>
+              ${stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
             </div>
-          </div>
+          `:`
+            <select onchange="moveLead('${l.id}',this.value)">
+              ${STAGE_ORDER.map(s=>`<option value="${s}" ${l.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
+            </select>
+            <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
+            ${expandedLeadHist.has(l.id)?`
+              <div class="hist-list" style="margin-top:6px;">
+                ${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}
+                <div class="row" style="margin-top:6px;">
+                  <input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadHistorico('${l.id}')}">
+                  <button class="btn" onclick="addLeadHistorico('${l.id}')">Salvar</button>
+                </div>
+              </div>
+            `:''}
+          `}
+        </div>
         `:''}
       </div>`;
     });
     html+='</div>';
   });
   document.getElementById('funilBoard').innerHTML=html;
+  if(isOwner){
+    expandedLeadCard.forEach(id=>{
+      const l=state.leads.find(x=>x.id===id);
+      const wrap=document.getElementById('leadEditWrap-'+id);
+      if(l&&wrap) showLeadForm(l,'leadEditWrap-'+id);
+    });
+  }
 }
 document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
 
