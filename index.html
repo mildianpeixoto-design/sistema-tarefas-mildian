@@ -2179,11 +2179,14 @@ function renderClients(){
   const total=activeClients.length;
   const somaValor=activeClients.reduce((s,c)=>s+(c.valorPagamento||0),0);
   const somaComissao=activeClients.reduce((s,c)=>s+(c.comissaoValor||0),0);
-  document.getElementById('clientesStats').innerHTML=`
-    <div class="card"><div class="label">Clientes cadastrados</div><div class="value">${total}</div></div>
-    <div class="card"><div class="label">Soma valor de pagamentos</div><div class="value">${fmtBRL(somaValor)}</div></div>
-    <div class="card"><div class="label">Total de comissão</div><div class="value">${fmtBRL(somaComissao)}</div></div>
-  `;
+  let statsHtml=`<div class="card"><div class="label">Clientes cadastrados</div><div class="value">${total}</div></div>`;
+  if(currentUser.role==='owner'){
+    statsHtml+=`
+      <div class="card"><div class="label">Soma valor de pagamentos</div><div class="value">${fmtBRL(somaValor)}</div></div>
+      <div class="card"><div class="label">Total de comissão</div><div class="value">${fmtBRL(somaComissao)}</div></div>
+    `;
+  }
+  document.getElementById('clientesStats').innerHTML=statsHtml;
   // sync search box value (in case renderClients is called externally)
   const searchBox=document.getElementById('clientSearch');
   if(searchBox && searchBox.value!==clientSearchQuery && document.activeElement!==searchBox) searchBox.value=clientSearchQuery;
