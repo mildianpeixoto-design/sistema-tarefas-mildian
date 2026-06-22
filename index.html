@@ -2558,7 +2558,7 @@ function renderBoletos(){
     const recebido=!!(c.boletosStatus&&c.boletosStatus[boletosViewMes]);
     const isOpen=selectedBoletoId===c.id;
     const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
-    const sub=[c.contato?`Contato: ${c.contato}`:'', c.diaVencimento?`Venc. dia ${c.diaVencimento}`:''].filter(Boolean).join(' · ');
+    const sub=[c.contato?`Contato: ${c.contato}`:''].filter(Boolean).join(' · ');
 
     let detail='';
     if(isOpen){
@@ -2586,7 +2586,8 @@ function renderBoletos(){
           <div class="cli-name">${esc(c.nome||'—')}</div>
           ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
         </div>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;" onclick="event.stopPropagation()">
+        ${c.diaVencimento?`<span class="muted" style="font-size:.85rem;white-space:nowrap;flex-shrink:0;">📅 Venc. dia ${esc(c.diaVencimento)}</span>`:''}
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;flex-shrink:0;" onclick="event.stopPropagation()">
           <input type="checkbox" ${recebido?'checked':''} onchange="toggleBoleto('${c.id}','${boletosViewMes}')"
             style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
           <span style="font-size:.85rem;color:${recebido?'var(--green)':'var(--text2)'};">${recebido?'Recebido':'Pendente'}</span>
