@@ -2939,6 +2939,8 @@ async function archiveMissingReports(){
     const existing=new Set(existingSnap.docs.map(d=>d.id));
     for(let i=1;i<=DAILY_REPORT_LOOKBACK_DAYS;i++){
       const d=new Date(); d.setDate(d.getDate()-i);
+      const dow=d.getDay(); // 0=domingo, 6=sábado
+      if(dow===0 || dow===6) continue; // não gera relatório de atividades aos fins de semana
       const ds=dstr(d);
       if(existing.has(ds)) continue;
       await buildAndSaveDailyReport(ds);
