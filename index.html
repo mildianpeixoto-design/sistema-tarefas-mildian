@@ -390,7 +390,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div id="clientsList"></div>
 </section>
 
-<section id="tab-cancelados" class="section owner-only">
+<section id="tab-cancelados" class="section">
   <div class="cards summary-cards" id="canceladosStats"></div>
   <p class="muted" style="margin-bottom:12px;">Clientes marcados como cancelados (botão "❌ Cliente cancelado" na edição do cliente). Eles saem da lista de clientes ativos, mas os dados ficam guardados aqui — pode reativar quando quiser.</p>
   <div id="canceladosList"></div>
@@ -952,6 +952,7 @@ function setupNav(){
     `;
   }else{
     nav.innerHTML=`
+      <button data-tab="cancelados">Cancelados</button>
       <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
