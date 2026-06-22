@@ -85,6 +85,9 @@ nav button.active{color:#fff;border-left-color:var(--gold);background:rgba(255,2
 .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
 .card .label{font-size:11px;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;}
 .card .value{font-size:22px;font-weight:600;color:var(--accent);}
+.card.clickable{cursor:pointer;transition:border-color .15s,box-shadow .15s;}
+.card.clickable:hover{border-color:var(--gold);}
+.card.active-filter{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-bg);}
 .group{margin-bottom:20px;}
 .group h3{font-size:14px;font-weight:600;margin:0 0 8px;display:flex;align-items:center;gap:8px;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;}
 .activity{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
@@ -350,9 +353,6 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 <section id="tab-hoje" class="section active">
   <div class="home-layout">
     <div class="home-main">
-      <div class="row" style="margin-bottom:10px;">
-        <button class="btn primary" onclick="switchTab('ponto')">🕐 Ponto</button>
-      </div>
       <div class="cards" id="hojeStats"></div>
       <div id="hojeGroups"></div>
     </div>
@@ -561,6 +561,16 @@ function fmtHMS(sec){
   return [h,m,s].map(v=>String(v).padStart(2,'0')).join(':');
 }
 function fmtHours(sec){ return (sec/3600).toFixed(1).replace('.',',')+'h'; }
+function fmtHoursMin(sec){
+  sec=Math.max(0,Math.round(sec||0));
+  const h=Math.floor(sec/3600);
+  const m=Math.floor((sec%3600)/60);
+  return `${h}:${String(m).padStart(2,'0')}`;
+}
+function setHojeStatusFilter(status){
+  hojeStatusFilter = hojeStatusFilter===status ? null : status;
+  renderHoje();
+}
 function ts(){ return firebase.firestore.Timestamp.now(); }
 function del(){ return firebase.firestore.FieldValue.delete(); }
 
@@ -720,6 +730,7 @@ let editingClientId=null;
 let creatingActivityForClientId=null;
 let expandedActDetail=new Set();
 let expandedHojeGroups=new Set();
+let hojeStatusFilter=null; // null=todos, ou 'pendente'|'finalizada'|'redirecionada'
 let expandedReschedule=new Set();
 let expandedNotes=new Set();
 let reportsArchived=false;
@@ -1375,19 +1386,25 @@ function renderHoje(){
     overduePerUser[uid]=items.filter(x=>x.isOverdue).length;
   });
 
-  let cardsHtml=`
-    <div class="card"><div class="label">Atividades hoje</div><div class="value">${stats.total}</div></div>
-    <div class="card"><div class="label">Finalizadas</div><div class="value">${stats.finalizada||0}</div></div>
-    <div class="card"><div class="label">Pendentes</div><div class="value">${stats.pendente||0}</div></div>
-    <div class="card"><div class="label">Redirecionadas</div><div class="value">${stats.redirecionada||0}</div></div>
-  `;
+  const filterCardCfg=[
+    {key:null,label:'Atividades hoje',value:stats.total},
+    {key:'finalizada',label:'Finalizadas',value:stats.finalizada||0},
+    {key:'pendente',label:'Pendentes',value:stats.pendente||0},
+    {key:'redirecionada',label:'Redirecionadas',value:stats.redirecionada||0},
+  ];
+  let cardsHtml=filterCardCfg.map(c=>{
+    const isActive=hojeStatusFilter===c.key;
+    const arg=c.key?`'${c.key}'`:'null';
+    return `<div class="card clickable${isActive?' active-filter':''}" onclick="setHojeStatusFilter(${arg})"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`;
+  }).join('');
   if(isOwner){
     let totalHours=0;
     state.users.forEach(u=>{ totalHours+=logTotalSeconds(state.logsToday[u.id]); });
-    cardsHtml+=`<div class="card"><div class="label">Horas trabalhadas (equipe)</div><div class="value">${fmtHours(totalHours)}</div></div>`;
+    cardsHtml+=`<div class="card clickable" onclick="switchTab('ponto')"><div class="label">Horas trabalhadas (equipe)</div><div class="value">${fmtHoursMin(totalHours)}</div></div>`;
   }else{
-    cardsHtml+=`<div class="card"><div class="label">Minhas horas hoje</div><div class="value">${fmtHours(logTotalSeconds(state.logsToday[currentUser.uid]))}</div></div>`;
+    cardsHtml+=`<div class="card clickable" onclick="switchTab('ponto')"><div class="label">Minhas horas hoje</div><div class="value">${fmtHoursMin(logTotalSeconds(state.logsToday[currentUser.uid]))}</div></div>`;
   }
+  cardsHtml+=`<div class="card clickable" onclick="switchTab('ponto')"><div class="label">🕐 Ponto</div><div class="value">Ver</div></div>`;
   document.getElementById('hojeStats').innerHTML=cardsHtml;
 
   let html='';
@@ -1424,35 +1441,48 @@ function renderHoje(){
         ? state.users
         : [...state.users, {id:currentUser.uid, name:currentUser.name}]);
 
-  /* Ícones clicáveis: um por colaborador (inclui atrasadas no mesmo card) */
-  const usersWithItems=effectiveUsers.filter(u=>(groups[u.id]||[]).length>0);
+  /* Quando um card de status está selecionado (Pendentes/Finalizadas/Redirecionadas),
+     mostra o ícone de todo mundo (mesmo com 0) para comparar; sem filtro, só quem tem tarefa. */
+  function countForFilter(items){
+    if(!hojeStatusFilter) return items.length;
+    return items.filter(x=>!x.isOverdue && x.occ.status===hojeStatusFilter).length;
+  }
+  const usersWithItems = hojeStatusFilter
+    ? effectiveUsers
+    : effectiveUsers.filter(u=>(groups[u.id]||[]).length>0);
+
+  /* Ícones clicáveis: um por colaborador (inclui atrasadas no mesmo card, exceto quando filtrado) */
   if(usersWithItems.length>0){
     html+='<div class="hoje-icon-grid">';
     usersWithItems.forEach(u=>{
       const items=groups[u.id]||[];
       const active=expandedHojeGroups.has(u.id)?' active':'';
       const nOverdue=overduePerUser[u.id]||0;
+      const count=countForFilter(items);
       html+=`<div class="hoje-icon-card${active}" onclick="toggleHojeGroup('${u.id}')">
         <span class="avatar lg" style="background:${avatarColor(u.id)}">${esc(initials(u.name))}</span>
         <div class="hoje-icon-label">${esc(u.name)}</div>
-        <div class="hoje-icon-count">${items.length}</div>
-        ${nOverdue>0?`<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:2px;">⚠ ${nOverdue} atrasada${nOverdue>1?'s':''}</div>`:''}
+        <div class="hoje-icon-count">${count}</div>
+        ${(!hojeStatusFilter && nOverdue>0)?`<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:2px;">⚠ ${nOverdue} atrasada${nOverdue>1?'s':''}</div>`:''}
       </div>`;
     });
     html+='</div>';
+  } else if(hojeStatusFilter){
+    html+='<div class="empty">Nenhuma atividade com esse status hoje.</div>';
   }
 
   /* Grupos por colaborador — atrasadas primeiro em vermelho, depois as de hoje */
   effectiveUsers.forEach(u=>{
     const items=groups[u.id]||[];
-    if(items.length===0) return;
+    const matchCount=countForFilter(items);
+    if(hojeStatusFilter ? matchCount===0 : items.length===0) return;
     if(!expandedHojeGroups.has(u.id)) return;
 
-    const overdueItems=items.filter(x=>x.isOverdue).sort((a,b)=>a.date.localeCompare(b.date));
-    const todayItems=items.filter(x=>!x.isOverdue).sort((a,b)=>prioRank(a.act.priority)-prioRank(b.act.priority));
+    const overdueItems=items.filter(x=>x.isOverdue && (!hojeStatusFilter || x.occ.status===hojeStatusFilter)).sort((a,b)=>a.date.localeCompare(b.date));
+    const todayItems=items.filter(x=>!x.isOverdue && (!hojeStatusFilter || x.occ.status===hojeStatusFilter)).sort((a,b)=>prioRank(a.act.priority)-prioRank(b.act.priority));
     const nOverdue=overdueItems.length;
 
-    html+=`<div class="group"><h3>${avatarHtml(u.id)} ${esc(u.name)} <span class="muted">(${items.length})</span>${nOverdue>0?` <span class="badge" style="background:var(--red-bg);color:var(--red);">⚠ ${nOverdue} atrasada${nOverdue>1?'s':''}</span>`:''}</h3>`;
+    html+=`<div class="group"><h3>${avatarHtml(u.id)} ${esc(u.name)} <span class="muted">(${overdueItems.length+todayItems.length})</span>${nOverdue>0?` <span class="badge" style="background:var(--red-bg);color:var(--red);">⚠ ${nOverdue} atrasada${nOverdue>1?'s':''}</span>`:''}</h3>`;
     html+='<div class="activity-grid">';
 
     /* Tarefas atrasadas com borda vermelha */
