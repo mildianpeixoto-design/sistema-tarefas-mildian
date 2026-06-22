@@ -1186,6 +1186,42 @@ function deleteAttachment(actId,attId){
     .catch(err=>alert('Erro: '+err.message));
 }
 
+/* ====================== Anexos no formulário de atividade (documentos da atividade) ====================== */
+let actFormAttachments={};
+function renderActAttachPreview(){
+  const el=document.getElementById('actAttachPreview');
+  if(!el) return;
+  const entries=Object.entries(actFormAttachments);
+  el.innerHTML = entries.length ? entries.map(([attId,a])=>`
+    <div class="att-item row">
+      ${a.type&&a.type.startsWith('image/')?`<img src="${esc(a.data)}" alt="${esc(a.name)}" style="max-width:50px;max-height:50px;border-radius:4px;vertical-align:middle;">`:''}
+      <a href="${esc(a.data)}" download="${esc(a.name)}" target="_blank" rel="noopener">${esc(a.name)}</a>
+      <button type="button" class="icon-btn" onclick="removeActFormAttachment('${attId}')">✕ Remover</button>
+    </div>`).join('') : '<span class="muted" style="font-size:12px;">Nenhum documento anexado.</span>';
+}
+function removeActFormAttachment(attId){
+  delete actFormAttachments[attId];
+  renderActAttachPreview();
+}
+function addActFormAttachmentFromInput(inputEl){
+  const files=Array.from(inputEl.files||[]);
+  if(!files.length) return;
+  const statusEl=document.getElementById('actAttachStatus');
+  if(statusEl) statusEl.textContent='Processando...';
+  Promise.all(files.map(file=>processAttachmentFile(file).then(dataUrl=>{
+    if(dataUrl.length>MAX_ATTACHMENT_CHARS) throw new Error(`"${file.name}" é muito grande (use um arquivo menor que ~500KB).`);
+    const attId='att_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    actFormAttachments[attId]={name:file.name,type:file.type,data:dataUrl,uploadedBy:currentUser.uid,uploadedByName:currentUser.name,uploadedAt:ts()};
+  })))
+    .then(()=>{ if(statusEl) statusEl.textContent=''; renderActAttachPreview(); })
+    .catch(err=>{ if(statusEl) statusEl.textContent=''; alert('Erro ao anexar arquivo: '+err.message); })
+    .finally(()=>{ inputEl.value=''; });
+}
+function deleteActivityAttachment(actId,attId){
+  if(!confirm('Remover este anexo da atividade?')) return;
+  db.collection('activities').doc(actId).update({[`attachments.${attId}`]:del()}).catch(err=>alert('Erro: '+err.message));
+}
+
 const ACT_ICONS={pendente:'⏳',finalizada:'✓',redirecionada:'↪'};
 function renderActivityCard(act,occ){
   const redirNote=(occ.status==='redirecionada'&&occ.redirectedTo)?`<span class="muted"> · originalmente de ${esc(userName(act.assignedTo))}</span>`:'';
@@ -1218,6 +1254,15 @@ function renderActivityCard(act,occ){
     </div>
     ${act.description?`<div class="activity-desc">${esc(act.description)}</div>`:''}
     ${act.cliente?`<div class="cliente-tag">Cliente/Apólice: ${esc(act.cliente)}</div>`:''}
+    ${(()=>{
+      const actAtts=Object.entries(act.attachments||{});
+      if(!actAtts.length) return '';
+      return `<div class="attachments"><div class="muted" style="font-size:12px;margin-bottom:2px;">📎 Documentos da atividade:</div>${actAtts.map(([attId,a])=>`<div class="att-item row">
+        ${a.type&&a.type.startsWith('image/')?`<img src="${esc(a.data)}" alt="${esc(a.name)}" style="max-width:50px;max-height:50px;border-radius:4px;vertical-align:middle;">`:''}
+        <a href="${esc(a.data)}" download="${esc(a.name)}" target="_blank" rel="noopener">${esc(a.name)}</a>
+        <button class="icon-btn" onclick="deleteActivityAttachment('${act.id}','${attId}')">Remover</button>
+      </div>`).join('')}</div>`;
+    })()}
     <div class="activity-controls">
       <span class="timer" id="timer-${act.id}">${fmtHMS(occElapsed(occ))}</span>
       ${occ.status!=='finalizada'?`
@@ -1467,12 +1512,20 @@ function showActivityForm(act, containerId){
         ${Object.keys(RECUR_LABELS).map(r=>`<option value="${r}" ${act.recurrence===r?'selected':''}>${RECUR_LABELS[r]}</option>`).join('')}
       </select></div>
       <div><label id="startDateLabel">Data</label><input type="date" id="actStartDate" value="${act.startDate}" required></div>
+      <div class="full">
+        <label>📎 Documentos anexados (opcional)</label>
+        <input type="file" id="actAttachInput" multiple onchange="addActFormAttachmentFromInput(this)">
+        <span class="muted" id="actAttachStatus"></span>
+        <div id="actAttachPreview" style="margin-top:6px;"></div>
+      </div>
       <div class="full row">
         <button class="btn primary" type="submit">${isEdit?'Salvar':'Criar atividade'}</button>
         <button class="btn" type="button" id="cancelActBtn">Cancelar</button>
       </div>
     </form>
   `;
+  actFormAttachments = act.attachments ? {...act.attachments} : {};
+  renderActAttachPreview();
   document.getElementById('actRecurrence').addEventListener('change',updateStartDateLabel);
   updateStartDateLabel();
   document.getElementById('cancelActBtn').addEventListener('click',closeThisForm);
@@ -1488,9 +1541,11 @@ function showActivityForm(act, containerId){
       startDate: document.getElementById('actStartDate').value,
     };
     if(!obj.title) return;
+    const finalAttachments={...actFormAttachments};
     const p = isEdit
       ? db.collection('activities').doc(act.id).set(obj,{merge:true})
-      : db.collection('activities').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+          .then(()=>db.collection('activities').doc(act.id).update({attachments:finalAttachments}))
+      : db.collection('activities').add({...obj, attachments:finalAttachments, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
     p.then(()=>{ closeThisForm(); }).catch(err=>alert('Erro: '+err.message));
   });
 }
