@@ -708,6 +708,7 @@ let expandedClientHist=new Set();
 let clientSearchQuery='';
 let selectedClientId=null;
 let editingClientId=null;
+let creatingActivityForClientId=null;
 let expandedActDetail=new Set();
 let expandedHojeGroups=new Set();
 let expandedReschedule=new Set();
@@ -1442,10 +1443,16 @@ setInterval(()=>{
 /* ====================== Atividades (administradora) ====================== */
 document.getElementById('newActivityBtn').addEventListener('click',()=>showActivityForm());
 
-function showActivityForm(act){
-  const isEdit=!!act;
+function showActivityForm(act, containerId){
+  containerId = containerId || 'activityFormWrap';
+  const isInline = containerId !== 'activityFormWrap';
+  const isEdit=!!(act&&act.id);
+  function closeThisForm(){
+    if(isInline){ creatingActivityForClientId=null; renderClients(); }
+    else { document.getElementById('activityFormWrap').innerHTML=''; }
+  }
   act=act||{id:null,title:'',description:'',cliente:'',assignedTo:currentUser.uid,priority:'media',recurrence:'nenhuma',startDate:todayStr()};
-  document.getElementById('activityFormWrap').innerHTML=`
+  document.getElementById(containerId).innerHTML=`
     <form class="form-grid" id="activityForm">
       <div class="full"><label>Título</label><input type="text" id="actTitle" value="${esc(act.title)}" required></div>
       <div class="full"><label>Descrição (opcional)</label><textarea id="actDesc">${esc(act.description)}</textarea></div>
@@ -1468,7 +1475,7 @@ function showActivityForm(act){
   `;
   document.getElementById('actRecurrence').addEventListener('change',updateStartDateLabel);
   updateStartDateLabel();
-  document.getElementById('cancelActBtn').addEventListener('click',cancelActivityForm);
+  document.getElementById('cancelActBtn').addEventListener('click',closeThisForm);
   document.getElementById('activityForm').addEventListener('submit',e=>{
     e.preventDefault();
     const obj={
@@ -1484,7 +1491,7 @@ function showActivityForm(act){
     const p = isEdit
       ? db.collection('activities').doc(act.id).set(obj,{merge:true})
       : db.collection('activities').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
-    p.then(()=>{ cancelActivityForm(); }).catch(err=>alert('Erro: '+err.message));
+    p.then(()=>{ closeThisForm(); }).catch(err=>alert('Erro: '+err.message));
   });
 }
 function updateStartDateLabel(){
@@ -2186,9 +2193,12 @@ function renderClients(){
         </div>
         <div class="cdp-actions row">
           <button class="btn primary" onclick="editClient('${c.id}');event.stopPropagation()">✏️ Editar</button>
+          <button class="btn" onclick="toggleClientActivityForm('${c.id}');event.stopPropagation()">🗓️ Nova atividade</button>
           <button class="btn" onclick="convertClientToLead('${c.id}');event.stopPropagation()">🔄 Converter em lead</button>
           <button class="btn" style="color:var(--danger,#c0392b);border-color:var(--danger,#c0392b);" onclick="deleteClient('${c.id}');event.stopPropagation()">🗑️ Excluir</button>
-        </div></div>`;
+        </div>
+        ${creatingActivityForClientId===c.id?`<div id="clientActivityWrap-${c.id}" style="margin-top:12px;" onclick="event.stopPropagation()"></div>`:''}
+        </div>`;
       }
     });
     h+='</div>';
@@ -2204,6 +2214,30 @@ function renderClients(){
     const wrap=document.getElementById('clientEditWrap-'+editingClientId);
     if(editTarget && wrap) showClientForm(editTarget, 'clientEditWrap-'+editingClientId);
     else editingClientId=null;
+  }
+  // Se está criando uma atividade vinculada a um cliente, injeta o
+  // formulário dentro do painel desse cliente.
+  if(creatingActivityForClientId){
+    const targetClient=state.clients.find(x=>x.id===creatingActivityForClientId);
+    const actWrap=document.getElementById('clientActivityWrap-'+creatingActivityForClientId);
+    if(targetClient && actWrap){
+      showActivityForm({
+        id:null,title:'',description:'',cliente:targetClient.nome,
+        assignedTo:currentUser.uid,priority:'media',recurrence:'nenhuma',startDate:todayStr()
+      }, 'clientActivityWrap-'+creatingActivityForClientId);
+    } else {
+      creatingActivityForClientId=null;
+    }
+  }
+}
+function toggleClientActivityForm(id){
+  creatingActivityForClientId = creatingActivityForClientId===id ? null : id;
+  renderClients();
+  if(creatingActivityForClientId){
+    setTimeout(()=>{
+      const el=document.getElementById('clientActivityWrap-'+id);
+      if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'});
+    },50);
   }
 }
 
