@@ -390,6 +390,12 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div id="clientsList"></div>
 </section>
 
+<section id="tab-cancelados" class="section owner-only">
+  <div class="cards summary-cards" id="canceladosStats"></div>
+  <p class="muted" style="margin-bottom:12px;">Clientes marcados como cancelados (botão "❌ Cliente cancelado" na edição do cliente). Eles saem da lista de clientes ativos, mas os dados ficam guardados aqui — pode reativar quando quiser.</p>
+  <div id="canceladosList"></div>
+</section>
+
 <section id="tab-boletos" class="section">
   <div class="cards summary-cards" id="boletosStats"></div>
   <div id="boletoFormWrap"></div>
@@ -880,6 +886,7 @@ function initApp(){
     renderClients();
     renderHoje();
     renderPendencias();
+    renderCancelados();
   },err=>console.error(err)));
 
   listeners.push(db.collection('leads').onSnapshot(snap=>{
@@ -929,6 +936,7 @@ function setupNav(){
     nav.innerHTML=`
       <button data-tab="arquivo">Arquivo</button>
       <button data-tab="atividades">Atividades</button>
+      <button data-tab="cancelados">Cancelados</button>
       <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
@@ -1075,6 +1083,16 @@ function setStatus(actId,status){
 }
 function setRedirect(actId,collabId){
   setOccurrence(todayStr(),actId,{redirectedTo:collabId});
+}
+function redirectActivity(actId,date){
+  const selId = date ? `redirTarget-${date}_${actId}` : `redirTarget-${actId}`;
+  const sel=document.getElementById(selId);
+  const target=sel ? sel.value : '';
+  if(!target){ alert('Selecione um colaborador para redirecionar a tarefa.'); return; }
+  setOccurrence(date||todayStr(),actId,{status:'redirecionada',redirectedTo:target});
+}
+function undoRedirect(actId,date){
+  setOccurrence(date||todayStr(),actId,{status:'pendente',redirectedTo:null});
 }
 
 /* ====================== Comentários ====================== */
@@ -1270,17 +1288,22 @@ function renderActivityCard(act,occ){
           ? `<button class="btn" onclick="toggleTimer('${act.id}')">⏸ Pausar</button>`
           : `<button class="btn" onclick="toggleTimer('${act.id}')">▶ Iniciar</button>`}
         <button class="btn primary" onclick="setStatus('${act.id}','finalizada')">✓ Finalizar</button>
-        <select onchange="setStatus('${act.id}',this.value)">
-          <option value="pendente" ${occ.status==='pendente'?'selected':''}>${STATUS_LABELS.pendente}</option>
-          <option value="redirecionada" ${occ.status==='redirecionada'?'selected':''}>${STATUS_LABELS.redirecionada}</option>
-        </select>
       `:`
         <button class="btn" onclick="setStatus('${act.id}','pendente')">↺ Reabrir tarefa</button>
       `}
-      ${occ.status==='redirecionada'?`<select onchange="setRedirect('${act.id}',this.value)">
-        ${state.users.filter(x=>x.id!==act.assignedTo).map(x=>`<option value="${x.id}" ${occ.redirectedTo===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
-      </select>`:''}
     </div>
+    ${occ.status!=='finalizada'?`<div class="row" style="margin-top:6px;flex-wrap:wrap;">
+      ${occ.status==='redirecionada'?`
+        <span class="muted">↪ Redirecionada para: <b>${esc(userName(occ.redirectedTo))}</b></span>
+        <button class="btn" onclick="undoRedirect('${act.id}')">↺ Cancelar redirecionamento</button>
+      `:`
+        <select id="redirTarget-${act.id}">
+          <option value="">↪ Redirecionar para...</option>
+          ${state.users.filter(x=>x.id!==act.assignedTo).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}
+        </select>
+        <button class="btn" onclick="redirectActivity('${act.id}')">Redirecionar</button>
+      `}
+    </div>`:''}
     <div class="attachments">
       <div class="row">
         <label class="icon-btn" style="cursor:pointer;">📎 Anexar arquivo
@@ -1453,6 +1476,18 @@ function renderHoje(){
           <input type="date" id="reschedule-${date}_${act.id}" value="${todayStr()}">
           <button class="btn primary" onclick="confirmReschedule('${act.id}','${date}','${date}_${act.id}')">Confirmar nova data</button>
         </div>`:''}
+        <div class="row" style="margin-top:6px;flex-wrap:wrap;">
+          ${occ.status==='redirecionada'?`
+            <span class="muted">↪ Redirecionada para: <b>${esc(userName(occ.redirectedTo))}</b></span>
+            <button class="btn" onclick="undoRedirect('${act.id}','${date}')">↺ Cancelar redirecionamento</button>
+          `:`
+            <select id="redirTarget-${date}_${act.id}">
+              <option value="">↪ Redirecionar para...</option>
+              ${state.users.filter(x=>x.id!==act.assignedTo).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}
+            </select>
+            <button class="btn" onclick="redirectActivity('${act.id}','${date}')">Redirecionar</button>
+          `}
+        </div>
       </div>`;
     });
 
@@ -1965,6 +2000,7 @@ function showClientForm(client, containerId){
       ${!isEdit && client.historico && client.historico.length?`<div class="full"><label>Histórico de contato (migrado do lead)</label><div class="hist-list">${historicoListHtml(client.historico)}</div></div>`:''}
       <div class="full row">
         <button class="btn primary" type="submit">${isEdit?'Salvar':'Cadastrar cliente'}</button>
+        ${isEdit?`<button class="btn" type="button" id="cancelarClienteBtn" style="color:var(--danger,#c0392b);border-color:var(--danger,#c0392b);">❌ Cliente cancelado</button>`:''}
         <button class="btn" type="button" id="cancelClientBtn">Cancelar</button>
       </div>
     </form>
@@ -2056,6 +2092,12 @@ function showClientForm(client, containerId){
   });
   renderProdutosRows();
   document.getElementById('cancelClientBtn').addEventListener('click',closeThisForm);
+  document.getElementById('cancelarClienteBtn')?.addEventListener('click',()=>{
+    if(!confirm(`Marcar "${client.nome}" como cliente cancelado? Ele sai da lista de clientes ativos e passa a aparecer na aba Cancelados (pode ser reativado depois).`)) return;
+    db.collection('clients').doc(client.id).update({status:'cancelado', canceladoEm: ts()})
+      .then(()=>closeThisForm())
+      .catch(err=>alert('Erro: '+err.message));
+  });
   document.getElementById('clientForm').addEventListener('submit',e=>{
     e.preventDefault();
     const submitBtn=e.target.querySelector('button[type="submit"]');
@@ -2132,9 +2174,10 @@ function filterClients(q){
   if(box && document.activeElement!==box){ box.focus(); box.setSelectionRange(box.value.length,box.value.length); }
 }
 function renderClients(){
-  const total=state.clients.length;
-  const somaValor=state.clients.reduce((s,c)=>s+(c.valorPagamento||0),0);
-  const somaComissao=state.clients.reduce((s,c)=>s+(c.comissaoValor||0),0);
+  const activeClients=state.clients.filter(c=>c.status!=='cancelado');
+  const total=activeClients.length;
+  const somaValor=activeClients.reduce((s,c)=>s+(c.valorPagamento||0),0);
+  const somaComissao=activeClients.reduce((s,c)=>s+(c.comissaoValor||0),0);
   document.getElementById('clientesStats').innerHTML=`
     <div class="card"><div class="label">Clientes cadastrados</div><div class="value">${total}</div></div>
     <div class="card"><div class="label">Soma valor de pagamentos</div><div class="value">${fmtBRL(somaValor)}</div></div>
@@ -2146,7 +2189,7 @@ function renderClients(){
   // filter
   const q=clientSearchQuery;
   const filtered = q
-    ? state.clients.filter(c=>{
+    ? activeClients.filter(c=>{
         const textHaystack=[c.nome,c.cpf,c.cnpj,c.telefone].filter(Boolean).join(' ').toLowerCase();
         if(textHaystack.includes(q)) return true;
         const digitsQuery=q.replace(/\D/g,'');
@@ -2156,7 +2199,7 @@ function renderClients(){
         }
         return false;
       })
-    : state.clients;
+    : activeClients;
   // update count label
   const countEl=document.getElementById('clientSearchCount');
   if(countEl) countEl.textContent = q ? `${filtered.length} de ${total} cliente${total!==1?'s':''}` : '';
@@ -2317,12 +2360,13 @@ function renderPendencias(){
   const statsEl=document.getElementById('pendenciasStats');
   const listEl=document.getElementById('pendenciasList');
   if(!statsEl || !listEl) return;
-  const withIssues=state.clients.map(c=>({c,issues:getClientPendencias(c)})).filter(x=>x.issues.length>0);
+  const activeClients=state.clients.filter(c=>c.status!=='cancelado');
+  const withIssues=activeClients.map(c=>({c,issues:getClientPendencias(c)})).filter(x=>x.issues.length>0);
   const produtosSemNomeSet=new Set();
-  state.clients.forEach(c=>(c.produtos||[]).forEach(p=>{ if((p.cobertura||'').startsWith('(nome a definir)')) produtosSemNomeSet.add(p.numero); }));
+  activeClients.forEach(c=>(c.produtos||[]).forEach(p=>{ if((p.cobertura||'').startsWith('(nome a definir)')) produtosSemNomeSet.add(p.numero); }));
   statsEl.innerHTML=`
     <div class="card"><div class="label">Clientes com dados incompletos</div><div class="value">${withIssues.length}</div></div>
-    <div class="card"><div class="label">Total de clientes</div><div class="value">${state.clients.length}</div></div>
+    <div class="card"><div class="label">Total de clientes</div><div class="value">${activeClients.length}</div></div>
     <div class="card"><div class="label">Produtos sem nome definido</div><div class="value">${produtosSemNomeSet.size}</div></div>
   `;
   if(withIssues.length===0){
@@ -2344,6 +2388,37 @@ function renderPendencias(){
 function goEditClientFromPendencias(id){
   switchTab('clientes');
   editClient(id);
+}
+
+/* ====================== Clientes cancelados ====================== */
+function renderCancelados(){
+  const statsEl=document.getElementById('canceladosStats');
+  const listEl=document.getElementById('canceladosList');
+  if(!statsEl || !listEl) return;
+  const cancelados=state.clients.filter(c=>c.status==='cancelado')
+    .slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+  statsEl.innerHTML=`<div class="card"><div class="label">Clientes cancelados</div><div class="value">${cancelados.length}</div></div>`;
+  if(cancelados.length===0){
+    listEl.innerHTML='<div class="empty">Nenhum cliente cancelado por aqui.</div>';
+    return;
+  }
+  listEl.innerHTML=cancelados.map(c=>{
+    const sub=(c.tipo==='PJ'?c.cnpj:c.cpf)||'';
+    return `<div class="pendencia-item">
+      <div class="pendencia-info">
+        <div class="pendencia-nome">${esc(c.nome)} ${sub?`<span class="muted">· ${esc(sub)}</span>`:''}</div>
+        ${c.canceladoEm?`<div class="muted" style="font-size:12px;">Cancelado em ${fmtDateTime(c.canceladoEm)}</div>`:''}
+      </div>
+      <div class="row">
+        <button class="btn primary" onclick="reativarCliente('${c.id}')">↺ Reativar cliente</button>
+        <button class="btn" style="color:var(--danger,#c0392b);border-color:var(--danger,#c0392b);" onclick="deleteClient('${c.id}')">🗑️ Excluir definitivamente</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function reativarCliente(id){
+  if(!confirm('Reativar este cliente? Ele volta a aparecer na lista de clientes ativos.')) return;
+  db.collection('clients').doc(id).update({status:'ativo'}).catch(err=>alert('Erro: '+err.message));
 }
 
 function row(label,val){
