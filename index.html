@@ -2586,7 +2586,13 @@ function renderBoletos(){
           <div class="cli-name">${esc(c.nome||'—')}</div>
           ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
         </div>
-        ${c.diaVencimento?`<span class="muted" style="font-size:.85rem;white-space:nowrap;flex-shrink:0;">📅 Venc. dia ${esc(c.diaVencimento)}</span>`:''}
+        <label style="display:flex;align-items:center;gap:5px;flex-shrink:0;cursor:default;" onclick="event.stopPropagation()">
+          <span style="font-size:.8rem;color:var(--text2);white-space:nowrap;">📅 Dia</span>
+          <input type="text" inputmode="numeric" maxlength="2" value="${esc(c.diaVencimento||'')}" placeholder="--"
+            style="width:34px;height:26px;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:.85rem;padding:0 2px;background:var(--bg);color:var(--text);"
+            onblur="saveBoletoDia('${c.id}',this.value)"
+            onclick="event.stopPropagation()">
+        </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;flex-shrink:0;" onclick="event.stopPropagation()">
           <input type="checkbox" ${recebido?'checked':''} onchange="toggleBoleto('${c.id}','${boletosViewMes}')"
             style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
@@ -2613,6 +2619,14 @@ function toggleBoleto(id,mes){
   db.collection('boletosClientes').doc(id).set(
     {boletosStatus:{[mes]:!current}},{merge:true}
   ).catch(err=>alert('Erro: '+err.message));
+}
+
+function saveBoletoDia(id, val){
+  val=(val||'').trim().replace(/\D/g,'');
+  const num=parseInt(val,10);
+  if(val && (isNaN(num)||num<1||num>31)) return; // valor inválido, ignora
+  db.collection('boletosClientes').doc(id).set({diaVencimento:val},{merge:true})
+    .catch(err=>alert('Erro: '+err.message));
 }
 
 function showBoletoForm(c){
