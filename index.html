@@ -2332,6 +2332,7 @@ function renderClients(){
           <button class="btn primary" onclick="editClient('${c.id}');event.stopPropagation()">✏️ Editar</button>
           <button class="btn" onclick="toggleClientActivityForm('${c.id}');event.stopPropagation()">🗓️ Nova atividade</button>
           <button class="btn" onclick="convertClientToLead('${c.id}');event.stopPropagation()">🔄 Converter em lead</button>
+          <button class="btn" style="color:var(--amber);border-color:var(--amber);" onclick="cancelarClienteDireto('${c.id}','${esc(c.nome)}');event.stopPropagation()">❌ Cliente cancelado</button>
           <button class="btn" style="color:var(--danger,#c0392b);border-color:var(--danger,#c0392b);" onclick="deleteClient('${c.id}');event.stopPropagation()">🗑️ Excluir</button>
         </div>
         ${creatingActivityForClientId===c.id?`<div id="clientActivityWrap-${c.id}" style="margin-top:12px;" onclick="event.stopPropagation()"></div>`:''}
@@ -2454,6 +2455,12 @@ function renderCancelados(){
       </div>
     </div>`;
   }).join('');
+}
+function cancelarClienteDireto(id, nome){
+  if(!confirm(`Marcar "${nome}" como cliente cancelado?\n\nEle sai da lista de clientes ativos e passa para a aba Cancelados.\nPode ser reativado a qualquer momento.`)) return;
+  db.collection('clients').doc(id).update({status:'cancelado', canceladoEm: ts()})
+    .then(()=>{ selectedClientId=null; switchTab('cancelados'); })
+    .catch(err=>alert('Erro: '+err.message));
 }
 function reativarCliente(id){
   if(!confirm('Reativar este cliente? Ele volta a aparecer na lista de clientes ativos.')) return;
