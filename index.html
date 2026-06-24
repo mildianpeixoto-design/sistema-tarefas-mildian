@@ -126,23 +126,30 @@ table th{color:var(--text2);font-weight:500;font-size:12px;}
 .empty{color:var(--text3);font-size:13px;padding:20px;text-align:center;}
 .icon-btn{background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:4px;text-decoration:underline;}
 .icon-btn:hover{color:var(--red);}
-.chat-wrap{display:flex;flex-direction:column;height:70vh;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
 .chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
-.chat-msg{max-width:80%;padding:8px 12px;border-radius:10px;background:var(--bg);align-self:flex-start;}
+.chat-msg{max-width:85%;padding:8px 12px;border-radius:10px;background:var(--bg);align-self:flex-start;word-break:break-word;}
 .chat-msg.mine{align-self:flex-end;background:var(--accent-bg);}
 .chat-msg .chat-meta{font-size:11px;color:var(--text2);margin-bottom:2px;}
 .chat-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);}
 .chat-form input{flex:1;}
-/* Layout da tela inicial (Hoje) com chat fixo na lateral direita */
-.home-layout{display:flex;gap:16px;align-items:flex-start;}
-.home-main{flex:1;min-width:0;}
-.home-chat{width:320px;flex-shrink:0;position:sticky;top:0;}
-.home-chat-title{margin:0 0 8px;font-size:14px;color:var(--text2);font-weight:600;}
-.home-chat .chat-wrap{height:calc(100vh - 120px);}
-@media (max-width:1000px){
-  .home-layout{flex-direction:column;}
-  .home-chat{width:100%;position:static;}
-  .home-chat .chat-wrap{height:400px;}
+/* Layout da tela inicial (Hoje) — sem coluna de chat */
+.home-layout{display:block;}
+.home-main{min-width:0;}
+/* Botão flutuante de chat */
+#floatChatBtn{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--gradient);color:#fff;border:none;cursor:pointer;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(15,34,56,0.3);z-index:1000;transition:transform .15s;padding:0;}
+#floatChatBtn:hover{transform:scale(1.08);}
+#floatChatBadge{position:absolute;top:1px;right:1px;background:#e53e3e;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:none;align-items:center;justify-content:center;padding:0 4px;pointer-events:none;}
+#floatChatBadge.show{display:flex;}
+/* Painel flutuante */
+#floatChatPanel{position:fixed;bottom:88px;right:24px;width:340px;height:480px;display:none;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(15,34,56,0.22);z-index:999;overflow:hidden;}
+#floatChatPanel.open{display:flex;}
+#floatChatHeader{background:var(--gradient);color:#fff;padding:11px 14px;display:flex;align-items:center;justify-content:space-between;font-weight:600;font-size:13px;flex-shrink:0;}
+#floatChatHeader .hdr-btns{display:flex;gap:6px;align-items:center;}
+#floatChatHeader button{background:rgba(255,255,255,0.15);border:none;color:#fff;cursor:pointer;font-size:12px;padding:3px 7px;border-radius:4px;white-space:nowrap;}
+#floatChatHeader button:hover{background:rgba(255,255,255,0.28);}
+@media(max-width:760px){
+  #floatChatPanel{width:calc(100vw - 32px);right:16px;bottom:76px;height:420px;}
+  #floatChatBtn{bottom:16px;right:16px;}
 }
 /* Campo com ícone (ex: valor em R$) */
 .input-icon-wrap{position:relative;}
@@ -360,18 +367,6 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       <div class="cards" id="hojeStats"></div>
       <div id="hojeGroups"></div>
     </div>
-    <aside class="home-chat">
-      <h3 class="home-chat-title">💬 Chat da equipe
-        <button type="button" id="notifBtn" class="icon-btn" style="font-size:11px;float:right;" title="Ativar notificações do navegador para novas mensagens">🔔 Ativar notificações</button>
-      </h3>
-      <div class="chat-wrap">
-        <div id="chatMessages" class="chat-messages"></div>
-        <form id="chatForm" class="chat-form">
-          <input type="text" id="chatInput" placeholder="Digite uma mensagem..." autocomplete="off" required>
-          <button class="btn primary" type="submit">Enviar</button>
-        </form>
-      </div>
-    </aside>
   </div>
 </section>
 
@@ -3599,12 +3594,14 @@ window.addEventListener('focus',_flashTitleStop);
 
 function _notifyNewChatMessage(senderName,text){
   playChatSound();
+  // Mostra badge no botão flutuante se o chat estiver fechado
+  if(!_chatOpen){ _unreadChat++; _setChatBadge(_unreadChat); }
   if(document.hidden || !document.hasFocus()){
     _flashTitleStart(senderName,text);
     if('Notification' in window && Notification.permission==='granted'){
       try{
         const n=new Notification(`💬 ${senderName}`,{body:text,tag:'chat-msg',renotify:true});
-        n.onclick=()=>{ window.focus(); n.close(); };
+        n.onclick=()=>{ window.focus(); _openChat(); n.close(); };
       }catch(e){ console.warn('Notification error:',e); }
     }
   }
@@ -3614,16 +3611,40 @@ function updateNotifBtn(){
   const btn=document.getElementById('notifBtn');
   if(!btn) return;
   if(!('Notification' in window)){ btn.style.display='none'; return; }
-  if(Notification.permission==='granted'){ btn.textContent='🔔 Notificações ativadas'; btn.disabled=true; }
-  else if(Notification.permission==='denied'){ btn.textContent='🔕 Notificações bloqueadas'; btn.disabled=true; }
-  else { btn.textContent='🔔 Ativar notificações'; btn.disabled=false; }
+  if(Notification.permission==='granted'){ btn.textContent='🔔 Ativas'; btn.disabled=true; }
+  else if(Notification.permission==='denied'){ btn.textContent='🔕 Bloqueadas'; btn.disabled=true; }
+  else { btn.textContent='🔔 Notificações'; btn.disabled=false; }
 }
 document.getElementById('notifBtn')?.addEventListener('click',()=>{
-  if('Notification' in window){
-    Notification.requestPermission().then(updateNotifBtn);
-  }
+  if('Notification' in window) Notification.requestPermission().then(updateNotifBtn);
 });
 updateNotifBtn();
+
+// --- Chat flutuante ---
+let _chatOpen=false;
+function _setChatBadge(n){
+  const badge=document.getElementById('floatChatBadge');
+  if(!badge) return;
+  if(n>0){ badge.textContent=n>9?'9+':n; badge.classList.add('show'); }
+  else { badge.classList.remove('show'); }
+}
+function _openChat(){
+  _chatOpen=true;
+  document.getElementById('floatChatPanel').classList.add('open');
+  _unreadChat=0; _setChatBadge(0);
+  // scroll to bottom
+  const el=document.getElementById('chatMessages');
+  if(el) setTimeout(()=>{ el.scrollTop=el.scrollHeight; },30);
+  document.getElementById('chatInput')?.focus();
+}
+function _closeChat(){
+  _chatOpen=false;
+  document.getElementById('floatChatPanel').classList.remove('open');
+}
+document.getElementById('floatChatBtn').addEventListener('click',()=>{
+  if(_chatOpen) _closeChat(); else _openChat();
+});
+document.getElementById('closeChatBtn').addEventListener('click',_closeChat);
 
 function renderChat(msgs){
   const el=document.getElementById('chatMessages');
@@ -3691,5 +3712,24 @@ if('serviceWorker' in navigator){
   });
 }
 </script>
+
+<!-- Chat flutuante global -->
+<button id="floatChatBtn" title="Chat da equipe" aria-label="Abrir chat">
+  💬<span id="floatChatBadge"></span>
+</button>
+<div id="floatChatPanel">
+  <div id="floatChatHeader">
+    <span>💬 Chat da equipe</span>
+    <div class="hdr-btns">
+      <button type="button" id="notifBtn" title="Ativar notificações">🔔 Notificações</button>
+      <button type="button" id="closeChatBtn" title="Fechar chat">✕</button>
+    </div>
+  </div>
+  <div id="chatMessages" class="chat-messages"></div>
+  <form id="chatForm" class="chat-form">
+    <input type="text" id="chatInput" placeholder="Digite uma mensagem..." autocomplete="off" required>
+    <button class="btn primary" type="submit" style="padding:0 14px;">↑</button>
+  </form>
+</div>
 </body>
 </html>
