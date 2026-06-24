@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260624-2';
+  var BUILD='20260624-3';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3681,10 +3681,7 @@ function _closeChat(){
   _chatOpen=false;
   document.getElementById('floatChatPanel').classList.remove('open');
 }
-document.getElementById('floatChatBtn').addEventListener('click',()=>{
-  if(_chatOpen) _closeChat(); else _openChat();
-});
-document.getElementById('closeChatBtn').addEventListener('click',_closeChat);
+// floatChatBtn usa onclick direto no HTML — não adicionar listener aqui para evitar duplo disparo
 
 function renderChat(msgs){
   const el=document.getElementById('chatMessages');
