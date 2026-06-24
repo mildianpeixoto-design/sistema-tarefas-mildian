@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260624-1';
+  var BUILD='20260624-2';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -530,7 +530,8 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 </div>
 
 <!-- Chat flutuante global -->
-<button id="floatChatBtn" title="Chat da equipe" aria-label="Abrir chat">
+<button id="floatChatBtn" title="Chat da equipe" aria-label="Abrir chat"
+  onclick="if(typeof _openChat==='function'){if(_chatOpen)_closeChat();else _openChat();}else{document.getElementById('floatChatPanel').classList.toggle('open');}">
   💬<span id="floatChatBadge"></span>
 </button>
 <div id="floatChatPanel">
@@ -538,7 +539,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
     <span>💬 Chat da equipe</span>
     <div class="hdr-btns">
       <button type="button" id="notifBtn" title="Ativar notificações">🔔 Notificações</button>
-      <button type="button" id="closeChatBtn" title="Fechar chat">✕</button>
+      <button type="button" id="closeChatBtn" title="Fechar chat" onclick="if(typeof _closeChat==='function')_closeChat();else document.getElementById('floatChatPanel').classList.remove('open');">✕</button>
     </div>
   </div>
   <div id="chatMessages" class="chat-messages"></div>
