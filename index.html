@@ -130,6 +130,8 @@ table th{color:var(--text2);font-weight:500;font-size:12px;}
 .chat-msg{max-width:85%;padding:8px 12px;border-radius:10px;background:var(--bg);align-self:flex-start;word-break:break-word;}
 .chat-msg.mine{align-self:flex-end;background:var(--accent-bg);}
 .chat-msg .chat-meta{font-size:11px;color:var(--text2);margin-bottom:2px;}
+.chat-msg .chat-receipt{font-size:10px;color:var(--text3);text-align:right;margin-top:3px;}
+.chat-msg .chat-receipt.seen{color:var(--green);}
 .chat-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);}
 .chat-form input{flex:1;}
 /* Layout da tela inicial (Hoje) — sem coluna de chat */
@@ -894,6 +896,15 @@ function initApp(){
     const msgs=[]; snap.forEach(d=>msgs.push({id:d.id,...d.data()}));
     msgs.reverse();
     renderChat(msgs);
+  },err=>console.error(err)));
+
+  // Presença no chat — quem está com o chat aberto e quando foi a última vez
+  listeners.push(db.collection('chatPresence').onSnapshot(snap=>{
+    chatPresenceMap={};
+    snap.forEach(d=>{
+      const data=d.data();
+      if(d.id!==currentUser.uid) chatPresenceMap[d.id]={name:data.name||d.id, lastSeen:data.lastSeen?.toDate()||null};
+    });
   },err=>console.error(err)));
 
   listeners.push(db.collection('clients').onSnapshot(snap=>{
@@ -3531,6 +3542,7 @@ function renderPayables(){
 const CHAT_LIMIT=200;
 let chatInitialized=false;
 let lastChatMsgId=null;
+let chatPresenceMap={}; // {uid: {name, lastSeen (Date)}} — presenças dos outros usuários
 let _audioCtx=null;
 const _origTitle=document.title;
 let _titleFlashTimer=null;
@@ -3628,10 +3640,18 @@ function _setChatBadge(n){
   if(n>0){ badge.textContent=n>9?'9+':n; badge.classList.add('show'); }
   else { badge.classList.remove('show'); }
 }
+function _updateChatPresence(){
+  if(!currentUser) return;
+  db.collection('chatPresence').doc(currentUser.uid).set({
+    name: currentUser.name,
+    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+  },{merge:true}).catch(()=>{});
+}
 function _openChat(){
   _chatOpen=true;
   document.getElementById('floatChatPanel').classList.add('open');
   _unreadChat=0; _setChatBadge(0);
+  _updateChatPresence();
   // scroll to bottom
   const el=document.getElementById('chatMessages');
   if(el) setTimeout(()=>{ el.scrollTop=el.scrollHeight; },30);
@@ -3660,11 +3680,25 @@ function renderChat(msgs){
     _notifyNewChatMessage(last.name,last.text);
   }
   lastChatMsgId=last.id;
-  el.innerHTML=msgs.map(m=>`
-    <div class="chat-msg ${m.uid===currentUser.uid?'mine':''}">
+  el.innerHTML=msgs.map(m=>{
+    const isMine=m.uid===currentUser.uid;
+    let receipt='';
+    if(isMine && m.createdAt){
+      const msgTime=m.createdAt.toDate?m.createdAt.toDate():new Date(m.createdAt);
+      const viewers=Object.values(chatPresenceMap).filter(p=>p.lastSeen && p.lastSeen>msgTime);
+      if(viewers.length>0){
+        const names=viewers.map(p=>p.name.split(' ')[0]).join(', ');
+        receipt=`<div class="chat-receipt seen">✓✓ Visto por ${esc(names)}</div>`;
+      } else {
+        receipt=`<div class="chat-receipt">✓ Enviado</div>`;
+      }
+    }
+    return `<div class="chat-msg ${isMine?'mine':''}">
       <div class="chat-meta">${esc(m.name)}${m.createdAt?' · '+fmtDateTime(m.createdAt):''}</div>
       <div>${esc(m.text)}</div>
-    </div>`).join('');
+      ${receipt}
+    </div>`;
+  }).join('');
   if(wasNearBottom || !chatInitialized) el.scrollTop=el.scrollHeight;
   chatInitialized=true;
 }
@@ -3674,6 +3708,7 @@ document.getElementById('chatForm').addEventListener('submit',e=>{
   const text=input.value.trim();
   if(!text) return;
   input.value='';
+  _updateChatPresence();
   db.collection('chatMessages').add({
     text, uid:currentUser.uid, name:currentUser.name,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
