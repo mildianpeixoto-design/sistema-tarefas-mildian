@@ -529,6 +529,25 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div class="modal" id="collabModalContent"></div>
 </div>
 
+<!-- Chat flutuante global -->
+<button id="floatChatBtn" title="Chat da equipe" aria-label="Abrir chat">
+  💬<span id="floatChatBadge"></span>
+</button>
+<div id="floatChatPanel">
+  <div id="floatChatHeader">
+    <span>💬 Chat da equipe</span>
+    <div class="hdr-btns">
+      <button type="button" id="notifBtn" title="Ativar notificações">🔔 Notificações</button>
+      <button type="button" id="closeChatBtn" title="Fechar chat">✕</button>
+    </div>
+  </div>
+  <div id="chatMessages" class="chat-messages"></div>
+  <form id="chatForm" class="chat-form">
+    <input type="text" id="chatInput" placeholder="Digite uma mensagem..." autocomplete="off" required>
+    <button class="btn primary" type="submit" style="padding:0 14px;">↑</button>
+  </form>
+</div>
+
 <script>
 /* ======================================================================
    CONFIGURAÇÃO DO FIREBASE
@@ -3747,24 +3766,5 @@ if('serviceWorker' in navigator){
   });
 }
 </script>
-
-<!-- Chat flutuante global -->
-<button id="floatChatBtn" title="Chat da equipe" aria-label="Abrir chat">
-  💬<span id="floatChatBadge"></span>
-</button>
-<div id="floatChatPanel">
-  <div id="floatChatHeader">
-    <span>💬 Chat da equipe</span>
-    <div class="hdr-btns">
-      <button type="button" id="notifBtn" title="Ativar notificações">🔔 Notificações</button>
-      <button type="button" id="closeChatBtn" title="Fechar chat">✕</button>
-    </div>
-  </div>
-  <div id="chatMessages" class="chat-messages"></div>
-  <form id="chatForm" class="chat-form">
-    <input type="text" id="chatInput" placeholder="Digite uma mensagem..." autocomplete="off" required>
-    <button class="btn primary" type="submit" style="padding:0 14px;">↑</button>
-  </form>
-</div>
 </body>
 </html>
