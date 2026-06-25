@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260624-3';
+  var BUILD='20260625-1';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -199,8 +199,10 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .pendencia-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
 .pendencia-badge{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;}
 /* Funil de vendas - kanban */
-.kanban{display:grid;grid-template-columns:repeat(6,minmax(180px,1fr));gap:10px;overflow-x:auto;}
-@media (max-width:1100px){.kanban{grid-template-columns:repeat(6,220px);}}
+.kanban{display:grid;grid-template-columns:repeat(7,minmax(170px,1fr));gap:10px;overflow-x:auto;}
+@media (max-width:1100px){.kanban{grid-template-columns:repeat(7,210px);}}
+.kanban-col.espera h4{color:var(--amber)!important;border-bottom-color:var(--amber)!important;}
+.kanban-col.espera{background:rgba(214,158,46,0.05)!important;}
 .kanban-col{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;min-height:120px;}
 .kanban-col h4{font-size:13px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;color:var(--accent);border-bottom:2px solid var(--gold);padding-bottom:6px;}
 .kanban-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px;}
@@ -732,8 +734,8 @@ const SEGUROS_LIST=[
   '(nome a definir) 3080','(nome a definir) 3082','(nome a definir) 3108','(nome a definir) 3117','(nome a definir) 3501','(nome a definir) 3503',
   '(nome a definir) 3509','(nome a definir) 3511','(nome a definir) 3514','(nome a definir) 3531','(nome a definir) 3532'
 ];
-const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',perdido:'Perdida'};
-const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','perdido'];
+const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida'};
+const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido'];
 
 /* ====================== Estado global ====================== */
 let currentUser=null; // {uid,name,email,role}
@@ -2830,7 +2832,7 @@ function renderFunil(){
   const isOwner=currentUser.role==='owner';
   STAGE_ORDER.forEach(stage=>{
     const items=state.leads.filter(l=>l.etapa===stage);
-    html+=`<div class="kanban-col"><h4>${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
+    html+=`<div class="kanban-col${stage==='espera'?' espera':''}"><h4>${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
     items.forEach(l=>{
       const isExpanded=expandedLeadCard.has(l.id);
       const toggleLabel = isExpanded ? 'Fechar ▲' : (isOwner?'Editar ▼':'Ver mais ▼');
