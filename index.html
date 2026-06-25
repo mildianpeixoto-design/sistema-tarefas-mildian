@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-3';
+  var BUILD='20260625-4';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -486,6 +486,10 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 <section id="tab-pendencias" class="section owner-only">
   <div class="cards summary-cards" id="pendenciasStats"></div>
   <p class="muted" style="margin-bottom:12px;">Clientes com campos importantes em branco (telefone, e-mail, endereço, etc.) ou com produtos cujo nome do seguro ainda não foi definido. Clique em "Editar" para completar o cadastro.</p>
+  <div style="margin-bottom:16px;">
+    <button class="btn" style="border-color:var(--amber);color:var(--amber);" onclick="migrarNomesProdutos()">🔄 Corrigir nomes de produtos desatualizados</button>
+    <span class="muted" style="font-size:12px;margin-left:10px;">Atualiza automaticamente todos os produtos cadastrados com nome antigo "(nome a definir)"</span>
+  </div>
   <div id="pendenciasList"></div>
 </section>
 
