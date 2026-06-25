@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-2';
+  var BUILD='20260625-3';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2429,6 +2429,53 @@ function getClientPendencias(c){
   if(!c.produtos || !c.produtos.length) issues.push('Nenhum produto cadastrado');
   return issues;
 }
+async function migrarNomesProdutos(){
+  // Monta mapa código → nome correto a partir do SEGUROS_LIST
+  const mapaCorreto={};
+  SEGUROS_LIST.forEach(item=>{
+    const parts=item.trim().split(' ');
+    const codigo=parts[parts.length-1];
+    if(!item.startsWith('(nome a definir)')) mapaCorreto[codigo]=item;
+  });
+
+  const clientes=state.clients||[];
+  let totalAtualizados=0;
+  let totalProdutos=0;
+  const batch=db.batch();
+
+  clientes.forEach(c=>{
+    if(!c.produtos||!c.produtos.length) return;
+    let alterou=false;
+    const novosProdutos=c.produtos.map(p=>{
+      if(!(p.cobertura||'').startsWith('(nome a definir)')) return p;
+      const parts=(p.cobertura||'').trim().split(' ');
+      const codigo=parts[parts.length-1];
+      if(mapaCorreto[codigo]){
+        totalProdutos++;
+        alterou=true;
+        return {...p, cobertura:mapaCorreto[codigo]};
+      }
+      return p;
+    });
+    if(alterou){
+      totalAtualizados++;
+      batch.update(db.collection('clients').doc(c.id),{produtos:novosProdutos});
+    }
+  });
+
+  if(totalProdutos===0){
+    alert('Nenhum produto com nome indefinido encontrado para corrigir.');
+    return;
+  }
+
+  try{
+    await batch.commit();
+    alert(`✅ Migração concluída!\n${totalProdutos} produto(s) renomeado(s) em ${totalAtualizados} cliente(s).`);
+  }catch(err){
+    alert('Erro na migração: '+err.message);
+  }
+}
+
 function renderPendencias(){
   const statsEl=document.getElementById('pendenciasStats');
   const listEl=document.getElementById('pendenciasList');
@@ -2440,7 +2487,11 @@ function renderPendencias(){
   statsEl.innerHTML=`
     <div class="card"><div class="label">Clientes com dados incompletos</div><div class="value">${withIssues.length}</div></div>
     <div class="card"><div class="label">Total de clientes</div><div class="value">${activeClients.length}</div></div>
-    <div class="card"><div class="label">Produtos sem nome definido</div><div class="value">${produtosSemNomeSet.size}</div></div>
+    <div class="card clickable" onclick="migrarNomesProdutos()" title="Clique para corrigir automaticamente" style="${produtosSemNomeSet.size>0?'border-color:var(--amber);cursor:pointer;':''}}">
+      <div class="label">Produtos sem nome definido</div>
+      <div class="value">${produtosSemNomeSet.size}</div>
+      ${produtosSemNomeSet.size>0?'<div style="font-size:11px;color:var(--amber);margin-top:4px;">▶ Clique para corrigir</div>':''}
+    </div>
   `;
   if(withIssues.length===0){
     listEl.innerHTML='<div class="empty">Nenhuma pendência encontrada. Todos os clientes estão com os dados completos! 🎉</div>';
