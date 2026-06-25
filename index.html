@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-4';
+  var BUILD='20260625-5';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -718,30 +718,45 @@ function markContatoFeito(id){
 /* ====================== Constantes: Clientes e Funil ====================== */
 const COMMISSION_OPTIONS=[5,6,9,10,12,14,14.16,15,17,20,25,29,30,33.33,35,40,50,70,100,150,200];
 const SEGUROS_LIST=[
-  'PGBL PRIVATE 1808','PGBL VIDA TODA 1800','VGBL PRIVATE 1809','VGBL VIDA TODA 1801',
+  'PGBL PRIVATE FREE 812','VGBL PRIVATE FREE 813',
+  'PGBL VIDA TODA 1800','VGBL VIDA TODA 1801','PGBL PRIVATE 1808','VGBL PRIVATE 1809','PGBL PRIVATE TOP 1810','VGBL PRIVATE TOP 1811',
   'Morte por acidente 1501','Renda por invalidez 2009','IPA com majoração 2278',
   'IPA com majoração + IFPD 2279','Diária por incapacidade temporária por acidente 2330',
   'Dit + MQC 7 dias 2397','Dit + MAC + IPAM 10 dias 2398','Dit + MQC 10 dias 2399',
+  'PGBL Especial 2298','VGBL Especial 2299','Doenças graves master 2345',
+  'Vida produtor rural 5 2504',
+  'IPTA - Rider 2427','Morte acidental - Rider 2429',
   'SAF essencial individual 3057','SAF essencial familiar 3058',
   'SAF essencial familiar + pais 3060','SAF essencial familiar + pais e sogros 3061',
   'SAF Plus individual 3062','SAF Plus familiar 3063',
   'SAF Plus familiar + pais 3064','SAF Plus familiar + pais e sogros 3065',
-  'SAF Premium individual 3066','SAF Premium familiar + pais 3068','SAF Premium familiar + pais e sogros 3069',
-  'Pensão por morte 3084','Prazo certo 3085',
-  'Doenças graves essencial 3500','Diária por internação hospitalar + suporte 250 3510',
-  'Assistência Invida 3529','Assistência residencial 3539','Assistência auto 3541','Assistência proteção pet 3542',
+  'SAF Premium individual 3066','SAF Premium familiar 3067','SAF Premium familiar + pais 3068','SAF Premium familiar + pais e sogros 3069',
+  'SAF Essencial individual - Rider 3070','SAF Essencial familiar - Rider 3071',
+  'SAF Plus individual - Rider 3074','SAF Plus familiar - Rider 3075',
+  'SAF Premium individual - Rider 3078','SAF Premium familiar - Rider 3079',
+  'Vida inteira 3082','Pensão por morte 3084','Prazo certo 3085','Term Life sob medida pagamento único 3086',
+  'Whole Life integral 3108','Whole Life integral 10 anos 3109','Whole Life integral pagamento único 3110',
+  'Whole Life dinâmico 3111','Whole Life dinâmico 10 anos 3112','Whole Life dinâmico pagamento único 3113',
+  'Whole Life sucessão 10 anos 3115','Whole Life sucessão pagamento único 3116',
+  'Term Life sob medida 3117',
+  'Doenças graves essencial 3500','Doenças graves plus 3501','Doenças graves infantil 3503',
+  'Diária por internação hospitalar + suporte 150 3509','Diária por internação hospitalar + suporte 250 3510',
+  'Cirurgias + amparo 3511',
+  'Doenças graves essencial - Rider 3512','Doenças graves plus - Rider 3513','Doenças graves multi - Rider 3514','Doenças graves vital - Rider 3515',
+  'Assistência Invida 3529','Cirurgias + amparo - Rider 3530','Doenças graves multi 3531','Doenças graves vital 3532',
+  'Diária por internação hospitalar + suporte 150 - Rider 3534','Diária por internação hospitalar + suporte 250 - Rider 3535',
+  'Vivermais benefícios 3536','Assistência residencial 3539','Assistência auto 3541','Assistência proteção pet 3542',
   '(nome a definir) 1113','(nome a definir) 1504','(nome a definir) 1505','(nome a definir) 1537','(nome a definir) 1538','(nome a definir) 1546',
-  '(nome a definir) 1548','(nome a definir) 1561','(nome a definir) 1567','(nome a definir) 1570','(nome a definir) 1581','(nome a definir) 1583',
+  'IPTA 1548','(nome a definir) 1561','(nome a definir) 1567','(nome a definir) 1570','(nome a definir) 1581','(nome a definir) 1583',
   '(nome a definir) 1628','(nome a definir) 1660','(nome a definir) 1780','(nome a definir) 1782','(nome a definir) 1784','(nome a definir) 1947',
   '(nome a definir) 1950','(nome a definir) 1953','(nome a definir) 2025','(nome a definir) 2026','(nome a definir) 2027','(nome a definir) 2028',
   '(nome a definir) 2037','(nome a definir) 2113','(nome a definir) 2114','(nome a definir) 2117','(nome a definir) 2230','(nome a definir) 2231',
-  '(nome a definir) 2232','(nome a definir) 2234','(nome a definir) 2299','(nome a definir) 2301','(nome a definir) 2322','(nome a definir) 2342',
+  '(nome a definir) 2232','(nome a definir) 2234','(nome a definir) 2301','(nome a definir) 2322','Master acidentes domiciliares 2342',
   '(nome a definir) 2390','(nome a definir) 2395','(nome a definir) 2396','(nome a definir) 2400','(nome a definir) 2406','(nome a definir) 2413',
-  '(nome a definir) 2414','(nome a definir) 2418','(nome a definir) 2419','(nome a definir) 2420','(nome a definir) 2421','(nome a definir) 2427',
+  '(nome a definir) 2414','(nome a definir) 2418','(nome a definir) 2419','(nome a definir) 2420','(nome a definir) 2421',
   '(nome a definir) 2430','(nome a definir) 2444','(nome a definir) 2445','(nome a definir) 2595','(nome a definir) 2694','(nome a definir) 2696',
-  '(nome a definir) 2697','(nome a definir) 2795','(nome a definir) 2800','SAF Premium familiar 3067','(nome a definir) 3073','(nome a definir) 3079',
-  '(nome a definir) 3080','Vida inteira 3082','(nome a definir) 3108','(nome a definir) 3117','Doenças graves plus 3501','(nome a definir) 3503',
-  'Diária por internação hospitalar + suporte 150 3509','Cirurgias + amparo 3511','(nome a definir) 3514','Doenças graves multi 3531','Doenças graves vital 3532'
+  '(nome a definir) 2697','(nome a definir) 2795','(nome a definir) 2800','(nome a definir) 3073',
+  '(nome a definir) 3080'
 ];
 const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida'};
 const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido'];
