@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-1';
+  var BUILD='20260625-2';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -721,6 +721,11 @@ const SEGUROS_LIST=[
   'SAF essencial individual 3057','SAF essencial familiar 3058',
   'SAF essencial familiar + pais 3060','SAF essencial familiar + pais e sogros 3061',
   'SAF Plus individual 3062','SAF Plus familiar 3063',
+  'SAF Plus familiar + pais 3064','SAF Plus familiar + pais e sogros 3065',
+  'SAF Premium individual 3066','SAF Premium familiar + pais 3068','SAF Premium familiar + pais e sogros 3069',
+  'Pensão por morte 3084','Prazo certo 3085',
+  'Doenças graves essencial 3500','Diária por internação hospitalar + suporte 250 3510',
+  'Assistência Invida 3529','Assistência residencial 3539','Assistência auto 3541','Assistência proteção pet 3542',
   '(nome a definir) 1113','(nome a definir) 1504','(nome a definir) 1505','(nome a definir) 1537','(nome a definir) 1538','(nome a definir) 1546',
   '(nome a definir) 1548','(nome a definir) 1561','(nome a definir) 1567','(nome a definir) 1570','(nome a definir) 1581','(nome a definir) 1583',
   '(nome a definir) 1628','(nome a definir) 1660','(nome a definir) 1780','(nome a definir) 1782','(nome a definir) 1784','(nome a definir) 1947',
@@ -730,9 +735,9 @@ const SEGUROS_LIST=[
   '(nome a definir) 2390','(nome a definir) 2395','(nome a definir) 2396','(nome a definir) 2400','(nome a definir) 2406','(nome a definir) 2413',
   '(nome a definir) 2414','(nome a definir) 2418','(nome a definir) 2419','(nome a definir) 2420','(nome a definir) 2421','(nome a definir) 2427',
   '(nome a definir) 2430','(nome a definir) 2444','(nome a definir) 2445','(nome a definir) 2595','(nome a definir) 2694','(nome a definir) 2696',
-  '(nome a definir) 2697','(nome a definir) 2795','(nome a definir) 2800','(nome a definir) 3067','(nome a definir) 3073','(nome a definir) 3079',
-  '(nome a definir) 3080','(nome a definir) 3082','(nome a definir) 3108','(nome a definir) 3117','(nome a definir) 3501','(nome a definir) 3503',
-  '(nome a definir) 3509','(nome a definir) 3511','(nome a definir) 3514','(nome a definir) 3531','(nome a definir) 3532'
+  '(nome a definir) 2697','(nome a definir) 2795','(nome a definir) 2800','SAF Premium familiar 3067','(nome a definir) 3073','(nome a definir) 3079',
+  '(nome a definir) 3080','Vida inteira 3082','(nome a definir) 3108','(nome a definir) 3117','Doenças graves plus 3501','(nome a definir) 3503',
+  'Diária por internação hospitalar + suporte 150 3509','Cirurgias + amparo 3511','(nome a definir) 3514','Doenças graves multi 3531','Doenças graves vital 3532'
 ];
 const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida'};
 const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido'];
