@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-5';
+  var BUILD='20260625-6';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -142,6 +142,8 @@ table th{color:var(--text2);font-weight:500;font-size:12px;}
 #floatChatBtn:hover{transform:scale(1.08);}
 #floatChatBadge{position:absolute;top:1px;right:1px;background:#e53e3e;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:none;align-items:center;justify-content:center;padding:0 4px;pointer-events:none;}
 #floatChatBadge.show{display:flex;}
+@keyframes chatPulse{0%,100%{box-shadow:0 4px 16px rgba(15,34,56,0.3),0 0 0 0 rgba(229,62,62,0.7);}50%{box-shadow:0 4px 16px rgba(15,34,56,0.3),0 0 0 10px rgba(229,62,62,0);}}
+#floatChatBtn.has-unread{animation:chatPulse 1.2s ease-in-out infinite;}
 /* Painel flutuante */
 #floatChatPanel{position:fixed;bottom:88px;right:24px;width:340px;height:480px;display:none;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(15,34,56,0.22);z-index:999;overflow:hidden;}
 #floatChatPanel.open{display:flex;}
@@ -3645,8 +3647,25 @@ const _origTitle=document.title;
 let _titleFlashTimer=null;
 let _unreadChat=0;
 
-// Desbloqueia AudioContext o mais cedo possível e em qualquer interação
-// (cliques, toques e teclas) — exigido pelos navegadores para permitir áudio.
+// Elemento <audio> com beep embutido em base64 — mais confiável que Web Audio API
+// pois não exige interação prévia do usuário na maioria dos navegadores.
+const _BEEP_SRC='data:audio/wav;base64,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';
+let _beepAudio=null;
+function _getBeepAudio(){
+  if(!_beepAudio){
+    _beepAudio=new Audio(_BEEP_SRC);
+    _beepAudio.volume=0.7;
+    _beepAudio.preload='auto';
+  }
+  return _beepAudio;
+}
+// Pré-carrega o áudio assim que o usuário fizer a primeira interação
+['click','touchstart','keydown','pointerdown'].forEach(evt=>{
+  document.addEventListener(evt,()=>{ try{ const a=_getBeepAudio(); a.load(); }catch(e){} },{once:true,passive:true});
+});
+
+// Web Audio como backup (caso o elemento <audio> falhe)
+let _audioCtx=null;
 function _getAudioCtx(){
   if(!_audioCtx) _audioCtx=new (window.AudioContext||window.webkitAudioContext)();
   if(_audioCtx.state==='suspended') _audioCtx.resume().catch(()=>{});
@@ -3655,15 +3674,19 @@ function _getAudioCtx(){
 ['click','touchstart','touchend','keydown','pointerdown'].forEach(evt=>{
   document.addEventListener(evt,()=>{ try{ _getAudioCtx(); }catch(e){} },{passive:true});
 });
-// Tenta desbloquear assim que o app inicializa também (alguns navegadores
-// permitem resume() em resposta a qualquer evento de input recente).
-window.addEventListener('load',()=>{ try{ _getAudioCtx(); }catch(e){} });
 
 async function playChatSound(){
+  // Tenta primeiro via elemento <audio> (mais confiável em mobile/desktop)
+  try{
+    const a=_getBeepAudio();
+    a.currentTime=0;
+    await a.play();
+    return; // sucesso — não precisa do fallback
+  }catch(e){ /* bloqueado pelo autoplay — tenta Web Audio */ }
+  // Fallback: Web Audio API (funciona se o usuário já interagiu com a página)
   try{
     const ctx=_getAudioCtx();
     if(ctx.state==='suspended') await ctx.resume();
-    // Toca dois tons (campainha) bem mais audível que um único bip curto.
     const tones=[[880,0],[660,0.16]];
     tones.forEach(([freq,delay])=>{
       const o=ctx.createOscillator();
@@ -3675,8 +3698,7 @@ async function playChatSound(){
       g.gain.exponentialRampToValueAtTime(0.5,t0+0.02);
       g.gain.exponentialRampToValueAtTime(0.0001,t0+0.35);
       o.connect(g); g.connect(ctx.destination);
-      o.start(t0);
-      o.stop(t0+0.36);
+      o.start(t0); o.stop(t0+0.36);
     });
   }catch(e){ console.warn('Chat sound error:',e); }
 }
@@ -3703,16 +3725,24 @@ window.addEventListener('focus',_flashTitleStop);
 
 function _notifyNewChatMessage(senderName,text){
   playChatSound();
-  // Mostra badge no botão flutuante se o chat estiver fechado
-  if(!_chatOpen){ _unreadChat++; _setChatBadge(_unreadChat); }
+  // Vibração para dispositivos móveis (não requer permissão)
+  try{ if(navigator.vibrate) navigator.vibrate([200,80,200]); }catch(e){}
+  // Mostra badge + pulsação no botão flutuante se o chat estiver fechado
+  if(!_chatOpen){
+    _unreadChat++;
+    _setChatBadge(_unreadChat);
+    const btn=document.getElementById('floatChatBtn');
+    if(btn) btn.classList.add('has-unread');
+  }
   if(document.hidden || !document.hasFocus()){
     _flashTitleStart(senderName,text);
-    if('Notification' in window && Notification.permission==='granted'){
-      try{
-        const n=new Notification(`💬 ${senderName}`,{body:text,tag:'chat-msg',renotify:true});
-        n.onclick=()=>{ window.focus(); _openChat(); n.close(); };
-      }catch(e){ console.warn('Notification error:',e); }
-    }
+  }
+  // Notificação do sistema (quando permitido) — funciona independente do foco
+  if('Notification' in window && Notification.permission==='granted'){
+    try{
+      const n=new Notification(`💬 ${senderName}`,{body:text,tag:'chat-msg',renotify:true});
+      n.onclick=()=>{ window.focus(); _openChat(); n.close(); };
+    }catch(e){ console.warn('Notification error:',e); }
   }
 }
 
@@ -3748,6 +3778,10 @@ function _openChat(){
   _chatOpen=true;
   document.getElementById('floatChatPanel').classList.add('open');
   _unreadChat=0; _setChatBadge(0);
+  // Remove animação pulsante ao abrir o chat
+  const btn=document.getElementById('floatChatBtn');
+  if(btn) btn.classList.remove('has-unread');
+  _flashTitleStop();
   _updateChatPresence();
   // scroll to bottom
   const el=document.getElementById('chatMessages');
