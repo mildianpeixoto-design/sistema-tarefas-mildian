@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-6';
+  var BUILD='20260625-7';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -245,6 +245,14 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .act-icon.finalizada{background:var(--green-bg);color:var(--green);}
 .act-icon.redirecionada{background:var(--blue-bg);color:var(--blue);}
 .act-icon.running{background:var(--lilac-bg);color:var(--lilac);}
+/* Destaque visual: tarefa finalizada aparece com borda verde e levemente opaca */
+.activity.compact.status-finalizada{border-left:4px solid var(--green)!important;opacity:0.82;}
+/* Toast de notificação */
+#toastContainer{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;}
+.toast{background:#222;color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.3);animation:toastIn .2s ease;pointer-events:none;}
+.toast.success{background:var(--green);}
+.toast.error{background:#e53e3e;}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 .act-head .activity-title{font-size:13px;}
 .act-toggle{margin-top:8px;}
 /* Avatares de colaborador */
@@ -537,6 +545,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div class="modal" id="collabModalContent"></div>
 </div>
 
+<div id="toastContainer"></div>
 <!-- Chat flutuante global -->
 <button id="floatChatBtn" title="Chat da equipe" aria-label="Abrir chat"
   onclick="if(typeof _openChat==='function'){if(_chatOpen)_closeChat();else _openChat();}else{document.getElementById('floatChatPanel').classList.toggle('open');}">
@@ -581,6 +590,15 @@ const RECUR_LABELS={nenhuma:'Não repete',diaria:'Diária',semanal:'Semanal',qui
 const STATUS_LABELS={pendente:'Pendente',finalizada:'Finalizada',redirecionada:'Redirecionada',reagendada:'Reagendada'};
 
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function showToast(msg,type='',dur=2800){
+  const c=document.getElementById('toastContainer');
+  if(!c) return;
+  const t=document.createElement('div');
+  t.className='toast'+(type?' '+type:'');
+  t.textContent=msg;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(),dur);
+}
 function prioRank(p){return {alta:0,media:1,baixa:2}[p]??3;}
 function dstr(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
 function todayStr(){return dstr(new Date());}
@@ -1044,6 +1062,18 @@ function switchTab(tab,btn){
   document.getElementById('tab-'+tab).classList.add('active');
 }
 
+/* Reconecta os listeners do dia quando a aba volta ao foco após ficar em segundo plano.
+   Garante que o owner/colaborador sempre veja dados atualizados sem precisar recarregar. */
+let _lastVisibilityHide=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ _lastVisibilityHide=Date.now(); }
+  else if(currentUser && Date.now()-_lastVisibilityHide>60000){
+    // Aba ficou em segundo plano por mais de 1 minuto — reconecta os listeners
+    subscribeToday();
+    subscribeOverdue();
+  }
+});
+
 /* ====================== Listeners do dia atual ====================== */
 function subscribeToday(){
   todayUnsubs.forEach(u=>u()); todayUnsubs=[];
@@ -1126,7 +1156,12 @@ function renderAll(){
 
 /* ====================== Hoje / Minhas tarefas ====================== */
 function setOccurrence(date,activityId,patch){
-  return db.collection('occurrences').doc(`${date}_${activityId}`).set({date,activityId,...patch},{merge:true});
+  return db.collection('occurrences').doc(`${date}_${activityId}`).set({date,activityId,...patch},{merge:true})
+    .catch(err=>{
+      console.error('setOccurrence error:',err);
+      showToast('❌ Erro ao salvar: '+err.message,'error');
+      throw err;
+    });
 }
 function toggleTimer(actId){
   const ds=todayStr();
@@ -1148,7 +1183,12 @@ function setStatus(actId,status){
     patch.timerStart=del();
   }
   if(status!=='redirecionada') patch.redirectedTo=null;
-  setOccurrence(ds,actId,patch);
+  setOccurrence(ds,actId,patch)
+    .then(()=>{
+      if(status==='finalizada') showToast('✅ Tarefa finalizada!','success');
+      else if(status==='pendente') showToast('↺ Tarefa reaberta');
+    })
+    .catch(()=>{}); // erro já tratado em setOccurrence
 }
 function setRedirect(actId,collabId){
   setOccurrence(todayStr(),actId,{redirectedTo:collabId});
@@ -1322,7 +1362,7 @@ function renderActivityCard(act,occ){
   const running=!!occ.timerStart;
   const iconClass=running?'running':occ.status;
   const icon=running?'▶':ACT_ICONS[occ.status];
-  return `<div class="activity compact" data-act="${act.id}">
+  return `<div class="activity compact${occ.status==='finalizada'?' status-finalizada':''}" data-act="${act.id}">
     <div class="act-head" onclick="toggleActDetail('${act.id}')" style="cursor:pointer;">
       <span class="act-icon ${iconClass}">${icon}</span>
       <div style="flex:1;min-width:0;">
