@@ -14,7 +14,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-7';
+  var BUILD='20260625-8';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3704,8 +3704,7 @@ function _getBeepAudio(){
   document.addEventListener(evt,()=>{ try{ const a=_getBeepAudio(); a.load(); }catch(e){} },{once:true,passive:true});
 });
 
-// Web Audio como backup (caso o elemento <audio> falhe)
-let _audioCtx=null;
+// Web Audio como backup (caso o elemento <audio> falhe) — _audioCtx já declarado acima
 function _getAudioCtx(){
   if(!_audioCtx) _audioCtx=new (window.AudioContext||window.webkitAudioContext)();
   if(_audioCtx.state==='suspended') _audioCtx.resume().catch(()=>{});
