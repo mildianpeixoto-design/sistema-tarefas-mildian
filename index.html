@@ -2,6 +2,9 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Gestão de Equipe</title>
 <link rel="manifest" href="/manifest.json">
@@ -14,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-8';
+  var BUILD='20260625-9';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -602,6 +605,7 @@ function showToast(msg,type='',dur=2800){
 function prioRank(p){return {alta:0,media:1,baixa:2}[p]??3;}
 function dstr(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
 function todayStr(){return dstr(new Date());}
+function tomorrowStr(){const d=new Date();d.setDate(d.getDate()+1);return dstr(d);}
 function fmtHMS(sec){
   sec=Math.max(0,Math.round(sec));
   const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
@@ -1413,6 +1417,20 @@ function renderActivityCard(act,occ){
         <button class="btn" onclick="redirectActivity('${act.id}')">Redirecionar</button>
       `}
     </div>`:''}
+    ${occ.status!=='finalizada'?(()=>{
+      const _ds=todayStr();
+      const _key=_ds+'_'+act.id;
+      const _tom=tomorrowStr();
+      return `<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px;">
+        <button class="btn" onclick="toggleRescheduleForm('${_key}')" title="Adiar esta tarefa para outro dia">📅 Adiar tarefa</button>
+      </div>
+      ${expandedReschedule.has(_key)?`<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px;align-items:center;">
+        <span class="muted" style="font-size:12px;">Nova data:</span>
+        <input type="date" id="reschedule-${_key}" min="${_tom}" value="${_tom}" style="flex:1;min-width:130px;">
+        <button class="btn primary" onclick="confirmReschedule('${act.id}','${_ds}','${_key}')">Confirmar</button>
+        <button class="btn" onclick="toggleRescheduleForm('${_key}')">Cancelar</button>
+      </div>`:''}`;
+    })():''}
     <div class="attachments">
       <div class="row">
         <label class="icon-btn" style="cursor:pointer;">📎 Anexar arquivo
