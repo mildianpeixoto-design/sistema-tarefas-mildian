@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260629-01';
+  var BUILD='20260630-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1205,17 +1205,22 @@ function toggleTimer(actId){
     const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
     setOccurrence(ds,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()});
   }else{
-    setOccurrence(ds,actId,{timerStart:ts(), status:occ.status||'pendente'});
+    const patch={timerStart:ts(), status:occ.status||'pendente'};
+    if(!occ.startedAt) patch.startedAt=ts(); // registra horário de início da primeira sessão
+    setOccurrence(ds,actId,patch);
   }
 }
 function setStatus(actId,status){
   const ds=todayStr();
   const occ=state.occToday[actId]||{};
   const patch={status};
-  if(status==='finalizada' && occ.timerStart){
-    const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
-    patch.timeSpent=(occ.timeSpent||0)+elapsed;
-    patch.timerStart=del();
+  if(status==='finalizada'){
+    if(occ.timerStart){
+      const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
+      patch.timeSpent=(occ.timeSpent||0)+elapsed;
+      patch.timerStart=del();
+    }
+    patch.completedAt=ts(); // registra horário de conclusão
   }
   if(status!=='redirecionada') patch.redirectedTo=null;
   setOccurrence(ds,actId,patch)
@@ -3294,7 +3299,9 @@ async function buildAndSaveDailyReport(ds){
     const assignee=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
     items.push({
       title:act.title, cliente:act.cliente||'', responsavel:userName(assignee),
-      prioridade:act.priority, status:occ.status, tempo:occ.timeSpent||0
+      prioridade:act.priority, status:occ.status, tempo:occ.timeSpent||0,
+      startedAt: occ.startedAt ? occ.startedAt.toMillis() : null,
+      completedAt: occ.completedAt ? occ.completedAt.toMillis() : null
     });
   });
 
@@ -3304,18 +3311,40 @@ async function buildAndSaveDailyReport(ds){
   const stats={total:items.length,finalizada:0,pendente:0,redirecionada:0};
   items.forEach(it=>{ stats[it.status]=(stats[it.status]||0)+1; });
 
-  const users=state.users.map(u=>({uid:u.id,name:u.name,horas:logTotalSeconds(logsByUid[u.id])}));
+  // Monta dados dos colaboradores: sessões de ponto e ausência
+  const users=state.users.map(u=>{
+    const log=logsByUid[u.id];
+    const sessions=(log&&log.sessions)
+      ? log.sessions.map(s=>({in:s.in.toMillis(), out:s.out.toMillis()}))
+      : [];
+    const ausente=!log || sessions.length===0;
+    return {
+      uid:u.id, name:u.name,
+      horas:logTotalSeconds(log),
+      sessions,
+      ausente
+    };
+  });
+
+  const ausentes=users.filter(u=>u.ausente).map(u=>u.name);
 
   await db.collection('dailyReports').doc(ds).set({
     date:ds,
     generatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    stats, users, activities:items
+    stats, users, activities:items, ausentes
   });
 }
 async function archiveMissingReports(){
   try{
     const existingSnap=await db.collection('dailyReports').get();
     const existing=new Set(existingSnap.docs.map(d=>d.id));
+    // Gera relatório de hoje automaticamente a partir das 23h
+    const now=new Date();
+    const todayDs=todayStr();
+    if(now.getHours()>=23 && !existing.has(todayDs)){
+      await buildAndSaveDailyReport(todayDs);
+      existing.add(todayDs);
+    }
     for(let i=1;i<=DAILY_REPORT_LOOKBACK_DAYS;i++){
       const d=new Date(); d.setDate(d.getDate()-i);
       const dow=d.getDay(); // 0=domingo, 6=sábado
@@ -3326,22 +3355,107 @@ async function archiveMissingReports(){
     }
   }catch(err){ console.error('Erro ao arquivar relatórios diários:',err); }
 }
+function exportArquivoPdf(id){
+  const r=state.dailyReports.find(x=>x.id===id);
+  if(!r) return;
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const azul=[31,58,95];
+  const cinza=[100,100,100];
+  // Cabeçalho
+  doc.setFillColor(...azul);
+  doc.rect(0,0,297,18,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(13);
+  doc.setFont('helvetica','bold');
+  doc.text(`Relatório Diário — ${fmtDateFull(r.date)}`,10,12);
+  doc.setFont('helvetica','normal');
+  // Seção de colaboradores
+  let y=26;
+  doc.setTextColor(...azul);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','bold');
+  doc.text('Equipe',10,y); y+=6;
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(...cinza);
+  doc.setFontSize(8.5);
+  (r.users||[]).forEach(u=>{
+    const entrada=u.sessions&&u.sessions.length
+      ? new Date(u.sessions[0].in).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+      : '—';
+    const saida=u.sessions&&u.sessions.length
+      ? new Date(u.sessions[u.sessions.length-1].out).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+      : '—';
+    const linha=u.ausente
+      ? `${u.name}: AUSENTE`
+      : `${u.name}: ${fmtHours(u.horas||0)} trabalhadas  |  Entrada: ${entrada}  |  Saída: ${saida}`;
+    doc.text(linha,10,y); y+=5.5;
+  });
+  if(r.ausentes&&r.ausentes.length){
+    y+=2;
+    doc.setTextColor(180,30,30);
+    doc.text(`⚠ Ausentes no dia: ${r.ausentes.join(', ')}`,10,y); y+=6;
+    doc.setTextColor(...cinza);
+  }
+  y+=4;
+  // Tabela de atividades
+  doc.autoTable({
+    startY:y,
+    head:[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Início','Conclusão','Tempo']],
+    body:(r.activities||[]).map(it=>[
+      it.title,
+      it.cliente||'',
+      it.responsavel,
+      PRIORITY_LABELS[it.prioridade]||it.prioridade,
+      STATUS_LABELS[it.status]||it.status,
+      it.startedAt ? new Date(it.startedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—',
+      it.completedAt ? new Date(it.completedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—',
+      fmtHMS(it.tempo||0)
+    ]),
+    styles:{fontSize:7.5,cellPadding:2},
+    headStyles:{fillColor:azul,textColor:255,fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[245,247,251]},
+    margin:{left:10,right:10}
+  });
+  doc.save(`relatorio_${r.date}.pdf`);
+}
 function toggleArquivoDetail(id){
   if(expandedArquivo.has(id)) expandedArquivo.delete(id);
   else expandedArquivo.add(id);
   renderArquivo();
 }
+function fmtTimestamp(ms){
+  if(!ms) return '—';
+  return new Date(ms).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
 function arquivoDetailHtml(r){
+  // Seção de ponto por colaborador
   let html='<div class="cards">';
   (r.users||[]).forEach(u=>{
-    html+=`<div class="card"><div class="label">${esc(u.name)}</div><div class="value">${fmtHours(u.horas||0)}</div></div>`;
+    const ausente=u.ausente||false;
+    const entrada=u.sessions&&u.sessions.length ? fmtTimestamp(u.sessions[0].in) : '—';
+    const saida=u.sessions&&u.sessions.length ? fmtTimestamp(u.sessions[u.sessions.length-1].out) : '—';
+    html+=`<div class="card${ausente?' style="border-color:#c0392b"':''}">
+      <div class="label">${esc(u.name)}${ausente?' <span style="color:#c0392b;font-size:11px">⚠ Ausente</span>':''}</div>
+      <div class="value">${ausente?'—':fmtHours(u.horas||0)}</div>
+      ${!ausente?`<div style="font-size:11px;color:var(--muted);margin-top:4px">Entrada: ${entrada} &nbsp; Saída: ${saida}</div>`:''}
+      ${!ausente&&u.sessions&&u.sessions.length>1?`<div style="font-size:10px;color:var(--muted)">${u.sessions.map((_,i)=>i===0?'':` Intervalo ${i}`).filter(Boolean).join('')}</div>`:''}
+    </div>`;
   });
   html+='</div>';
+  // Alerta de ausências
+  const ausentes=r.ausentes||[];
+  if(ausentes.length){
+    html+=`<div style="background:#fff0f0;border:1px solid #c0392b;border-radius:8px;padding:10px 14px;margin-bottom:12px;color:#c0392b;font-size:13px">
+      ⚠ <strong>Ausentes no dia:</strong> ${ausentes.map(esc).join(', ')}
+    </div>`;
+  }
+  // Tabela de atividades
   const acts=r.activities||[];
   if(acts.length===0){
     html+='<div class="empty">Nenhuma atividade registrada nesta data.</div>';
   }else{
-    html+='<table><thead><tr><th>Atividade</th><th>Cliente/Apólice</th><th>Responsável</th><th>Prioridade</th><th>Status</th><th>Tempo gasto</th></tr></thead><tbody>';
+    html+='<table><thead><tr><th>Atividade</th><th>Cliente/Apólice</th><th>Responsável</th><th>Prioridade</th><th>Status</th><th>Início</th><th>Conclusão</th><th>Tempo gasto</th></tr></thead><tbody>';
     acts.forEach(it=>{
       html+=`<tr>
         <td>${esc(it.title)}</td>
@@ -3349,6 +3463,8 @@ function arquivoDetailHtml(r){
         <td>${esc(it.responsavel)}</td>
         <td><span class="badge ${it.prioridade}">${PRIORITY_LABELS[it.prioridade]||it.prioridade}</span></td>
         <td><span class="badge ${it.status}">${STATUS_LABELS[it.status]||it.status}</span></td>
+        <td>${fmtTimestamp(it.startedAt)}</td>
+        <td>${fmtTimestamp(it.completedAt)}</td>
         <td>${fmtHMS(it.tempo||0)}</td>
       </tr>`;
     });
@@ -3359,13 +3475,17 @@ function arquivoDetailHtml(r){
 function exportArquivoCsv(id){
   const r=state.dailyReports.find(x=>x.id===id);
   if(!r) return;
-  const rows=[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Tempo gasto (hh:mm:ss)']];
+  const rows=[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Início','Conclusão','Tempo gasto (hh:mm:ss)']];
   (r.activities||[]).forEach(it=>{
-    rows.push([it.title,it.cliente||'',it.responsavel,PRIORITY_LABELS[it.prioridade]||it.prioridade,STATUS_LABELS[it.status]||it.status,fmtHMS(it.tempo||0)]);
+    rows.push([it.title,it.cliente||'',it.responsavel,PRIORITY_LABELS[it.prioridade]||it.prioridade,STATUS_LABELS[it.status]||it.status,fmtTimestamp(it.startedAt),fmtTimestamp(it.completedAt),fmtHMS(it.tempo||0)]);
   });
   rows.push([]);
-  rows.push(['Colaborador','Horas trabalhadas']);
-  (r.users||[]).forEach(u=>rows.push([u.name,fmtHours(u.horas||0)]));
+  rows.push(['Colaborador','Horas trabalhadas','Entrada','Saída','Ausente']);
+  (r.users||[]).forEach(u=>{
+    const entrada=u.sessions&&u.sessions.length?fmtTimestamp(u.sessions[0].in):'—';
+    const saida=u.sessions&&u.sessions.length?fmtTimestamp(u.sessions[u.sessions.length-1].out):'—';
+    rows.push([u.name,fmtHours(u.horas||0),entrada,saida,u.ausente?'Sim':'Não']);
+  });
   const csvEscape=v=>{
     const s=String(v==null?'':v);
     return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -3397,6 +3517,7 @@ function renderArquivo(){
       <td class="row">
         <button class="icon-btn" onclick="toggleArquivoDetail('${r.id}')">${expandedArquivo.has(r.id)?'Ocultar':'Ver detalhes'}</button>
         <button class="icon-btn" onclick="exportArquivoCsv('${r.id}')">Exportar CSV</button>
+        <button class="icon-btn" onclick="exportArquivoPdf('${r.id}')">Exportar PDF</button>
       </td>
     </tr>`;
     if(expandedArquivo.has(r.id)){
