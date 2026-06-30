@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260630-05';
+  var BUILD='20260630-06';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -520,7 +520,16 @@ textarea{width:100%;min-height:60px;resize:vertical;}
     <button class="btn" id="genPayablesReportBtn">Gerar relatório do mês e arquivar</button>
   </div>
   <div id="payableFormWrap"></div>
-  <h3>Contas deste mês</h3>
+  <h3>Contas do mês</h3>
+  <div class="row" style="margin-bottom:10px;align-items:center;gap:8px;flex-wrap:wrap;">
+    <button class="btn" onclick="navigatePayablesMonth(-1)">◀ Mês anterior</button>
+    <span id="payablesMonthLabel" style="font-weight:700;min-width:155px;text-align:center;font-size:.95rem;"></span>
+    <button class="btn" onclick="navigatePayablesMonth(1)">Próximo mês ▶</button>
+    <button class="btn" id="payablesMonthTodayBtn" onclick="goToCurrentPayablesMonth()" style="margin-left:4px;">Mês atual</button>
+    <label style="margin-left:auto;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.9rem;">
+      <input type="checkbox" id="hidePaidPayables" onchange="renderPayablesMonthList()"> Ocultar pagas
+    </label>
+  </div>
   <div id="payablesMonthList"></div>
   <h3>Todas as contas cadastradas</h3>
   <div id="payablesList"></div>
@@ -856,6 +865,8 @@ let state={
   cards:[],
   payables:[],
   payableOccCurrent:{},
+  payableOccSelected:{},
+  payableSelectedMonth:'',
   payablesArchive:[],
   boletosClientes:[]
 };
@@ -1044,8 +1055,10 @@ function initApp(){
       renderPayables();
     },err=>console.error(err)));
 
+    if(!state.payableSelectedMonth) state.payableSelectedMonth=currentMonthKey();
     listeners.push(db.collection('payableOccurrences').where('month','==',currentMonthKey()).onSnapshot(snap=>{
       state.payableOccCurrent={}; snap.forEach(d=>{ const data=d.data(); state.payableOccCurrent[data.payableId]=data; });
+      if(state.payableSelectedMonth===currentMonthKey()) state.payableOccSelected=state.payableOccCurrent;
       renderPayablesMonthList();
     },err=>console.error(err)));
 
@@ -3937,63 +3950,114 @@ function deletePayable(id){
 function setPayableOccurrence(payableId,mk,patch){
   return db.collection('payableOccurrences').doc(`${mk}_${payableId}`).set({payableId,month:mk,...patch},{merge:true});
 }
+async function navigatePayablesMonth(delta){
+  const [y,m]=state.payableSelectedMonth.split('-').map(Number);
+  const d=new Date(y,m-1+delta,1);
+  state.payableSelectedMonth=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  if(state.payableSelectedMonth===currentMonthKey()){
+    state.payableOccSelected=state.payableOccCurrent;
+    renderPayablesMonthList();
+  } else {
+    const snap=await db.collection('payableOccurrences').where('month','==',state.payableSelectedMonth).get();
+    state.payableOccSelected={};
+    snap.forEach(d2=>{ const data=d2.data(); state.payableOccSelected[data.payableId]=data; });
+    renderPayablesMonthList();
+  }
+}
+function goToCurrentPayablesMonth(){
+  state.payableSelectedMonth=currentMonthKey();
+  state.payableOccSelected=state.payableOccCurrent;
+  renderPayablesMonthList();
+}
 function togglePayablePaid(payableId,mk,currentStatus){
   const newStatus = currentStatus==='pago'?'pendente':'pago';
   const patch={status:newStatus};
   patch.paidAt = newStatus==='pago' ? ts() : del();
-  setPayableOccurrence(payableId,mk,patch).catch(err=>alert('Erro: '+err.message));
+  setPayableOccurrence(payableId,mk,patch).then(()=>{
+    if(mk!==currentMonthKey()){
+      if(!state.payableOccSelected[payableId]) state.payableOccSelected[payableId]={payableId,month:mk};
+      state.payableOccSelected[payableId].status=newStatus;
+      renderPayablesMonthList();
+    }
+    // mês atual: listener já atualiza automaticamente
+  }).catch(err=>alert('Erro: '+err.message));
 }
 function renderPayablesMonthList(){
   const el=document.getElementById('payablesMonthList');
   if(!el) return;
-  const mk=currentMonthKey();
-  const items=state.payables.filter(p=>p.active!==false && payableAppliesInMonth(p,mk));
-  if(items.length===0){ el.innerHTML='<div class="empty">Nenhuma conta a pagar neste mês.</div>'; return; }
+  if(!state.payableSelectedMonth) state.payableSelectedMonth=currentMonthKey();
+  const mk=state.payableSelectedMonth;
 
-  // Ordenar: por data de vencimento, depois alfabético dentro do mesmo dia
+  // Atualizar label do mês
+  const labelEl=document.getElementById('payablesMonthLabel');
+  if(labelEl){
+    const isCurrent=mk===currentMonthKey();
+    labelEl.textContent=fmtMonthBR(mk).replace(/^\w/,c=>c.toUpperCase())+(isCurrent?' (atual)':'');
+  }
+  // Botão "Mês atual" só aparece quando não está no mês atual
+  const todayBtn=document.getElementById('payablesMonthTodayBtn');
+  if(todayBtn) todayBtn.style.display=mk===currentMonthKey()?'none':'';
+
+  const occMap=mk===currentMonthKey() ? state.payableOccCurrent : state.payableOccSelected;
+  const hidePaid=document.getElementById('hidePaidPayables')?.checked;
+
+  const allItems=state.payables.filter(p=>p.active!==false && payableAppliesInMonth(p,mk));
+  // Calcular totais sobre todos os itens (antes do filtro de ocultar)
+  let totalMes=0, totalPago=0;
+  allItems.forEach(p=>{
+    totalMes+=(p.value||0);
+    const occ=occMap[p.id]||{status:'pendente'};
+    if(occ.status==='pago') totalPago+=(p.value||0);
+  });
+
+  // Aplicar filtro de ocultar pagas
+  const items=hidePaid ? allItems.filter(p=>(occMap[p.id]||{status:'pendente'}).status!=='pago') : allItems;
+
+  if(allItems.length===0){ el.innerHTML=`<div class="empty">Nenhuma conta a pagar em ${fmtMonthBR(mk)}.</div>`; return; }
+
   items.sort((a,b)=>{
     const da=payableDueDateInMonth(a,mk);
-    const db=payableDueDateInMonth(b,mk);
-    if(da!==db) return da.localeCompare(db);
+    const db_=payableDueDateInMonth(b,mk);
+    if(da!==db_) return da.localeCompare(db_);
     return (a.name||'').localeCompare(b.name||'','pt-BR');
   });
 
   // Agrupar por dia de vencimento
   const grupos={};
-  let totalMes=0, totalPago=0;
   items.forEach(p=>{
     const due=payableDueDateInMonth(p,mk);
     if(!grupos[due]) grupos[due]=[];
     grupos[due].push(p);
-    totalMes+=(p.value||0);
-    const occ=state.payableOccCurrent[p.id]||{status:'pendente'};
-    if(occ.status==='pago') totalPago+=(p.value||0);
   });
 
   let html='';
-  Object.keys(grupos).sort().forEach(due=>{
-    const dia=due.slice(-2).replace(/^0/,'');
-    const nomeMes=new Date(due+'T12:00:00').toLocaleDateString('pt-BR',{month:'long'});
-    const subtotal=grupos[due].reduce((s,p)=>s+(p.value||0),0);
-    html+=`<div style="margin-bottom:18px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:6px 0;border-bottom:2px solid var(--gold);">
-        <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Dia ${dia} de ${nomeMes}</span>
-        <span style="font-size:.8rem;color:var(--text2);margin-left:auto;">${fmtBRL(subtotal)}</span>
-      </div>
-      <table><thead><tr><th>Conta</th><th>Valor</th><th>Recorrência</th><th>Status</th><th></th></tr></thead><tbody>`;
-    grupos[due].forEach(p=>{
-      const occ=state.payableOccCurrent[p.id]||{status:'pendente'};
-      const paid=occ.status==='pago';
-      html+=`<tr>
-        <td>${esc(p.name)}</td>
-        <td>💰 ${fmtBRL(p.value||0)}</td>
-        <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
-        <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
-        <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'Marcar pendente':'Marcar pago'}</button></td>
-      </tr>`;
+  if(items.length===0){
+    html='<div class="empty" style="padding:14px 0;">Todas as contas deste mês já foram pagas. ✅</div>';
+  } else {
+    Object.keys(grupos).sort().forEach(due=>{
+      const dia=due.slice(-2).replace(/^0/,'');
+      const nomeMes=new Date(due+'T12:00:00').toLocaleDateString('pt-BR',{month:'long'});
+      const subtotal=grupos[due].reduce((s,p)=>s+(p.value||0),0);
+      html+=`<div style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:6px 0;border-bottom:2px solid var(--gold);">
+          <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Dia ${dia} de ${nomeMes}</span>
+          <span style="font-size:.8rem;color:var(--text2);margin-left:auto;">${fmtBRL(subtotal)}</span>
+        </div>
+        <table><thead><tr><th>Conta</th><th>Valor</th><th>Recorrência</th><th>Status</th><th></th></tr></thead><tbody>`;
+      grupos[due].forEach(p=>{
+        const occ=occMap[p.id]||{status:'pendente'};
+        const paid=occ.status==='pago';
+        html+=`<tr>
+          <td>${esc(p.name)}</td>
+          <td>💰 ${fmtBRL(p.value||0)}</td>
+          <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
+          <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
+          <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'↩ Desfazer':'✔ Marcar pago'}</button></td>
+        </tr>`;
+      });
+      html+=`</tbody></table></div>`;
     });
-    html+=`</tbody></table></div>`;
-  });
+  }
   html+=`<div style="padding:10px 0;border-top:2px solid var(--border);font-size:.9rem;color:var(--text2);">
     <strong>Total do mês: ${fmtBRL(totalMes)}</strong> · Pago: ${fmtBRL(totalPago)} · Pendente: ${fmtBRL(totalMes-totalPago)}
   </div>`;
