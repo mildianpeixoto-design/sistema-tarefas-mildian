@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260630-01';
+  var BUILD='20260630-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -32,6 +32,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root{
   color-scheme: light;
@@ -299,7 +300,12 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .tipo-selector-card:hover{border-color:var(--gold);box-shadow:0 6px 20px rgba(0,0,0,0.1);transform:translateY(-3px);}
 .tipo-selector-icon{font-size:52px;margin-bottom:14px;}
 .tipo-selector-label{font-size:15px;font-weight:600;color:var(--accent);}
+.tipo-selector-card.import-card{border-color:var(--border);background:repeating-linear-gradient(135deg,var(--card) 0,var(--card) 10px,var(--bg2) 10px,var(--bg2) 20px);}
+.tipo-selector-card.import-card:hover{border-color:var(--gold);}
 @media(max-width:480px){.tipo-selector-wrap{gap:14px;padding:32px 12px 20px;}.tipo-selector-card{padding:24px 16px;}.tipo-selector-icon{font-size:38px;}}
+.pdf-loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;}
+.pdf-loading-card{background:var(--card);border-radius:16px;padding:40px 56px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.25);}
+.pdf-loading-spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 18px;}
 .cli-sec-header{color:var(--gold);font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:4px;margin-bottom:2px;}
 .hidden-group{display:none!important;}
 .contents-wrap{display:contents;}
@@ -413,7 +419,12 @@ textarea{width:100%;min-height:60px;resize:vertical;}
         <div class="tipo-selector-icon">🏢</div>
         <div class="tipo-selector-label">Pessoa Jurídica</div>
       </div>
+      <div class="tipo-selector-card import-card" onclick="document.getElementById('importarPdfInput').click()">
+        <div class="tipo-selector-icon">📎</div>
+        <div class="tipo-selector-label">Importar<br>Proposta PDF</div>
+      </div>
     </div>
+    <input type="file" id="importarPdfInput" accept="application/pdf" style="display:none" onchange="processarPropostaPdf(this.files[0])">
   </div>
   <div id="clienteListArea" style="display:none;">
     <div class="cards summary-cards" id="clientesStats"></div>
@@ -3279,6 +3290,187 @@ function renderNotesBoard(){
   boardEl.innerHTML=html;
 }
 document.getElementById('newCardBtn').addEventListener('click',()=>showNoteCardForm());
+
+/* ====================== Importar Proposta PDF ====================== */
+async function processarPropostaPdf(file){
+  if(!file) return;
+  const overlay=document.createElement('div');
+  overlay.className='pdf-loading-overlay';
+  overlay.innerHTML='<div class="pdf-loading-card"><div class="pdf-loading-spinner"></div><div style="font-weight:700;font-size:16px;color:var(--accent)">Lendo proposta...</div><div style="font-size:13px;color:var(--muted);margin-top:8px">Extraindo dados do PDF</div></div>';
+  document.body.appendChild(overlay);
+  try{
+    const pdfjsLib=window.pdfjsLib;
+    if(!pdfjsLib){ showToast('❌ Biblioteca PDF não carregada. Verifique sua conexão.','error'); document.body.removeChild(overlay); return; }
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const arrayBuffer=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
+    let fullText='';
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const content=await page.getTextContent();
+      // Preserve line breaks using y-position grouping
+      const items=content.items;
+      let lastY=null, lineText='';
+      items.forEach(item=>{
+        const y=item.transform[5];
+        if(lastY!==null && Math.abs(y-lastY)>3){ fullText+=lineText+'\n'; lineText=''; }
+        lineText+=item.str+' ';
+        lastY=y;
+      });
+      if(lineText) fullText+=lineText+'\n';
+      fullText+='\n';
+    }
+    document.body.removeChild(overlay);
+    const dados=extrairDadosDaProposta(fullText);
+    // Mostra o formulário pré-preenchido para revisão antes de criar
+    clientesTipoFiltro=dados.tipo;
+    document.getElementById('clienteTipoSelector').style.display='none';
+    document.getElementById('clienteListArea').style.display='block';
+    showClientForm(dados);
+    showToast('📎 Dados extraídos! Confira as informações antes de salvar.','success');
+  }catch(err){
+    if(document.body.contains(overlay)) document.body.removeChild(overlay);
+    console.error('Erro ao processar PDF:',err);
+    showToast('❌ Erro ao ler o PDF: '+(err.message||err),'error');
+  }
+  document.getElementById('importarPdfInput').value='';
+}
+
+function extrairDadosDaProposta(text){
+  const lines=text.split(/[\n\r]+/).map(l=>l.trim()).filter(Boolean);
+  const full=lines.join('\n');
+
+  // ---- Documentos ----
+  const cnpjM=full.match(/\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}/);
+  const cnpj=cnpjM?cnpjM[0]:'';
+  const cpfMatches=[...full.matchAll(/\d{3}\.\d{3}\.\d{3}-\d{2}/g)].filter(m=>m[0].replace(/\D/g,'').length===11);
+  const cpf=cpfMatches.length?cpfMatches[0][0]:'';
+  const tipo=cnpj?'PJ':'PF';
+
+  // ---- Contato ----
+  const emailM=full.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
+  const email=emailM?emailM[0]:'';
+  const telM=full.match(/\(?\d{2}\)?\s*\d{4,5}[-\s]\d{4}/);
+  const telefone=telM?telM[0].replace(/\s+/g,' ').trim():'';
+
+  // ---- Nome / Razão Social ----
+  let nome='';
+  const nomeKW=['segurado','contratante','proponente','razão social','nome completo','nome:','cliente:'];
+  outer:
+  for(let i=0;i<lines.length;i++){
+    const ll=lines[i].toLowerCase();
+    for(const kw of nomeKW){
+      if(ll.includes(kw)){
+        const ci=lines[i].indexOf(':');
+        if(ci!==-1){
+          const after=lines[i].substring(ci+1).trim();
+          if(after.length>2 && !/^\d/.test(after) && !/^(cpf|cnpj|data)/i.test(after)){nome=after;break outer;}
+        }
+        for(let j=i+1;j<Math.min(i+5,lines.length);j++){
+          const c=lines[j].trim();
+          if(c.length>3 && !/^(\d|R\$|CPF|CNPJ|Nasc|Data|E-mail|Tel|Fone|Rua|Av\.|Endere)/i.test(c)){nome=c;break outer;}
+        }
+      }
+    }
+  }
+
+  // ---- Endereço ----
+  let endereco='';
+  for(const line of lines){
+    const ll=line.toLowerCase();
+    if(/endere[çc]o|logradouro/.test(ll)){
+      const ci=line.indexOf(':');
+      if(ci!==-1){const a=line.substring(ci+1).trim();if(a.length>5){endereco=a;break;}}
+    }
+  }
+  if(!endereco){
+    const cepM=full.match(/CEP[:\s]*([\d]{5}-?[\d]{3})/i);
+    if(cepM){
+      const idx=full.indexOf(cepM[0]);
+      endereco=full.substring(Math.max(0,idx-200),idx).split('\n').filter(Boolean).slice(-3).join(', ').trim();
+    }
+  }
+
+  // ---- Número da proposta ----
+  let numeroProposta='';
+  const propM=full.match(/proposta\s*(?:n[°º.]?\s*)?:?\s*([A-Z0-9\-\/]{4,20})/i)
+    ||full.match(/n[°º][.\s]*:?\s*([A-Z0-9]{6,20})/i)
+    ||full.match(/número\s*:?\s*(\d{5,20})/i);
+  if(propM) numeroProposta=propM[1].trim();
+
+  // ---- Plano ----
+  let plano='';
+  const planoM=full.match(/plano\s*:?\s*([^\n]{3,80})/i)||full.match(/produto\s*:?\s*([^\n]{3,80})/i);
+  if(planoM) plano=planoM[1].trim().split(/\s{3,}/)[0].substring(0,80);
+
+  // ---- Valor de pagamento total (prêmio) ----
+  let valorPagamento=0;
+  for(const line of lines){
+    const ll=line.toLowerCase();
+    if(/prêmio total|valor total|mensalidade|total a pagar|valor do prêmio|prêmio bruto/.test(ll)){
+      const vM=line.match(/R\$\s*([\d.,]+)/);
+      if(vM){valorPagamento=parseFloat(vM[1].replace(/\./g,'').replace(',','.'))||0;break;}
+    }
+  }
+
+  // ---- Data de nascimento ----
+  let dataNascimento='';
+  for(const line of lines){
+    if(/nascimento|nasc\./i.test(line)){
+      const dM=line.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if(dM){dataNascimento=`${dM[3]}-${dM[2]}-${dM[1]}`;break;}
+    }
+  }
+
+  // ---- Banco ----
+  let banco='';
+  for(const line of lines){
+    if(/banco|débito em conta|d[ée]bito autom[aá]tico/i.test(line)){banco=line.trim();break;}
+  }
+
+  // ---- Dia de vencimento ----
+  let diaVencimento='';
+  const vencM=full.match(/(?:vencimento|dia de venc[^:]*)[:\s]+(\d{1,2})/i);
+  if(vencM) diaVencimento=vencM[1];
+
+  // ---- Responsável (PJ) ----
+  let responsavel='';
+  const respM=full.match(/respons[aá]vel\s*:?\s*([^\n]{3,60})/i)||full.match(/contato\s*:?\s*([^\n]{3,60})/i);
+  if(respM) responsavel=respM[1].trim();
+
+  // ---- Coberturas: match por código numérico do SEGUROS_LIST ----
+  const produtos=[];
+  const seenCodes=new Set();
+  [...full.matchAll(/\b(\d{3,4})\b/g)].forEach(m=>{
+    const cod=m[1];
+    if(seenCodes.has(cod)) return;
+    const seg=SEGUROS_LIST.find(s=>s.trimEnd().endsWith(cod));
+    if(seg){
+      seenCodes.add(cod);
+      // Tenta encontrar valor R$ próximo ao código no texto
+      const re=new RegExp(cod+'[^\\n]{0,80}?R\\$\\s*([\\d.,]+)','i');
+      const vm=full.match(re);
+      const val=vm?parseFloat(vm[1].replace(/\./g,'').replace(',','.'))||0:0;
+      produtos.push({cobertura:seg,valorPagamento:val,comissaoPercent:10,nota:''});
+    }
+  });
+  if(produtos.length===0){
+    produtos.push({cobertura:'',valorPagamento:valorPagamento,comissaoPercent:10,nota:''});
+  } else if(valorPagamento>0){
+    // Distribui o valor total se os produtos não têm valor individual
+    const semValor=produtos.every(p=>p.valorPagamento===0);
+    if(semValor) produtos[0].valorPagamento=valorPagamento;
+  }
+
+  return {
+    tipo,nome,cpf,cnpj,responsavel,cargo:'',segmento:'',
+    email,telefone,endereco,
+    numeroProposta,plano,produtos,valorPagamento,
+    banco,diaVencimento,dataNascimento,
+    sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',empresa:'',rendaMensal:'',
+    observacoesSaude:'',historico:[]
+  };
+}
 
 /* ====================== Arquivo de relatórios diários ====================== */
 const DAILY_REPORT_LOOKBACK_DAYS=30;
