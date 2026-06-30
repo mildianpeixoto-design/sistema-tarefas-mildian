@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260625-11';
+  var BUILD='20260629-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -293,6 +293,13 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .tipo-toggle button{background:var(--card);border:none;padding:8px 20px;cursor:pointer;color:var(--text2);font-size:.9rem;transition:background .15s,color .15s;}
 .tipo-toggle button.active{background:var(--navy,#1a2a4a);color:var(--gold);font-weight:700;}
 .tipo-toggle button:not(.active):hover{background:var(--gold-bg);}
+/* Seletor de tipo na aba Clientes */
+.tipo-selector-wrap{display:flex;gap:24px;justify-content:center;padding:52px 20px 36px;}
+.tipo-selector-card{background:var(--card);border:2px solid var(--border);border-radius:16px;padding:36px 48px;cursor:pointer;text-align:center;transition:border-color .18s,box-shadow .18s,transform .12s;flex:1;max-width:220px;}
+.tipo-selector-card:hover{border-color:var(--gold);box-shadow:0 6px 20px rgba(0,0,0,0.1);transform:translateY(-3px);}
+.tipo-selector-icon{font-size:52px;margin-bottom:14px;}
+.tipo-selector-label{font-size:15px;font-weight:600;color:var(--accent);}
+@media(max-width:480px){.tipo-selector-wrap{gap:14px;padding:32px 12px 20px;}.tipo-selector-card{padding:24px 16px;}.tipo-selector-icon{font-size:38px;}}
 .cli-sec-header{color:var(--gold);font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:4px;margin-bottom:2px;}
 .hidden-group{display:none!important;}
 .contents-wrap{display:contents;}
@@ -396,17 +403,32 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 </section>
 
 <section id="tab-clientes" class="section">
-  <div class="cards summary-cards" id="clientesStats"></div>
-  <div class="row" style="margin-bottom:12px;gap:10px;flex-wrap:wrap;">
-    <button class="btn primary" id="newClientBtn">+ Novo cliente</button>
-    <div style="position:relative;flex:1;min-width:220px;max-width:420px;">
-      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none;">🔍</span>
-      <input type="text" id="clientSearch" placeholder="Buscar por nome, CPF/CNPJ ou telefone..." style="width:100%;padding:8px 12px 8px 32px;box-sizing:border-box;" oninput="filterClients(this.value)">
+  <div id="clienteTipoSelector">
+    <div class="tipo-selector-wrap">
+      <div class="tipo-selector-card" onclick="selecionarTipoCliente('PF')">
+        <div class="tipo-selector-icon">👤</div>
+        <div class="tipo-selector-label">Pessoa Física</div>
+      </div>
+      <div class="tipo-selector-card" onclick="selecionarTipoCliente('PJ')">
+        <div class="tipo-selector-icon">🏢</div>
+        <div class="tipo-selector-label">Pessoa Jurídica</div>
+      </div>
     </div>
-    <span id="clientSearchCount" style="color:var(--text-muted);font-size:.88rem;align-self:center;white-space:nowrap;"></span>
   </div>
-  <div id="clientFormWrap"></div>
-  <div id="clientsList"></div>
+  <div id="clienteListArea" style="display:none;">
+    <div class="cards summary-cards" id="clientesStats"></div>
+    <div class="row" style="margin-bottom:12px;gap:10px;flex-wrap:wrap;">
+      <button class="btn" onclick="voltarSeletorCliente()" style="flex-shrink:0;">← Voltar</button>
+      <button class="btn primary" id="newClientBtn">+ Novo cliente</button>
+      <div style="position:relative;flex:1;min-width:220px;max-width:420px;">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none;">🔍</span>
+        <input type="text" id="clientSearch" placeholder="Buscar por nome, CPF/CNPJ ou telefone..." style="width:100%;padding:8px 12px 8px 32px;box-sizing:border-box;" oninput="filterClients(this.value)">
+      </div>
+      <span id="clientSearchCount" style="color:var(--text-muted);font-size:.88rem;align-self:center;white-space:nowrap;"></span>
+    </div>
+    <div id="clientFormWrap"></div>
+    <div id="clientsList"></div>
+  </div>
 </section>
 
 <section id="tab-cancelados" class="section">
@@ -799,6 +821,7 @@ let expandedClientHist=new Set();
 let clientSearchQuery='';
 let selectedClientId=null;
 let editingClientId=null;
+let clientesTipoFiltro=null; // null=selector, 'PF' ou 'PJ'
 let creatingActivityForClientId=null;
 let expandedActDetail=new Set();
 let expandedHojeGroups=new Set();
@@ -1064,6 +1087,14 @@ function switchTab(tab,btn){
   const navBtn = btn || document.querySelector(`#mainNav button[data-tab="${tab}"]`);
   if(navBtn) navBtn.classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
+  // Clique no nav de Clientes: sempre volta ao seletor de tipo
+  if(tab==='clientes' && btn){
+    clientesTipoFiltro=null;
+    const sel=document.getElementById('clienteTipoSelector');
+    const list=document.getElementById('clienteListArea');
+    if(sel) sel.style.display='';
+    if(list) list.style.display='none';
+  }
 }
 
 /* Reconecta os listeners do dia quando a aba volta ao foco após ficar em segundo plano.
@@ -2076,6 +2107,27 @@ document.getElementById('exportPdfBtn').addEventListener('click',()=>{
 });
 
 /* ====================== Clientes ====================== */
+function selecionarTipoCliente(tipo){
+  clientesTipoFiltro=tipo;
+  const sel=document.getElementById('clienteTipoSelector');
+  const list=document.getElementById('clienteListArea');
+  if(sel) sel.style.display='none';
+  if(list) list.style.display='';
+  clientSearchQuery='';
+  renderClients();
+}
+function voltarSeletorCliente(){
+  clientesTipoFiltro=null;
+  clientSearchQuery='';
+  selectedClientId=null;
+  editingClientId=null;
+  const fw=document.getElementById('clientFormWrap');
+  if(fw) fw.innerHTML='';
+  const sel=document.getElementById('clienteTipoSelector');
+  const list=document.getElementById('clienteListArea');
+  if(sel) sel.style.display='';
+  if(list) list.style.display='none';
+}
 function showClientForm(client, containerId){
   containerId = containerId || 'clientFormWrap';
   const isInline = containerId !== 'clientFormWrap';
@@ -2331,7 +2383,8 @@ function filterClients(q){
   if(box && document.activeElement!==box){ box.focus(); box.setSelectionRange(box.value.length,box.value.length); }
 }
 function renderClients(){
-  const activeClients=state.clients.filter(c=>c.status!=='cancelado');
+  const allActive=state.clients.filter(c=>c.status!=='cancelado');
+  const activeClients=clientesTipoFiltro ? allActive.filter(c=>(c.tipo||'PF')===clientesTipoFiltro) : allActive;
   const total=activeClients.length;
   const somaValor=activeClients.reduce((s,c)=>s+(c.valorPagamento||0),0);
   const somaComissao=activeClients.reduce((s,c)=>s+(c.comissaoValor||0),0);
@@ -2598,7 +2651,9 @@ function renderPendencias(){
   }).join('');
 }
 function goEditClientFromPendencias(id){
+  const c=state.clients.find(x=>x.id===id);
   switchTab('clientes');
+  selecionarTipoCliente(c?(c.tipo||'PF'):'PF');
   editClient(id);
 }
 
@@ -2672,7 +2727,7 @@ function addClientHistorico(id){
 }
 document.getElementById('newClientBtn').addEventListener('click',()=>{
   if(editingClientId){ editingClientId=null; renderClients(); }
-  showClientForm();
+  showClientForm(clientesTipoFiltro ? {tipo:clientesTipoFiltro} : null);
 });
 
 /* ====================== Cobranças (Boletos) ====================== */
@@ -2946,6 +3001,7 @@ function convertLeadToClient(id){
   const l=state.leads.find(x=>x.id===id);
   if(!l) return;
   switchTab('clientes');
+  selecionarTipoCliente('PF');
   showClientForm({id:null,nome:l.nome,cpf:'',telefone:l.telefone||l.contato||'',email:l.email||'',dataNascimento:'',endereco:'',coberturas:'',valorPagamento:l.valorEstimado||0,comissaoPercent:10,historico:l.historico||[]});
 }
 function convertClientToLead(id){
@@ -3932,4 +3988,14 @@ document.getElementById('copyVideoLinkBtn').addEventListener('click',()=>{
   }).catch(()=>{});
 });
 
-/* PWA: registra o service worker para perm
+/* PWA: registra o service worker para permitir instalação no celular
+   (ícone na tela inicial, abre em tela cheia). Os dados continuam
+   sincronizados em tempo real pelo Firestore, normalmente. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js').catch(err=>console.error('SW erro:',err));
+  });
+}
+</script>
+</body>
+</html>
