@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260630-02';
+  var BUILD='20260630-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3338,128 +3338,184 @@ async function processarPropostaPdf(file){
 
 function extrairDadosDaProposta(text){
   const lines=text.split(/[\n\r]+/).map(l=>l.trim()).filter(Boolean);
-  const full=lines.join('\n');
+  const full='\n'+lines.join('\n')+'\n';
+
+  // Helper: retorna valor logo após um label (na mesma linha ou na próxima)
+  function campo(...labels){
+    for(const label of labels){
+      const esc=label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      // Mesmo linha: "Label: valor" ou "Label valor"
+      const m=full.match(new RegExp(esc+'\\s*:?\\s*([^\\n]{1,150})','i'));
+      if(m){const v=m[1].trim();if(v&&v.length>0) return v;}
+      // Próxima linha: "Label\nvalor"
+      const m2=full.match(new RegExp(esc+'[:\\s]*\n([^\\n]{1,150})','i'));
+      if(m2&&m2[1].trim()) return m2[1].trim();
+    }
+    return '';
+  }
 
   // ---- Documentos ----
   const cnpjM=full.match(/\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}/);
   const cnpj=cnpjM?cnpjM[0]:'';
-  const cpfMatches=[...full.matchAll(/\d{3}\.\d{3}\.\d{3}-\d{2}/g)].filter(m=>m[0].replace(/\D/g,'').length===11);
-  const cpf=cpfMatches.length?cpfMatches[0][0]:'';
+  // CPF: busca pelo label específico primeiro, depois regex geral
+  let cpfRaw=campo('CPF:','CPF ');
+  if(!cpfRaw){const m=full.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/);if(m)cpfRaw=m[0];}
+  const cpf=cpfRaw?cpfRaw.match(/[\d.\-]+/)?.[0]||'':'';
   const tipo=cnpj?'PJ':'PF';
 
-  // ---- Contato ----
-  const emailM=full.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
-  const email=emailM?emailM[0]:'';
-  const telM=full.match(/\(?\d{2}\)?\s*\d{4,5}[-\s]\d{4}/);
-  const telefone=telM?telM[0].replace(/\s+/g,' ').trim():'';
-
-  // ---- Nome / Razão Social ----
-  let nome='';
-  const nomeKW=['segurado','contratante','proponente','razão social','nome completo','nome:','cliente:'];
-  outer:
-  for(let i=0;i<lines.length;i++){
-    const ll=lines[i].toLowerCase();
-    for(const kw of nomeKW){
-      if(ll.includes(kw)){
-        const ci=lines[i].indexOf(':');
-        if(ci!==-1){
-          const after=lines[i].substring(ci+1).trim();
-          if(after.length>2 && !/^\d/.test(after) && !/^(cpf|cnpj|data)/i.test(after)){nome=after;break outer;}
-        }
-        for(let j=i+1;j<Math.min(i+5,lines.length);j++){
-          const c=lines[j].trim();
-          if(c.length>3 && !/^(\d|R\$|CPF|CNPJ|Nasc|Data|E-mail|Tel|Fone|Rua|Av\.|Endere)/i.test(c)){nome=c;break outer;}
-        }
-      }
-    }
-  }
-
-  // ---- Endereço ----
-  let endereco='';
-  for(const line of lines){
-    const ll=line.toLowerCase();
-    if(/endere[çc]o|logradouro/.test(ll)){
-      const ci=line.indexOf(':');
-      if(ci!==-1){const a=line.substring(ci+1).trim();if(a.length>5){endereco=a;break;}}
-    }
-  }
-  if(!endereco){
-    const cepM=full.match(/CEP[:\s]*([\d]{5}-?[\d]{3})/i);
-    if(cepM){
-      const idx=full.indexOf(cepM[0]);
-      endereco=full.substring(Math.max(0,idx-200),idx).split('\n').filter(Boolean).slice(-3).join(', ').trim();
-    }
-  }
-
   // ---- Número da proposta ----
-  let numeroProposta='';
-  const propM=full.match(/proposta\s*(?:n[°º.]?\s*)?:?\s*([A-Z0-9\-\/]{4,20})/i)
-    ||full.match(/n[°º][.\s]*:?\s*([A-Z0-9]{6,20})/i)
-    ||full.match(/número\s*:?\s*(\d{5,20})/i);
-  if(propM) numeroProposta=propM[1].trim();
-
-  // ---- Plano ----
-  let plano='';
-  const planoM=full.match(/plano\s*:?\s*([^\n]{3,80})/i)||full.match(/produto\s*:?\s*([^\n]{3,80})/i);
-  if(planoM) plano=planoM[1].trim().split(/\s{3,}/)[0].substring(0,80);
-
-  // ---- Valor de pagamento total (prêmio) ----
-  let valorPagamento=0;
-  for(const line of lines){
-    const ll=line.toLowerCase();
-    if(/prêmio total|valor total|mensalidade|total a pagar|valor do prêmio|prêmio bruto/.test(ll)){
-      const vM=line.match(/R\$\s*([\d.,]+)/);
-      if(vM){valorPagamento=parseFloat(vM[1].replace(/\./g,'').replace(',','.'))||0;break;}
-    }
+  let numeroProposta=campo('NÚMERO DA PROPOSTA:','Número da Proposta:','Proposta N°','Proposta Nº','N° da Proposta');
+  if(!numeroProposta){
+    const m=full.match(/N[ÚU]MERO DA PROPOSTA[:\s]+([A-Z0-9\-\/]+)/i);
+    if(m) numeroProposta=m[1].trim();
   }
+
+  // ---- Nome ----
+  let nome=campo('Nome Completo:','Nome Completo','Segurado:','Contratante:','Proponente:','Razão Social:');
+  // Remove sobras de outros campos na mesma linha
+  nome=nome.replace(/\s+(Data de Nasc|Idade|CPF|Sexo|Estado Civil|Nº de Fil).*/i,'').trim();
 
   // ---- Data de nascimento ----
   let dataNascimento='';
-  for(const line of lines){
-    if(/nascimento|nasc\./i.test(line)){
-      const dM=line.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-      if(dM){dataNascimento=`${dM[3]}-${dM[2]}-${dM[1]}`;break;}
-    }
+  const nascStr=campo('Data de Nascimento:','Data de Nascimento','Dt. Nascimento');
+  if(nascStr){
+    const dM=nascStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if(dM) dataNascimento=`${dM[3]}-${dM[2]}-${dM[1]}`;
   }
 
-  // ---- Banco ----
-  let banco='';
-  for(const line of lines){
-    if(/banco|débito em conta|d[ée]bito autom[aá]tico/i.test(line)){banco=line.trim();break;}
+  // ---- Sexo ----
+  let sexo=campo('Sexo biológico:','Sexo biológico','Sexo:','Sexo ');
+  sexo=sexo.replace(/\s+(Estado Civil|Nº de Fil|CPF).*/i,'').trim();
+  if(/masculino/i.test(sexo)) sexo='Masculino';
+  else if(/feminino/i.test(sexo)) sexo='Feminino';
+  else sexo='';
+
+  // ---- Estado Civil ----
+  let estadoCivil=campo('Estado Civil:','Estado Civil');
+  estadoCivil=estadoCivil.replace(/\s+(Nº de Fil|CPF|Sexo).*/i,'').trim();
+
+  // ---- Nº de filhos ----
+  let filhosStr=campo('Nº de Filhos:','N° de Filhos:','Número de Filhos:','Nº de Filhos','N° de Filhos');
+  filhosStr=filhosStr.replace(/\s+(CPF|Sexo|Estado).*/i,'').trim();
+  const numFilhos=parseInt(filhosStr)||0;
+
+  // ---- Ocupação ----
+  let ocupacao=campo('Ocupação Principal:','Ocupação Principal','Ocupação:','Profissão:');
+  ocupacao=ocupacao.replace(/\s+(Código|Situação|Renda).*/i,'').trim();
+
+  // ---- Renda ----
+  let rendaStr=campo('Renda Mensal Bruta:','Renda Mensal Bruta','Renda Mensal:');
+  rendaStr=rendaStr.replace(/\s+(Empresa|Categoria).*/i,'').trim();
+  let rendaMensal=0;
+  if(rendaStr){const vm=rendaStr.match(/R?\$?\s*([\d.,]+)/);if(vm)rendaMensal=parseFloat(vm[1].replace(/\./g,'').replace(',','.'))||0;}
+
+  // ---- Empresa ----
+  let empresa=campo('Empresa em que Trabalha ou é Sócio:','Empresa em que Trabalha ou é Sócio','Empresa:');
+  empresa=empresa.replace(/\s+(Categoria|Situação).*/i,'').trim();
+  if(/não informado/i.test(empresa)) empresa='';
+
+  // ---- Endereço: monta a partir dos campos fragmentados ----
+  let rua=campo('Endereço Residencial:','Endereço Residencial','Logradouro:','Endereço:');
+  rua=rua.replace(/\s+(N[°º]:|Complemento:|Bairro:).*/i,'').trim();
+  let numEnd=campo('N°:','Nº:','Número:');
+  numEnd=numEnd.replace(/\s+(Complemento|Bairro|Cidade).*/i,'').trim();
+  let comp=campo('Complemento:');
+  comp=comp.replace(/\s+(Bairro|Cidade|UF|CEP).*/i,'').trim();
+  let bairro=campo('Bairro:');
+  bairro=bairro.replace(/\s+(Cidade|UF|CEP).*/i,'').trim();
+  let cidade=campo('Cidade:');
+  cidade=cidade.replace(/\s+(UF|CEP).*/i,'').trim();
+  const uf=campo('UF:').replace(/\s.*/,'').trim();
+  const cep=campo('CEP:').replace(/\s.*/,'').trim();
+  const partesEnd=[
+    rua,
+    numEnd&&numEnd!=='0'?'Nº '+numEnd:'',
+    comp,bairro,
+    cidade&&uf?cidade+' - '+uf:cidade||uf,
+    cep?'CEP '+cep:''
+  ].filter(Boolean);
+  const endereco=partesEnd.join(', ');
+
+  // ---- Telefone: prefere celular ----
+  let telefone=campo('Telefone Celular:','Telefone Celular','Celular:');
+  telefone=telefone.replace(/\s+(Endereço|E-mail|Tel).*/i,'').trim();
+  if(!telefone){
+    telefone=campo('Telefone Fixo:','Telefone Fixo','Telefone:');
+    telefone=telefone.replace(/\s+(Endereço|E-mail|Celular).*/i,'').trim();
   }
+
+  // ---- Email ----
+  let email=campo('E-mail:','E-mail ','Email:');
+  email=email.replace(/\s.*/,'').trim(); // pega só até o espaço
+  if(!email||!email.includes('@')){
+    const m=full.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
+    if(m) email=m[0];
+  }
+
+  // ---- Banco / Pagamento ----
+  let banco=campo('Banco:','Forma de Pagamento:','Débito em Conta:','Débito Automático:');
+  banco=banco.replace(/\s+(Dia|Vencimento|Aporte).*/i,'').trim();
 
   // ---- Dia de vencimento ----
   let diaVencimento='';
-  const vencM=full.match(/(?:vencimento|dia de venc[^:]*)[:\s]+(\d{1,2})/i);
+  const vencM=full.match(/(?:Vencimento|Dia de Venc)[^:]*[:\s]+(\d{1,2})/i);
   if(vencM) diaVencimento=vencM[1];
 
   // ---- Responsável (PJ) ----
-  let responsavel='';
-  const respM=full.match(/respons[aá]vel\s*:?\s*([^\n]{3,60})/i)||full.match(/contato\s*:?\s*([^\n]{3,60})/i);
-  if(respM) responsavel=respM[1].trim();
+  let responsavel=campo('Responsável:','Responsável ','Contato:');
+  responsavel=responsavel.replace(/\s+(Cargo|CPF).*/i,'').trim();
 
-  // ---- Coberturas: match por código numérico do SEGUROS_LIST ----
+  // ---- DADOS DOS PLANOS ----
+  // Detecta planos no formato "(CÓDIGO) NOME DO PLANO" ou "CÓDIGO - NOME"
+  let plano='';
+  let valorPagamento=0;
   const produtos=[];
-  const seenCodes=new Set();
-  [...full.matchAll(/\b(\d{3,4})\b/g)].forEach(m=>{
-    const cod=m[1];
-    if(seenCodes.has(cod)) return;
+
+  // Contribuição total (valorPagamento)
+  const contribM=full.match(/Contribui[çc][ãa]o\s*:\s*R\$\s*([\d.,]+)/i);
+  if(contribM) valorPagamento=parseFloat(contribM[1].replace(/\./g,'').replace(',','.'))||0;
+  // Também tenta "SubTotal"
+  if(!valorPagamento){
+    const subM=full.match(/SubTotal[:\s]*R\$\s*([\d.,]+)/i);
+    if(subM) valorPagamento=parseFloat(subM[1].replace(/\./g,'').replace(',','.'))||0;
+  }
+
+  // Detecta planos no formato "(XXXX) NOME" — tenta match com SEGUROS_LIST pelo código
+  const planoPadraoRe=/\((\d{3,4})\)\s*([A-ZÀÁÂÃÉÊÍÓÔÕÚÇ\s\d+\-\/]+)/gi;
+  let planMatch;
+  while((planMatch=planoPadraoRe.exec(full))!==null){
+    const cod=planMatch[1];
+    const nomePlano=planMatch[2].trim().replace(/\s+/g,' ');
     const seg=SEGUROS_LIST.find(s=>s.trimEnd().endsWith(cod));
     if(seg){
-      seenCodes.add(cod);
-      // Tenta encontrar valor R$ próximo ao código no texto
-      const re=new RegExp(cod+'[^\\n]{0,80}?R\\$\\s*([\\d.,]+)','i');
-      const vm=full.match(re);
-      const val=vm?parseFloat(vm[1].replace(/\./g,'').replace(',','.'))||0:0;
-      produtos.push({cobertura:seg,valorPagamento:val,comissaoPercent:10,nota:''});
+      produtos.push({cobertura:seg,valorPagamento,comissaoPercent:10,nota:nomePlano});
+    } else {
+      // Não encontrou na lista: usa nome do plano como texto livre
+      if(!plano) plano=`(${cod}) ${nomePlano}`;
+      produtos.push({cobertura:'',valorPagamento,comissaoPercent:10,nota:`(${cod}) ${nomePlano}`});
     }
-  });
+  }
+
+  // Fallback: match de códigos soltos no texto
   if(produtos.length===0){
-    produtos.push({cobertura:'',valorPagamento:valorPagamento,comissaoPercent:10,nota:''});
-  } else if(valorPagamento>0){
-    // Distribui o valor total se os produtos não têm valor individual
-    const semValor=produtos.every(p=>p.valorPagamento===0);
-    if(semValor) produtos[0].valorPagamento=valorPagamento;
+    const seenCodes=new Set();
+    [...full.matchAll(/\b(\d{3,4})\b/g)].forEach(m=>{
+      const cod=m[1];
+      if(seenCodes.has(cod)) return;
+      const seg=SEGUROS_LIST.find(s=>s.trimEnd().endsWith(cod));
+      if(seg){seenCodes.add(cod);produtos.push({cobertura:seg,valorPagamento,comissaoPercent:10,nota:''});}
+    });
+  }
+
+  if(produtos.length===0){
+    // Sem produto identificado: cria linha em branco com o valor
+    produtos.push({cobertura:'',valorPagamento,comissaoPercent:10,nota:plano||''});
+  }
+
+  // Se plano ainda não foi definido, tenta outros padrões
+  if(!plano){
+    const planoM=full.match(/plano\s*:?\s*([^\n]{3,80})/i)||full.match(/produto\s*:?\s*([^\n]{3,80})/i);
+    if(planoM) plano=planoM[1].trim().split(/\s{3,}/)[0].substring(0,80);
   }
 
   return {
@@ -3467,7 +3523,7 @@ function extrairDadosDaProposta(text){
     email,telefone,endereco,
     numeroProposta,plano,produtos,valorPagamento,
     banco,diaVencimento,dataNascimento,
-    sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',empresa:'',rendaMensal:'',
+    sexo,estadoCivil,numFilhos,ocupacao,empresa,rendaMensal,
     observacoesSaude:'',historico:[]
   };
 }
