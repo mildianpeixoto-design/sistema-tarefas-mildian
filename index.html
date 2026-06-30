@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260630-03';
+  var BUILD='20260630-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3364,16 +3364,22 @@ function extrairDadosDaProposta(text){
   const tipo=cnpj?'PJ':'PF';
 
   // ---- Número da proposta ----
-  let numeroProposta=campo('NÚMERO DA PROPOSTA:','Número da Proposta:','Proposta N°','Proposta Nº','N° da Proposta');
+  let numeroProposta=campo(
+    'NÚMERO DA PROPOSTA:','Número da Proposta:',
+    'Proposta de Contratação nº','Proposta de Contratação n°',
+    'Proposta N°','Proposta Nº','N° da Proposta'
+  );
   if(!numeroProposta){
-    const m=full.match(/N[ÚU]MERO DA PROPOSTA[:\s]+([A-Z0-9\-\/]+)/i);
+    const m=full.match(/N[ÚU]MERO DA PROPOSTA[:\s]+([A-Z0-9\-\/]+)/i)
+      ||full.match(/Proposta de Contrata[çc][aã]o\s*n[°º]\s*([A-Z0-9\/.\-]+)/i);
     if(m) numeroProposta=m[1].trim();
   }
 
-  // ---- Nome ----
-  let nome=campo('Nome Completo:','Nome Completo','Segurado:','Contratante:','Proponente:','Razão Social:');
+  // ---- Nome / Razão Social ----
+  // PJ: "Razão Social:" seguido de linha com o nome (geralmente na próxima linha)
+  let nome=campo('Nome Completo:','Nome Completo','Razão Social:','Razão Social','Segurado:','Contratante:','Proponente:');
   // Remove sobras de outros campos na mesma linha
-  nome=nome.replace(/\s+(Data de Nasc|Idade|CPF|Sexo|Estado Civil|Nº de Fil).*/i,'').trim();
+  nome=nome.replace(/\s+(Data de Nasc|Idade|CPF|CNPJ|Sexo|Estado Civil|Nº de Fil|Ramo).*/i,'').trim();
 
   // ---- Data de nascimento ----
   let dataNascimento='';
@@ -3399,24 +3405,29 @@ function extrairDadosDaProposta(text){
   filhosStr=filhosStr.replace(/\s+(CPF|Sexo|Estado).*/i,'').trim();
   const numFilhos=parseInt(filhosStr)||0;
 
-  // ---- Ocupação ----
+  // ---- Ocupação (PF) ----
   let ocupacao=campo('Ocupação Principal:','Ocupação Principal','Ocupação:','Profissão:');
   ocupacao=ocupacao.replace(/\s+(Código|Situação|Renda).*/i,'').trim();
 
-  // ---- Renda ----
+  // ---- Renda (PF) ----
   let rendaStr=campo('Renda Mensal Bruta:','Renda Mensal Bruta','Renda Mensal:');
   rendaStr=rendaStr.replace(/\s+(Empresa|Categoria).*/i,'').trim();
   let rendaMensal=0;
   if(rendaStr){const vm=rendaStr.match(/R?\$?\s*([\d.,]+)/);if(vm)rendaMensal=parseFloat(vm[1].replace(/\./g,'').replace(',','.'))||0;}
 
-  // ---- Empresa ----
+  // ---- Empresa (PF) ----
   let empresa=campo('Empresa em que Trabalha ou é Sócio:','Empresa em que Trabalha ou é Sócio','Empresa:');
   empresa=empresa.replace(/\s+(Categoria|Situação).*/i,'').trim();
   if(/não informado/i.test(empresa)) empresa='';
 
-  // ---- Endereço: monta a partir dos campos fragmentados ----
-  let rua=campo('Endereço Residencial:','Endereço Residencial','Logradouro:','Endereço:');
-  rua=rua.replace(/\s+(N[°º]:|Complemento:|Bairro:).*/i,'').trim();
+  // ---- Segmento (PJ) ----
+  let segmento=campo('Ramo de Atividade:','Ramo de Atividade','Segmento:','Atividade Principal:');
+  segmento=segmento.replace(/\s+(Nome do Contato|Telefone|E-mail|Endereço).*/i,'').trim();
+
+  // ---- Endereço: suporta linha única (PJ) ou fragmentada (PF) ----
+  // PJ usa "Endereço Completo:" com tudo na mesma linha
+  let rua=campo('Endereço Completo:','Endereço Completo','Endereço Residencial:','Endereço Residencial','Logradouro:','Endereço:');
+  rua=rua.replace(/\s+(N[°º]:|Complemento:|Bairro:|Cidade:).*/i,'').trim();
   let numEnd=campo('N°:','Nº:','Número:');
   numEnd=numEnd.replace(/\s+(Complemento|Bairro|Cidade).*/i,'').trim();
   let comp=campo('Complemento:');
@@ -3436,7 +3447,7 @@ function extrairDadosDaProposta(text){
   ].filter(Boolean);
   const endereco=partesEnd.join(', ');
 
-  // ---- Telefone: prefere celular ----
+  // ---- Telefone: prefere celular; PJ usa "Telefone:" simples ----
   let telefone=campo('Telefone Celular:','Telefone Celular','Celular:');
   telefone=telefone.replace(/\s+(Endereço|E-mail|Tel).*/i,'').trim();
   if(!telefone){
@@ -3444,9 +3455,9 @@ function extrairDadosDaProposta(text){
     telefone=telefone.replace(/\s+(Endereço|E-mail|Celular).*/i,'').trim();
   }
 
-  // ---- Email ----
-  let email=campo('E-mail:','E-mail ','Email:');
-  email=email.replace(/\s.*/,'').trim(); // pega só até o espaço
+  // ---- Email: PJ usa "E-mail para envio de correspondência:" ----
+  let email=campo('E-mail para envio de correspondência:','E-mail para envio de correspondência','E-mail:','E-mail ','Email:');
+  email=email.replace(/\s.*/,'').trim();
   if(!email||!email.includes('@')){
     const m=full.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
     if(m) email=m[0];
@@ -3461,26 +3472,45 @@ function extrairDadosDaProposta(text){
   const vencM=full.match(/(?:Vencimento|Dia de Venc)[^:]*[:\s]+(\d{1,2})/i);
   if(vencM) diaVencimento=vencM[1];
 
-  // ---- Responsável (PJ) ----
-  let responsavel=campo('Responsável:','Responsável ','Contato:');
-  responsavel=responsavel.replace(/\s+(Cargo|CPF).*/i,'').trim();
+  // ---- Responsável: PJ usa "Nome do Contato:" ou "Sócio responsável:" ----
+  let responsavel=campo('Nome do Contato:','Nome do Contato','Sócio responsável:','Sócio responsável','Responsável:','Contato:');
+  responsavel=responsavel.replace(/\s+(Telefone|Cargo|CPF|E-mail).*/i,'').trim();
 
-  // ---- DADOS DOS PLANOS ----
-  // Detecta planos no formato "(CÓDIGO) NOME DO PLANO" ou "CÓDIGO - NOME"
+  // ---- PLANO e PRODUTOS ----
   let plano='';
   let valorPagamento=0;
   const produtos=[];
 
-  // Contribuição total (valorPagamento)
-  const contribM=full.match(/Contribui[çc][ãa]o\s*:\s*R\$\s*([\d.,]+)/i);
-  if(contribM) valorPagamento=parseFloat(contribM[1].replace(/\./g,'').replace(',','.'))||0;
-  // Também tenta "SubTotal"
+  // Nome do plano: busca no cabeçalho do PDF (ex: "VG FLEX - MAG SEGUROS", "PRIVATE - MAG SEGUROS")
+  const headerProdM=full.match(/\n([A-ZÁÀÃÂÉÊÍÓÔÕÚÇ][A-ZÁÀÃÂÉÊÍÓÔÕÚÇ\s\-]+(?:FLEX|PRIVATE|VIDA|PGBL|VGBL|TERM|TOTAL)[A-ZÁÀÃÂÉÊÍÓÔÕÚÇ\s\-]*(?:-\s*MAG\s*SEGUROS)?)/m);
+  if(headerProdM) plano=headerProdM[1].trim();
+
+  // Valor total: tenta Contribuição, SubTotal, Prêmio Total, Total Geral
+  const totalPatterns=[
+    /Contribui[çc][ãa]o\s*:\s*R\$\s*([\d.,]+)/i,
+    /SubTotal[:\s]*R\$\s*([\d.,]+)/i,
+    /Prêmio Total[:\s]*R\$\s*([\d.,]+)/i,
+    /Total Geral[:\s]*R\$\s*([\d.,]+)/i,
+    /Total[:\s]+R\$\s*([\d.,]+)/i
+  ];
+  for(const pat of totalPatterns){
+    const m=full.match(pat);
+    if(m){valorPagamento=parseFloat(m[1].replace(/\./g,'').replace(',','.'))||0;break;}
+  }
+  // Fallback PJ: soma coluna "Prêmio Comercial" ignorando valores de Benefício (geralmente maiores)
   if(!valorPagamento){
-    const subM=full.match(/SubTotal[:\s]*R\$\s*([\d.,]+)/i);
-    if(subM) valorPagamento=parseFloat(subM[1].replace(/\./g,'').replace(',','.'))||0;
+    // Procura padrão de tabela com Prêmio Comercial: valores R$ pequenos após Capital/Benefício
+    const premiosComerciais=[...full.matchAll(/R\$\s*([\d.,]+)\s*\n/g)]
+      .map(m=>parseFloat(m[1].replace(/\./g,'').replace(',','.'))||0)
+      .filter(v=>v>0&&v<5000); // filtra valores plausíveis de prêmio individual
+    if(premiosComerciais.length>1){
+      // Soma apenas se parecer uma lista de prêmios individuais (todos pequenos)
+      const soma=premiosComerciais.reduce((a,b)=>a+b,0);
+      if(soma>0&&soma<10000) valorPagamento=Math.round(soma*100)/100;
+    }
   }
 
-  // Detecta planos no formato "(XXXX) NOME" — tenta match com SEGUROS_LIST pelo código
+  // Planos PF: formato "(CÓDIGO) NOME DO PLANO"
   const planoPadraoRe=/\((\d{3,4})\)\s*([A-ZÀÁÂÃÉÊÍÓÔÕÚÇ\s\d+\-\/]+)/gi;
   let planMatch;
   while((planMatch=planoPadraoRe.exec(full))!==null){
@@ -3488,15 +3518,15 @@ function extrairDadosDaProposta(text){
     const nomePlano=planMatch[2].trim().replace(/\s+/g,' ');
     const seg=SEGUROS_LIST.find(s=>s.trimEnd().endsWith(cod));
     if(seg){
+      if(!plano) plano=seg;
       produtos.push({cobertura:seg,valorPagamento,comissaoPercent:10,nota:nomePlano});
     } else {
-      // Não encontrou na lista: usa nome do plano como texto livre
       if(!plano) plano=`(${cod}) ${nomePlano}`;
       produtos.push({cobertura:'',valorPagamento,comissaoPercent:10,nota:`(${cod}) ${nomePlano}`});
     }
   }
 
-  // Fallback: match de códigos soltos no texto
+  // Fallback: match de códigos numéricos soltos no texto
   if(produtos.length===0){
     const seenCodes=new Set();
     [...full.matchAll(/\b(\d{3,4})\b/g)].forEach(m=>{
@@ -3507,19 +3537,19 @@ function extrairDadosDaProposta(text){
     });
   }
 
+  // Sem produto identificado: cria linha em branco com o valor e nome do plano
   if(produtos.length===0){
-    // Sem produto identificado: cria linha em branco com o valor
     produtos.push({cobertura:'',valorPagamento,comissaoPercent:10,nota:plano||''});
   }
 
-  // Se plano ainda não foi definido, tenta outros padrões
+  // Plano ainda não definido: tenta label genérico
   if(!plano){
     const planoM=full.match(/plano\s*:?\s*([^\n]{3,80})/i)||full.match(/produto\s*:?\s*([^\n]{3,80})/i);
     if(planoM) plano=planoM[1].trim().split(/\s{3,}/)[0].substring(0,80);
   }
 
   return {
-    tipo,nome,cpf,cnpj,responsavel,cargo:'',segmento:'',
+    tipo,nome,cpf,cnpj,responsavel,cargo:'',segmento,
     email,telefone,endereco,
     numeroProposta,plano,produtos,valorPagamento,
     banco,diaVencimento,dataNascimento,
