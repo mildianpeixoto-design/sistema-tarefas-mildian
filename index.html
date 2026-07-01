@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-08';
+  var BUILD='20260701-09';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2397,6 +2397,7 @@ function showClientForm(client, containerId){
 
       <div class="full cli-sec-header">🛡️ Produtos Contratados</div>
       <div><label>Nº da proposta (principal)</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
+      <div><label>Data da proposta <span class="muted" style="font-weight:400;">— deixe em branco para usar hoje</span></label><input type="date" id="cliDataProposta" value="${client.createdAt?(client.createdAt.toDate?client.createdAt.toDate():new Date((client.createdAt.seconds||0)*1000)).toISOString().slice(0,10):new Date().toISOString().slice(0,10)}"></div>
       <div><label>Plano (observação geral, opcional)</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: Doenças Graves Premium"></div>
       <div class="full">
         <label>Produtos / coberturas (cada um com seu valor e comissão)</label>
@@ -2564,9 +2565,13 @@ function showClientForm(client, containerId){
       historico: client.historico||[]
     };
     if(!obj.nome){ submitBtn.disabled=false; return; }
+    const dataPropostaStr = document.getElementById('cliDataProposta')?.value;
+    const createdAtValue = dataPropostaStr
+      ? firebase.firestore.Timestamp.fromDate(new Date(dataPropostaStr+'T12:00:00'))
+      : firebase.firestore.FieldValue.serverTimestamp();
     const p = isEdit
-      ? db.collection('clients').doc(client.id).set(obj,{merge:true})
-      : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+      ? db.collection('clients').doc(client.id).set({...obj, createdAt: createdAtValue},{merge:true})
+      : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: createdAtValue});
     p.then(()=>closeThisForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
