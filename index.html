@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-05';
+  var BUILD='20260701-07';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -139,6 +139,19 @@ table th{color:var(--text2);font-weight:500;font-size:12px;}
 .qa-in{background:#16a34a;color:#fff;}
 .qa-out{background:#dc2626;color:#fff;}
 .qa-nav{background:var(--gold);color:#fff;}
+.qa-meta{color:#fff;}
+/* ---- Meta Modal ---- */
+.meta-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto;}
+.meta-modal{background:var(--card);border-radius:12px;padding:24px;width:min(720px,96vw);max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.3);}
+.meta-modal h2{margin:0 0 14px;font-size:1.1rem;}
+.meta-progress-bar{height:14px;border-radius:8px;background:var(--border);overflow:hidden;margin:8px 0 18px;}
+.meta-progress-fill{height:100%;border-radius:8px;transition:width .4s;}
+.meta-set-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.meta-set-row label{font-weight:600;white-space:nowrap;}
+.meta-set-row input[type=number]{width:150px;}
+.meta-table{width:100%;border-collapse:collapse;font-size:.84rem;margin-top:10px;}
+.meta-table th{text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);font-weight:600;white-space:nowrap;}
+.meta-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top;}
 .chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
 .chat-msg{max-width:85%;padding:8px 12px;border-radius:10px;background:var(--bg);align-self:flex-start;word-break:break-word;}
 .chat-msg.mine{align-self:flex-end;background:var(--accent-bg);}
@@ -878,7 +891,9 @@ let state={
   payableOccSelected:{},
   payableSelectedMonth:'',
   payablesArchive:[],
-  boletosClientes:[]
+  boletosClientes:[],
+  metas:{},
+  metaAtual:null
 };
 let boletosViewMes=new Date().toISOString().slice(0,7);
 let selectedBoletoId=null;
@@ -1078,6 +1093,15 @@ function initApp(){
     },err=>console.error(err)));
 
     archiveMissingPayablesReports();
+
+    listeners.push(db.collection('metas').onSnapshot(snap=>{
+      state.metas={};
+      snap.forEach(d=>state.metas[d.id]={id:d.id,...d.data()});
+      state.metaAtual=state.metas[currentMonthKey()]||null;
+      renderQuickBar();
+    },err=>console.error(err)));
+
+    archiveMissingMetaReports();
   }
 
   switchTab('hoje');
@@ -1260,7 +1284,14 @@ function setStatus(actId,status){
   if(status!=='redirecionada') patch.redirectedTo=null;
   setOccurrence(ds,actId,patch)
     .then(()=>{
-      if(status==='finalizada') showToast('✅ Tarefa finalizada!','success');
+      if(status==='finalizada'){
+        showToast('✅ Tarefa finalizada!','success');
+        // Atividade única: remove do cadastro após finalizar (ocorrência fica no histórico/relatório)
+        const act=state.activities.find(a=>a.id===actId);
+        if(act&&act.recurrence==='nenhuma'){
+          db.collection('activities').doc(actId).delete().catch(()=>{});
+        }
+      }
       else if(status==='pendente') showToast('↺ Tarefa reaberta');
     })
     .catch(()=>{}); // erro já tratado em setOccurrence
@@ -1938,11 +1969,119 @@ function renderQuickBar(){
   html+=`<span class="qa-info">Eu: <strong>${myHours}</strong></span>`;
   html+=`<button class="qa-btn ${active?'qa-out':'qa-in'}" onclick="toggleClock()">${active?'⏹ Encerrar':'▶ Iniciar'} expediente</button>`;
   html+=`<span class="qa-sep"></span>`;
+  if(currentUser.role==='owner'){
+    const mk=currentMonthKey();
+    const metaValor=state.metaAtual?.valor||0;
+    const thisMonthClients=getMetaClients(mk);
+    const acumulado=thisMonthClients.reduce((s,c)=>s+(c.valorPagamento||0),0);
+    const pct=metaValor>0?acumulado/metaValor:0;
+    const cor=pct>=1?'#16a34a':pct>=0.7?'#d97706':'#dc2626';
+    const label=metaValor?`${fmtBRL(acumulado)} / ${fmtBRL(metaValor)}`:`${fmtBRL(acumulado)}`;
+    html+=`<button class="qa-btn qa-meta" style="background:${cor};" onclick="showMetaModal()">🎯 ${label}</button>`;
+  }
   html+=`<button class="qa-btn qa-nav" onclick="switchTab('ponto')">🕐 Ponto</button>`;
   html+=`<button class="qa-btn qa-nav" onclick="switchTab('funil')">📊 Funil</button>`;
   html+=`<button class="qa-btn qa-nav" onclick="switchTab('video')">🎥 Vídeo</button>`;
   bar.innerHTML=html;
   bar.style.display='flex';
+}
+
+/* ====================== Meta de Vendas ====================== */
+function getMetaClients(mk){
+  return state.clients.filter(c=>{
+    if(c.status==='cancelado') return false;
+    if(!c.createdAt) return false;
+    const d=c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000);
+    return monthKeyOf(d.toISOString().slice(0,10))===mk;
+  });
+}
+function showMetaModal(){
+  const mk=currentMonthKey();
+  const metaValor=state.metaAtual?.valor||0;
+  const clients=getMetaClients(mk);
+  const acumulado=clients.reduce((s,c)=>s+(c.valorPagamento||0),0);
+  const pct=metaValor>0?Math.min(acumulado/metaValor,1):0;
+  const cor=pct>=1?'#16a34a':pct>=0.7?'#d97706':'#dc2626';
+  const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const [ano,mes]=mk.split('-');
+  const nomeMes=MESES[parseInt(mes,10)-1]+' '+ano;
+  let rows='';
+  clients.slice().sort((a,b)=>(b.valorPagamento||0)-(a.valorPagamento||0)).forEach(c=>{
+    const dt=c.createdAt?(c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000)):null;
+    rows+=`<tr>
+      <td>${esc(c.nome)}</td>
+      <td>${fmtBRL(c.valorPagamento||0)}</td>
+      <td>${dt?dt.toLocaleDateString('pt-BR'):'-'}</td>
+      <td>${esc(c.numeroProposta||'-')}</td>
+      <td>${esc(c.banco||'-')}</td>
+      <td>${(c.comissaoPercent||0)}% (${fmtBRL(c.comissaoValor||0)})</td>
+    </tr>`;
+  });
+  const overlay=document.createElement('div');
+  overlay.className='meta-modal-overlay';
+  overlay.id='metaModalOverlay';
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) closeMetaModal(); });
+  overlay.innerHTML=`
+    <div class="meta-modal">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h2>🎯 Meta de Vendas — ${nomeMes}</h2>
+        <button class="icon-btn" onclick="closeMetaModal()">✕</button>
+      </div>
+      <div class="meta-set-row">
+        <label>Meta do mês (R$):</label>
+        <input type="number" id="metaValorInput" value="${metaValor||''}" placeholder="0,00" min="0" step="100">
+        <button class="btn btn-primary" onclick="saveMeta()">Salvar meta</button>
+      </div>
+      <div style="margin-bottom:6px;font-size:.92rem;">
+        <strong>Acumulado:</strong> ${fmtBRL(acumulado)}${metaValor?' de '+fmtBRL(metaValor)+' ('+Math.round(pct*100)+'%)':''}
+        ${metaValor&&acumulado>=metaValor?'&nbsp;<span style="color:#16a34a;font-weight:700;">✅ Meta atingida!</span>':''}
+        ${metaValor&&acumulado<metaValor?'&nbsp;— Faltam <strong>'+fmtBRL(metaValor-acumulado)+'</strong>':''}
+      </div>
+      ${metaValor?`<div class="meta-progress-bar"><div class="meta-progress-fill" style="width:${Math.round(pct*100)}%;background:${cor};"></div></div>`:''}
+      <table class="meta-table">
+        <thead><tr><th>Cliente</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="6" class="empty" style="padding:12px;">Nenhum cliente cadastrado neste mês ainda.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function closeMetaModal(){
+  const el=document.getElementById('metaModalOverlay');
+  if(el) el.remove();
+}
+function saveMeta(){
+  const val=parseFloat(document.getElementById('metaValorInput')?.value)||0;
+  const mk=currentMonthKey();
+  db.collection('metas').doc(mk).set({valor:val,mes:mk,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
+    .then(()=>{ closeMetaModal(); showToast('✅ Meta salva!','success'); })
+    .catch(err=>alert('Erro: '+err.message));
+}
+function archiveMissingMetaReports(){
+  const now=new Date();
+  const prevMonth=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const prevMk=prevMonth.toISOString().slice(0,7);
+  db.collection('metaReports').doc(prevMk).get().then(doc=>{
+    if(doc.exists) return; // já arquivado
+    const meta=state.metas[prevMk];
+    if(!meta) return; // meta não foi definida para o mês anterior
+    // Busca clientes criados no mês anterior
+    const start=new Date(prevMonth.getFullYear(),prevMonth.getMonth(),1);
+    const end=new Date(prevMonth.getFullYear(),prevMonth.getMonth()+1,1);
+    db.collection('clients')
+      .where('createdAt','>=',firebase.firestore.Timestamp.fromDate(start))
+      .where('createdAt','<',firebase.firestore.Timestamp.fromDate(end))
+      .get().then(snap=>{
+        const items=[];
+        snap.forEach(d=>{
+          const c=d.data();
+          const dt=c.createdAt?c.createdAt.toDate():null;
+          items.push({nome:c.nome,valor:c.valorPagamento||0,data:dt?dt.toLocaleDateString('pt-BR'):'-',proposta:c.numeroProposta||'',pagamento:c.banco||'',comissao:(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor||0)+')'});
+        });
+        const acumulado=items.reduce((s,i)=>s+i.valor,0);
+        const report={mes:prevMk,metaValor:meta.valor,acumulado,diferenca:acumulado-meta.valor,atingida:acumulado>=meta.valor,clientes:items,geradoEm:firebase.firestore.FieldValue.serverTimestamp()};
+        db.collection('metaReports').doc(prevMk).set(report).catch(()=>{});
+      }).catch(()=>{});
+  }).catch(()=>{});
 }
 
 /* ====================== Ponto ====================== */
