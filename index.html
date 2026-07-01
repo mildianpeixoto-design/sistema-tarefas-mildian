@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-02';
+  var BUILD='20260701-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -548,7 +548,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div id="payablesArchiveList"></div>
 </section>
 
-<section id="tab-pendencias" class="section owner-only">
+<section id="tab-pendencias" class="section">
   <div class="cards summary-cards" id="pendenciasStats"></div>
   <p class="muted" style="margin-bottom:12px;">Clientes com campos importantes em branco (telefone, e-mail, endereço, etc.) ou com produtos cujo nome do seguro ainda não foi definido. Clique em "Editar" para completar o cadastro.</p>
   <div style="margin-bottom:16px;">
@@ -1107,6 +1107,7 @@ function setupNav(){
       <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
+      <button data-tab="pendencias">Dados Incompletos</button>
       <button data-tab="links">Links</button>
     `;
   }
@@ -2450,6 +2451,7 @@ function filterClients(q){
   if(box && document.activeElement!==box){ box.focus(); box.setSelectionRange(box.value.length,box.value.length); }
 }
 function renderClients(){
+  const isOwner=currentUser.role==='owner';
   const allActive=state.clients.filter(c=>c.status!=='cancelado');
   const activeClients=clientesTipoFiltro ? allActive.filter(c=>(c.tipo||'PF')===clientesTipoFiltro) : allActive;
   const total=activeClients.length;
@@ -2552,11 +2554,12 @@ function renderClients(){
           ${(!c.produtos||!c.produtos.length)?row('Plano',plano):''}
           ${(c.produtos&&c.produtos.length)?`<div class="produtos-list-view">${c.produtos.map(p=>`
             <div class="produto-view-item">
-              <div class="pvi-top"><span>${esc(p.cobertura||'(sem cobertura definida)')}</span><span>${fmtBRL(p.valorPagamento||0)}/mês · ${p.comissaoPercent||0}% (${fmtBRL(p.comissaoValor||0)})</span></div>
+              <div class="pvi-top"><span>${esc(p.cobertura||'(sem cobertura definida)')}</span>${isOwner?`<span>${fmtBRL(p.valorPagamento||0)}/mês · ${p.comissaoPercent||0}% (${fmtBRL(p.comissaoValor||0)})</span>`:''}</div>
               ${p.nota?`<div class="pvi-nota">⚠ ${esc(p.nota)}</div>`:''}
             </div>`).join('')}</div>`:''}
-          ${row('Total mensal',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
-          ${row('Comissão total',(c.produtos&&c.produtos.length)?fmtBRL(c.comissaoValor||0):(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor)+')')}
+          ${isOwner?row('Total mensal',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':''):''}
+          ${isOwner?row('Comissão total',(c.produtos&&c.produtos.length)?fmtBRL(c.comissaoValor||0):(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor)+')'):''}
+
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
         </div>
         ${isPFc&&c.observacoesSaude?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Saúde (DPS)</div><div class="cdp-value">${esc(c.observacoesSaude)}</div></div>`:''}
@@ -4054,6 +4057,9 @@ function renderPayablesMonthList(){
   if(allItems.length===0){ el.innerHTML=`<div class="empty">Nenhuma conta a pagar em ${fmtMonthBR(mk)}.</div>`; return; }
 
   items.sort((a,b)=>{
+    const paidA=(occMap[a.id]||{}).status==='pago'?1:0;
+    const paidB=(occMap[b.id]||{}).status==='pago'?1:0;
+    if(paidA!==paidB) return paidA-paidB; // pendentes primeiro
     const da=payableDueDateInMonth(a,mk);
     const db_=payableDueDateInMonth(b,mk);
     if(da!==db_) return da.localeCompare(db_);
