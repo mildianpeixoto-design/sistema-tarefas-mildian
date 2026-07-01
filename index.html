@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-04';
+  var BUILD='20260701-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3077,10 +3077,20 @@ function convertLeadToClient(id){
 function convertClientToLead(id){
   const c=state.clients.find(x=>x.id===id);
   if(!c) return;
-  switchTab('funil');
-  showLeadForm({id:null,nome:c.nome,telefone:c.telefone||'',email:c.email||'',valorEstimado:c.valorPagamento||0,etapa:'lead',proximoContato:null,historico:[]});
-  const obsEl=document.getElementById('leadObsInicial');
-  if(obsEl) obsEl.value=`Cliente ativo "${c.nome}" — novo lead para atualização de plano.`;
+  const lead={
+    nome:c.nome,
+    telefone:c.telefone||'',
+    email:c.email||'',
+    valorEstimado:c.valorPagamento||0,
+    etapa:'lead',
+    proximoContato:null,
+    indicadoPor:'',
+    historico:[{texto:`Convertido do cadastro de cliente ativo.`,at:ts(),uid:currentUser.uid,name:currentUser.name}],
+    criadoEm:ts()
+  };
+  db.collection('leads').add(lead).then(()=>{
+    switchTab('funil');
+  }).catch(err=>alert('Erro ao criar lead: '+err.message));
 }
 function toggleLeadHist(id){
   if(expandedLeadHist.has(id)) expandedLeadHist.delete(id);
