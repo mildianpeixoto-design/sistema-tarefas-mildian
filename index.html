@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260630-06';
+  var BUILD='20260701-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -130,6 +130,15 @@ table th{color:var(--text2);font-weight:500;font-size:12px;}
 .empty{color:var(--text3);font-size:13px;padding:20px;text-align:center;}
 .icon-btn{background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:4px;text-decoration:underline;}
 .icon-btn:hover{color:var(--red);}
+/* ---- Quick Bar ---- */
+#quickBar{display:flex;align-items:center;gap:8px;padding:7px 18px;background:var(--bg2,#f0ead6);border-bottom:2px solid var(--gold);flex-wrap:wrap;position:sticky;top:0;z-index:90;}
+.qa-info{font-size:.78rem;color:var(--text2,#6b5e3a);padding:4px 9px;background:rgba(0,0,0,.06);border-radius:6px;white-space:nowrap;}
+.qa-sep{flex:1;}
+.qa-btn{border:none;border-radius:6px;padding:5px 13px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s;}
+.qa-btn:hover{opacity:.85;}
+.qa-in{background:#16a34a;color:#fff;}
+.qa-out{background:#dc2626;color:#fff;}
+.qa-nav{background:var(--gold);color:#fff;}
 .chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
 .chat-msg{max-width:85%;padding:8px 12px;border-radius:10px;background:var(--bg);align-self:flex-start;word-break:break-word;}
 .chat-msg.mine{align-self:flex-end;background:var(--accent-bg);}
@@ -390,6 +399,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   </div>
 </aside>
 <main class="main">
+<div id="quickBar" style="display:none;"></div>
 
 <section id="tab-hoje" class="section active">
   <div class="home-layout">
@@ -1571,16 +1581,7 @@ function renderHoje(){
     const arg=c.key?`'${c.key}'`:'null';
     return `<div class="card clickable${isActive?' active-filter':''}" onclick="setHojeStatusFilter(${arg})"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`;
   }).join('');
-  if(isOwner){
-    let totalHours=0;
-    state.users.forEach(u=>{ totalHours+=logTotalSeconds(state.logsToday[u.id]); });
-    cardsHtml+=`<div class="card clickable" onclick="switchTab('ponto')"><div class="label">Horas trabalhadas (equipe)</div><div class="value">${fmtHoursMin(totalHours)}</div></div>`;
-  }else{
-    cardsHtml+=`<div class="card clickable" onclick="switchTab('ponto')"><div class="label">Minhas horas hoje</div><div class="value">${fmtHoursMin(logTotalSeconds(state.logsToday[currentUser.uid]))}</div></div>`;
-  }
-  cardsHtml+=`<div class="card clickable" onclick="switchTab('ponto')"><div class="label">🕐 Ponto</div><div class="value">Ver</div></div>`;
-  cardsHtml+=`<div class="card clickable" onclick="switchTab('funil')"><div class="label">📊 Funil de Vendas</div><div class="value">Ver</div></div>`;
-  cardsHtml+=`<div class="card clickable" onclick="switchTab('video')"><div class="label">🎥 Videoconferência</div><div class="value">Ver</div></div>`;
+  renderQuickBar();
   document.getElementById('hojeStats').innerHTML=cardsHtml;
 
   let html='';
@@ -1912,6 +1913,29 @@ function renderCollaborators(){
   document.getElementById('collabList').innerHTML=html;
 }
 
+/* ====================== Quick Bar ====================== */
+function renderQuickBar(){
+  const bar=document.getElementById('quickBar');
+  if(!bar||!currentUser) return;
+  const myLog=state.logsToday[currentUser.uid];
+  const active=!!(myLog&&myLog.activeStart);
+  const myHours=fmtHoursMin(logTotalSeconds(myLog));
+  let html='';
+  if(currentUser.role==='owner'){
+    let totalHours=0;
+    state.users.forEach(u=>{ totalHours+=logTotalSeconds(state.logsToday[u.id]); });
+    html+=`<span class="qa-info">⏱ Equipe: <strong>${fmtHoursMin(totalHours)}</strong></span>`;
+  }
+  html+=`<span class="qa-info">Eu: <strong>${myHours}</strong></span>`;
+  html+=`<button class="qa-btn ${active?'qa-out':'qa-in'}" onclick="toggleClock()">${active?'⏹ Encerrar':'▶ Iniciar'} expediente</button>`;
+  html+=`<span class="qa-sep"></span>`;
+  html+=`<button class="qa-btn qa-nav" onclick="switchTab('ponto')">🕐 Ponto</button>`;
+  html+=`<button class="qa-btn qa-nav" onclick="switchTab('funil')">📊 Funil</button>`;
+  html+=`<button class="qa-btn qa-nav" onclick="switchTab('video')">🎥 Vídeo</button>`;
+  bar.innerHTML=html;
+  bar.style.display='flex';
+}
+
 /* ====================== Ponto ====================== */
 function toggleClock(){
   const ds=todayStr();
@@ -1922,9 +1946,9 @@ function toggleClock(){
     ref.update({
       sessions: firebase.firestore.FieldValue.arrayUnion({in:log.activeStart, out:ts()}),
       activeStart: del()
-    }).catch(err=>alert('Erro: '+err.message));
+    }).then(()=>renderQuickBar()).catch(err=>alert('Erro: '+err.message));
   }else{
-    ref.set({date:ds, uid, activeStart:ts()},{merge:true}).catch(err=>alert('Erro: '+err.message));
+    ref.set({date:ds, uid, activeStart:ts()},{merge:true}).then(()=>renderQuickBar()).catch(err=>alert('Erro: '+err.message));
   }
 }
 function renderPonto(){
