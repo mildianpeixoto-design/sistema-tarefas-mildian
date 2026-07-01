@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-07';
+  var BUILD='20260701-08';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2008,6 +2008,7 @@ function showMetaModal(){
   let rows='';
   clients.slice().sort((a,b)=>(b.valorPagamento||0)-(a.valorPagamento||0)).forEach(c=>{
     const dt=c.createdAt?(c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000)):null;
+    const paga=!!c.angariacacaoPaga;
     rows+=`<tr>
       <td>${esc(c.nome)}</td>
       <td>${fmtBRL(c.valorPagamento||0)}</td>
@@ -2015,6 +2016,7 @@ function showMetaModal(){
       <td>${esc(c.numeroProposta||'-')}</td>
       <td>${esc(c.banco||'-')}</td>
       <td>${(c.comissaoPercent||0)}% (${fmtBRL(c.comissaoValor||0)})</td>
+      <td><button class="btn" style="font-size:.78rem;padding:3px 9px;background:${paga?'#16a34a':'#dc2626'};color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="toggleAngariacao('${c.id}',${paga})">${paga?'✅ Paga':'⏳ Pendente'}</button></td>
     </tr>`;
   });
   const overlay=document.createElement('div');
@@ -2039,8 +2041,8 @@ function showMetaModal(){
       </div>
       ${metaValor?`<div class="meta-progress-bar"><div class="meta-progress-fill" style="width:${Math.round(pct*100)}%;background:${cor};"></div></div>`:''}
       <table class="meta-table">
-        <thead><tr><th>Cliente</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="6" class="empty" style="padding:12px;">Nenhum cliente cadastrado neste mês ainda.</td></tr>'}</tbody>
+        <thead><tr><th>Cliente</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th><th>Angariação</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="7" class="empty" style="padding:12px;">Nenhum cliente cadastrado neste mês ainda.</td></tr>'}</tbody>
       </table>
     </div>`;
   document.body.appendChild(overlay);
@@ -2054,6 +2056,11 @@ function saveMeta(){
   const mk=currentMonthKey();
   db.collection('metas').doc(mk).set({valor:val,mes:mk,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
     .then(()=>{ closeMetaModal(); showToast('✅ Meta salva!','success'); })
+    .catch(err=>alert('Erro: '+err.message));
+}
+function toggleAngariacao(id, currentPaga){
+  db.collection('clients').doc(id).update({angariacacaoPaga: !currentPaga})
+    .then(()=>{ showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success'); showMetaModal(); })
     .catch(err=>alert('Erro: '+err.message));
 }
 function archiveMissingMetaReports(){
