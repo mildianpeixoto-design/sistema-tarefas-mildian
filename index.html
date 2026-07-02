@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-09';
+  var BUILD='20260701-10';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1616,7 +1616,7 @@ function renderHoje(){
   if(isOwner){
     const activeClients=state.clients.filter(c=>c.status!=='cancelado');
     const totalSinistros=activeClients.reduce((s,c)=>s+(c.sinistrosPagos||0),0);
-    const totalCapital=activeClients.reduce((s,c)=>s+(c.produtos||[]).reduce((s2,p)=>s2+(p.capitalSegurado||0),0),0);
+    const totalCapital=activeClients.reduce((s,c)=>s+(c.capitalSegurado||0),0);
     cardsHtml+=`<div class="card" style="border-left:3px solid var(--blue);"><div class="label">👥 Clientes</div><div class="value">${activeClients.length}</div></div>`;
     cardsHtml+=`<div class="card" style="border-left:3px solid var(--red);"><div class="label">🏥 Sinistros Pagos</div><div class="value" style="font-size:1rem;">${fmtBRL(totalSinistros)}</div></div>`;
     cardsHtml+=`<div class="card" style="border-left:3px solid var(--green);"><div class="label">🛡️ Capital Segurado</div><div class="value" style="font-size:1rem;">${fmtBRL(totalCapital)}</div></div>`;
@@ -2015,7 +2015,7 @@ function showMetaModal(){
       <td>${dt?dt.toLocaleDateString('pt-BR'):'-'}</td>
       <td>${esc(c.numeroProposta||'-')}</td>
       <td>${esc(c.banco||'-')}</td>
-      <td>${(c.comissaoPercent||0)}% (${fmtBRL(c.comissaoValor||0)})</td>
+      <td>${fmtBRL(c.valorAngariacao||c.comissaoValor||0)}</td>
       <td><button class="btn" style="font-size:.78rem;padding:3px 9px;background:${paga?'#16a34a':'#dc2626'};color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="toggleAngariacao('${c.id}',${paga})">${paga?'✅ Paga':'⏳ Pendente'}</button></td>
     </tr>`;
   });
@@ -2082,7 +2082,7 @@ function archiveMissingMetaReports(){
         snap.forEach(d=>{
           const c=d.data();
           const dt=c.createdAt?c.createdAt.toDate():null;
-          items.push({nome:c.nome,valor:c.valorPagamento||0,data:dt?dt.toLocaleDateString('pt-BR'):'-',proposta:c.numeroProposta||'',pagamento:c.banco||'',comissao:(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor||0)+')'});
+          items.push({nome:c.nome,valor:c.valorPagamento||0,data:dt?dt.toLocaleDateString('pt-BR'):'-',proposta:c.numeroProposta||'',pagamento:c.banco||'',comissao:fmtBRL(c.valorAngariacao||c.comissaoValor||0)});
         });
         const acumulado=items.reduce((s,i)=>s+i.valor,0);
         const report={mes:prevMk,metaValor:meta.valor,acumulado,diferenca:acumulado-meta.valor,atingida:acumulado>=meta.valor,clientes:items,geradoEm:firebase.firestore.FieldValue.serverTimestamp()};
@@ -2344,7 +2344,7 @@ function showClientForm(client, containerId){
     else { document.getElementById('clientFormWrap').innerHTML=''; }
   }
   const isEdit=!!(client&&client.id);
-  client=client||{id:null,tipo:'PF',nome:'',cpf:'',cnpj:'',responsavel:'',cargo:'',telefone:'',email:'',dataNascimento:'',sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',segmento:'',rendaMensal:'',empresa:'',endereco:'',numeroProposta:'',plano:'',coberturas:'',valorPagamento:0,banco:'',diaVencimento:'',observacoesSaude:'',comissaoPercent:10,historico:[]};
+  client=client||{id:null,tipo:'PF',nome:'',cpf:'',cnpj:'',responsavel:'',cargo:'',telefone:'',email:'',dataNascimento:'',sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',segmento:'',rendaMensal:'',empresa:'',endereco:'',numeroProposta:'',plano:'',valorCobertura:0,valorPagamento:0,capitalSegurado:0,valorAngariacao:0,valorCarteira:0,banco:'',diaVencimento:'',observacoesSaude:'',historico:[]};
   const tipo=client.tipo||'PF';
   const isPF=tipo==='PF';
   document.getElementById(containerId).innerHTML=`
@@ -2398,14 +2398,12 @@ function showClientForm(client, containerId){
       <div class="full cli-sec-header">🛡️ Produtos Contratados</div>
       <div><label>Nº da proposta (principal)</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
       <div><label>Data da proposta <span class="muted" style="font-weight:400;">— deixe em branco para usar hoje</span></label><input type="date" id="cliDataProposta" value="${client.createdAt?(client.createdAt.toDate?client.createdAt.toDate():new Date((client.createdAt.seconds||0)*1000)).toISOString().slice(0,10):new Date().toISOString().slice(0,10)}"></div>
-      <div><label>Plano (observação geral, opcional)</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: Doenças Graves Premium"></div>
-      <div class="full">
-        <label>Produtos / coberturas (cada um com seu valor e comissão)</label>
-        <datalist id="commOptionsList">${COMMISSION_OPTIONS.map(p=>`<option value="${p}">`).join('')}</datalist>
-        <div id="produtosList"></div>
-        <button type="button" class="btn" id="addProdutoBtn" style="margin-top:6px;">+ Adicionar produto</button>
-      </div>
-      <div><label>Valor total de pagamento (R$) <span class="muted" style="font-weight:400;">— soma automática</span></label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}" readonly style="background:var(--bg2);"></div>
+      <div><label>Plano</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: VG Flex MAG Seguros"></div>
+      <div><label>Valor de cobertura (R$)</label><input type="number" id="cliValorCobertura" step="0.01" min="0" value="${client.valorCobertura||0}"></div>
+      <div><label>Valor de contribuição (R$) <span class="muted" style="font-weight:400;">— prêmio mensal</span></label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}"></div>
+      <div><label>Valor segurado (R$)</label><input type="number" id="cliCapitalSegurado" step="0.01" min="0" value="${client.capitalSegurado||0}"></div>
+      <div><label>Valor da angariação (R$)</label><input type="number" id="cliValorAngariacao" step="0.01" min="0" value="${client.valorAngariacao||client.comissaoValor||0}"></div>
+      <div><label>Valor da carteira (R$)</label><input type="number" id="cliValorCarteira" step="0.01" min="0" value="${client.valorCarteira||0}"></div>
       <div><label>Banco / Forma de pagamento</label><input type="text" id="cliBanco" value="${esc(client.banco||'')}" placeholder="Ex: Banco do Brasil Ag. 5964 CC 1307-2"></div>
       <div><label>Sinistros Pagos (R$)</label><div class="input-icon-wrap"><span class="input-icon">R$</span><input type="number" id="cliSinistros" step="0.01" min="0" value="${client.sinistrosPagos||0}" placeholder="0,00"></div></div>
       <div><label>Dia de vencimento</label><input type="text" id="cliDiaVenc" maxlength="2" value="${esc(client.diaVencimento||'')}" placeholder="05"></div>
@@ -2450,8 +2448,11 @@ function showClientForm(client, containerId){
         endereco:document.getElementById('cliEndereco')?.value||'',
         numeroProposta:document.getElementById('cliNumeroProposta')?.value||'',
         plano:document.getElementById('cliPlano')?.value||'',
-        produtos:produtos,
+        valorCobertura:parseFloat(document.getElementById('cliValorCobertura')?.value)||0,
         valorPagamento:parseFloat(document.getElementById('cliValor')?.value)||0,
+        capitalSegurado:parseFloat(document.getElementById('cliCapitalSegurado')?.value)||0,
+        valorAngariacao:parseFloat(document.getElementById('cliValorAngariacao')?.value)||0,
+        valorCarteira:parseFloat(document.getElementById('cliValorCarteira')?.value)||0,
         banco:document.getElementById('cliBanco')?.value||'',
         sinistrosPagos:parseFloat(document.getElementById('cliSinistros')?.value)||0,
         diaVencimento:document.getElementById('cliDiaVenc')?.value||'',
@@ -2462,57 +2463,6 @@ function showClientForm(client, containerId){
     });
   });
 
-  // ---- Lista de produtos (cada um com cobertura, valor e comissão próprios) ----
-  // Migração de cadastros antigos: só considera um fragmento de "coberturas" como
-  // produto válido se ele corresponder exatamente a um item do SEGUROS_LIST — evita
-  // quebrar texto livre (que pode conter vírgulas de valores em R$, ex: "100.000,00").
-  let produtos = (client.produtos && client.produtos.length)
-    ? JSON.parse(JSON.stringify(client.produtos))
-    : (client.coberturas||'').split(',').map(s=>s.trim()).filter(s=>SEGUROS_LIST.includes(s)).map(cob=>({
-        cobertura:cob, valorPagamento:client.valorPagamento||0, capitalSegurado:0, comissaoPercent:client.comissaoPercent||10, nota:''
-      }));
-  if(produtos.length===0) produtos=[{cobertura:'',valorPagamento:client.valorPagamento||0,capitalSegurado:0,comissaoPercent:client.comissaoPercent||10,nota:''}];
-
-  function updateValorTotal(){
-    const total=produtos.reduce((s,p)=>s+(parseFloat(p.valorPagamento)||0),0);
-    const el=document.getElementById('cliValor');
-    if(el) el.value=total.toFixed(2);
-  }
-  function renderProdutosRows(){
-    const wrap=document.getElementById('produtosList');
-    if(!wrap) return;
-    wrap.innerHTML=produtos.map((p,i)=>`
-      <div class="produto-row" data-idx="${i}">
-        <select class="prod-cobertura">
-          <option value="">— selecione a cobertura —</option>
-          ${SEGUROS_LIST.map(s=>`<option value="${esc(s)}" ${p.cobertura===s?'selected':''}>${esc(s)}</option>`).join('')}
-        </select>
-        <input type="number" class="prod-valor" step="0.01" min="0" placeholder="Prêmio R$/mês" value="${p.valorPagamento||0}">
-        <input type="number" class="prod-capital" step="0.01" min="0" placeholder="Capital Segurado R$" value="${p.capitalSegurado||0}">
-        <input type="number" class="prod-comissao" step="0.01" min="0" placeholder="Comissão %" list="commOptionsList" value="${p.comissaoPercent||0}">
-        <input type="text" class="prod-nota" placeholder="Nota (opcional)" value="${esc(p.nota||'')}">
-        <button type="button" class="icon-btn prod-remove" title="Remover produto">✕</button>
-      </div>`).join('');
-    updateValorTotal();
-    wrap.querySelectorAll('.produto-row').forEach(rowEl=>{
-      const idx=+rowEl.dataset.idx;
-      rowEl.querySelector('.prod-cobertura').addEventListener('change',e=>{ produtos[idx].cobertura=e.target.value; });
-      rowEl.querySelector('.prod-valor').addEventListener('input',e=>{ produtos[idx].valorPagamento=parseFloat(e.target.value)||0; updateValorTotal(); });
-      rowEl.querySelector('.prod-capital').addEventListener('input',e=>{ produtos[idx].capitalSegurado=parseFloat(e.target.value)||0; });
-      rowEl.querySelector('.prod-comissao').addEventListener('input',e=>{ produtos[idx].comissaoPercent=parseFloat(e.target.value)||0; });
-      rowEl.querySelector('.prod-nota').addEventListener('input',e=>{ produtos[idx].nota=e.target.value; });
-      rowEl.querySelector('.prod-remove').addEventListener('click',()=>{
-        produtos.splice(idx,1);
-        if(produtos.length===0) produtos=[{cobertura:'',valorPagamento:0,comissaoPercent:10,nota:''}];
-        renderProdutosRows();
-      });
-    });
-  }
-  document.getElementById('addProdutoBtn').addEventListener('click',()=>{
-    produtos.push({cobertura:'',valorPagamento:0,capitalSegurado:0,comissaoPercent:10,nota:''});
-    renderProdutosRows();
-  });
-  renderProdutosRows();
   document.getElementById('cancelClientBtn').addEventListener('click',closeThisForm);
   document.getElementById('cancelarClienteBtn')?.addEventListener('click',()=>{
     if(!confirm(`Marcar "${client.nome}" como cliente cancelado? Ele sai da lista de clientes ativos e passa a aparecer na aba Cancelados (pode ser reativado depois).`)) return;
@@ -2527,7 +2477,6 @@ function showClientForm(client, containerId){
     submitBtn.disabled=true;
     const tipoVal=document.getElementById('cliTipo').value;
     const isPFsub=tipoVal==='PF';
-    const valorPagamento=parseFloat(document.getElementById('cliValor').value)||0;
     const obj={
       tipo: tipoVal,
       nome: isPFsub ? document.getElementById('cliNome').value.trim() : document.getElementById('cliRazaoSocial').value.trim(),
@@ -2548,20 +2497,16 @@ function showClientForm(client, containerId){
       endereco: document.getElementById('cliEndereco').value.trim(),
       numeroProposta: document.getElementById('cliNumeroProposta').value.trim(),
       plano: document.getElementById('cliPlano').value.trim(),
-      produtos: produtos.filter(p=>p.cobertura||p.valorPagamento).map(p=>({
-        cobertura:p.cobertura||'', valorPagamento:parseFloat(p.valorPagamento)||0,
-        capitalSegurado:parseFloat(p.capitalSegurado)||0,
-        comissaoPercent:parseFloat(p.comissaoPercent)||0,
-        comissaoValor:+((parseFloat(p.valorPagamento)||0)*(parseFloat(p.comissaoPercent)||0)/100).toFixed(2),
-        nota:p.nota||''
-      })),
-      coberturas: produtos.filter(p=>p.cobertura).map(p=>p.cobertura).join(', '),
-      valorPagamento,
+      valorCobertura: parseFloat(document.getElementById('cliValorCobertura').value)||0,
+      valorPagamento: parseFloat(document.getElementById('cliValor').value)||0,
+      capitalSegurado: parseFloat(document.getElementById('cliCapitalSegurado').value)||0,
+      valorAngariacao: parseFloat(document.getElementById('cliValorAngariacao').value)||0,
+      comissaoValor: parseFloat(document.getElementById('cliValorAngariacao').value)||0,
+      valorCarteira: parseFloat(document.getElementById('cliValorCarteira').value)||0,
       banco: document.getElementById('cliBanco').value.trim(),
       sinistrosPagos: parseFloat(document.getElementById('cliSinistros')?.value)||0,
       diaVencimento: document.getElementById('cliDiaVenc').value.trim(),
       observacoesSaude: isPFsub ? document.getElementById('cliSaude').value.trim() : '',
-      comissaoValor: +produtos.reduce((s,p)=>s+((parseFloat(p.valorPagamento)||0)*(parseFloat(p.comissaoPercent)||0)/100),0).toFixed(2),
       historico: client.historico||[]
     };
     if(!obj.nome){ submitBtn.disabled=false; return; }
@@ -2701,16 +2646,12 @@ function renderClients(){
         </div>
         <div class="cdp-section cdp-full">
           <div class="cdp-title">🛡️ Produtos Contratados</div>
-          ${row('Nº proposta',c.numeroProposta)}
-          ${(!c.produtos||!c.produtos.length)?row('Plano',plano):''}
-          ${(c.produtos&&c.produtos.length)?`<div class="produtos-list-view">${c.produtos.map(p=>`
-            <div class="produto-view-item">
-              <div class="pvi-top"><span>${esc(p.cobertura||'(sem cobertura definida)')}</span>${isOwner?`<span>${fmtBRL(p.valorPagamento||0)}/mês · ${p.comissaoPercent||0}% (${fmtBRL(p.comissaoValor||0)})</span>`:''}</div>
-              ${p.nota?`<div class="pvi-nota">⚠ ${esc(p.nota)}</div>`:''}
-            </div>`).join('')}</div>`:''}
-          ${isOwner?row('Total mensal',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':''):''}
-          ${isOwner?row('Comissão total',(c.produtos&&c.produtos.length)?fmtBRL(c.comissaoValor||0):(c.comissaoPercent||0)+'% ('+fmtBRL(c.comissaoValor)+')'):''}
-
+          ${row('Nº proposta',c.numeroProposta)}${row('Plano',c.plano)}
+          ${isOwner?row('Valor de cobertura',c.valorCobertura?fmtBRL(c.valorCobertura):''):''}
+          ${row('Valor de contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
+          ${isOwner?row('Valor segurado',c.capitalSegurado?fmtBRL(c.capitalSegurado):''):''}
+          ${isOwner?row('Valor da angariação',c.valorAngariacao?fmtBRL(c.valorAngariacao):(c.comissaoValor?fmtBRL(c.comissaoValor):'')):''}
+          ${isOwner?row('Valor da carteira',c.valorCarteira?fmtBRL(c.valorCarteira):''):''}
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
         </div>
         ${isPFc&&c.observacoesSaude?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Saúde (DPS)</div><div class="cdp-value">${esc(c.observacoesSaude)}</div></div>`:''}
@@ -2788,7 +2729,7 @@ function getClientPendencias(c){
   }
   const semNomeNums=[...new Set((c.produtos||[]).filter(p=>(p.cobertura||'').startsWith('(nome a definir)')).map(p=>p.numero))];
   if(semNomeNums.length) issues.push(`Produto sem nome (nº ${semNomeNums.join(', ')})`);
-  if(!c.produtos || !c.produtos.length) issues.push('Nenhum produto cadastrado');
+  if(!c.plano && !c.valorPagamento) issues.push('Plano/produto não cadastrado');
   return issues;
 }
 async function migrarNomesProdutos(){
@@ -3223,7 +3164,7 @@ function convertLeadToClient(id){
   if(!l) return;
   switchTab('clientes');
   selecionarTipoCliente('PF');
-  showClientForm({id:null,nome:l.nome,cpf:'',telefone:l.telefone||l.contato||'',email:l.email||'',dataNascimento:'',endereco:'',coberturas:'',valorPagamento:l.valorEstimado||0,comissaoPercent:10,historico:l.historico||[]});
+  showClientForm({id:null,nome:l.nome,cpf:'',telefone:l.telefone||l.contato||'',email:l.email||'',dataNascimento:'',endereco:'',plano:'',valorCobertura:0,valorPagamento:l.valorEstimado||0,capitalSegurado:0,valorAngariacao:0,valorCarteira:0,historico:l.historico||[]});
 }
 function convertClientToLead(id){
   const c=state.clients.find(x=>x.id===id);
@@ -3763,10 +3704,15 @@ function extrairDadosDaProposta(text){
     if(planoM) plano=planoM[1].trim().split(/\s{3,}/)[0].substring(0,80);
   }
 
+  // Mapeia dados do PDF para os novos campos simples
+  const capitalSegurado=produtos.reduce((s,p)=>s+(p.capitalSegurado||0),0)||0;
+
   return {
     tipo,nome,cpf,cnpj,responsavel,cargo:'',segmento,
     email,telefone,endereco,
-    numeroProposta,plano,produtos,valorPagamento,
+    numeroProposta,plano,
+    valorCobertura:0, valorPagamento, capitalSegurado,
+    valorAngariacao:0, valorCarteira:0,
     banco,diaVencimento,dataNascimento,
     sexo,estadoCivil,numFilhos,ocupacao,empresa,rendaMensal,
     observacoesSaude:'',historico:[]
