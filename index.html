@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-10';
+  var BUILD='20260701-11';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2401,7 +2401,7 @@ function showClientForm(client, containerId){
       <div><label>Plano</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: VG Flex MAG Seguros"></div>
       <div><label>Valor de cobertura (R$)</label><input type="number" id="cliValorCobertura" step="0.01" min="0" value="${client.valorCobertura||0}"></div>
       <div><label>Valor de contribuição (R$) <span class="muted" style="font-weight:400;">— prêmio mensal</span></label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}"></div>
-      <div><label>Valor segurado (R$)</label><input type="number" id="cliCapitalSegurado" step="0.01" min="0" value="${client.capitalSegurado||0}"></div>
+      <div><label>Valor segurado (R$)</label><input type="number" id="cliCapitalSegurado" step="0.01" min="0" value="${client.capitalSegurado||(client.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0)||0}"></div>
       <div><label>Valor da angariação (R$)</label><input type="number" id="cliValorAngariacao" step="0.01" min="0" value="${client.valorAngariacao||client.comissaoValor||0}"></div>
       <div><label>Valor da carteira (R$)</label><input type="number" id="cliValorCarteira" step="0.01" min="0" value="${client.valorCarteira||0}"></div>
       <div><label>Banco / Forma de pagamento</label><input type="text" id="cliBanco" value="${esc(client.banco||'')}" placeholder="Ex: Banco do Brasil Ag. 5964 CC 1307-2"></div>
