@@ -2646,10 +2646,11 @@ function renderClients(){
         </div>
         <div class="cdp-section cdp-full">
           <div class="cdp-title">🛡️ Produtos Contratados</div>
-          ${row('Nº proposta',c.numeroProposta)}${row('Plano',c.plano)}
+          ${row('Nº proposta',c.numeroProposta)}${row('Plano',c.plano||(c.produtos&&c.produtos[0]&&c.produtos[0].cobertura)||'')}
+          ${(c.produtos&&c.produtos.length>1)?`<div style="font-size:.82rem;color:var(--muted);margin:2px 0 6px 0;">${c.produtos.slice(1).map(p=>esc(p.cobertura||p.nota||'')).filter(Boolean).join(' · ')}</div>`:''}
           ${isOwner?row('Valor de cobertura',c.valorCobertura?fmtBRL(c.valorCobertura):''):''}
           ${row('Valor de contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
-          ${isOwner?row('Valor segurado',c.capitalSegurado?fmtBRL(c.capitalSegurado):''):''}
+          ${(()=>{const cs=c.capitalSegurado||(c.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0);return isOwner?row('Valor segurado',cs?fmtBRL(cs):''):'';})()}
           ${isOwner?row('Valor da angariação',c.valorAngariacao?fmtBRL(c.valorAngariacao):(c.comissaoValor?fmtBRL(c.comissaoValor):'')):''}
           ${isOwner?row('Valor da carteira',c.valorCarteira?fmtBRL(c.valorCarteira):''):''}
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
