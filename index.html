@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-12';
+  var BUILD='20260701-13';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -494,7 +494,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 </section>
 
 <section id="tab-funil" class="section">
-  <div class="row owner-only" style="margin-bottom:12px;">
+  <div class="row" style="margin-bottom:12px;">
     <button class="btn primary" id="newLeadBtn">+ Novo lead</button>
   </div>
   <div id="leadFormWrap"></div>
@@ -1132,6 +1132,7 @@ function setupNav(){
       <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
+      <button data-tab="funil">Funil</button>
       <button data-tab="pendencias">Dados Incompletos</button>
       <button data-tab="links">Links</button>
     `;
@@ -3297,13 +3298,13 @@ function renderFunil(){
             const lbl=l.proximoContato<ds?'Contato atrasado':(l.proximoContato===ds?'Contato hoje':'Próximo contato');
             return `<div class="kc-next ${cls}">📅 ${lbl}: ${fmtDateBR(l.proximoContato)}</div>`;
           })():''}
-          ${isOwner?`
-            <div id="leadEditWrap-${l.id}" style="margin-top:8px;"></div>
-            <div class="row" style="margin-top:8px;">
-              <button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>
-              ${stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
-            </div>
-          `:`
+          <div id="leadEditWrap-${l.id}" style="margin-top:8px;"></div>
+          <div class="row" style="margin-top:8px;">
+            <button class="icon-btn" onclick="editLead('${l.id}')">✏️ Editar</button>
+            ${isOwner?`<button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>`:''}
+            ${isOwner&&stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
+          </div>
+          ${!isOwner?`
             <select onchange="moveLead('${l.id}',this.value)">
               ${STAGE_ORDER.map(s=>`<option value="${s}" ${l.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
             </select>
