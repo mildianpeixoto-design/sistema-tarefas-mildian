@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-11';
+  var BUILD='20260701-12';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -806,6 +806,7 @@ function markContatoFeito(id){
 
 /* ====================== Constantes: Clientes e Funil ====================== */
 const COMMISSION_OPTIONS=[5,6,9,10,12,14,14.16,15,17,20,25,29,30,33.33,35,40,50,70,100,150,200];
+const COVERAGE_TYPES=[{key:'Dit',label:'DIT'},{key:'Morte',label:'Morte'},{key:'Invalidez',label:'Invalidez'},{key:'DG',label:'Doenças Graves'},{key:'Cirurgias',label:'Cirurgias'}];
 const SEGUROS_LIST=[
   'PGBL PRIVATE FREE 812','VGBL PRIVATE FREE 813',
   'PGBL VIDA TODA 1800','VGBL VIDA TODA 1801','PGBL PRIVATE 1808','VGBL PRIVATE 1809','PGBL PRIVATE TOP 1810','VGBL PRIVATE TOP 1811',
@@ -1618,8 +1619,8 @@ function renderHoje(){
     const totalSinistros=activeClients.reduce((s,c)=>s+(c.sinistrosPagos||0),0);
     const totalCapital=activeClients.reduce((s,c)=>s+(c.capitalSegurado||0),0);
     cardsHtml+=`<div class="card" style="border-left:3px solid var(--blue);"><div class="label">👥 Clientes</div><div class="value">${activeClients.length}</div></div>`;
-    cardsHtml+=`<div class="card" style="border-left:3px solid var(--red);"><div class="label">🏥 Sinistros Pagos</div><div class="value" style="font-size:1rem;">${fmtBRL(totalSinistros)}</div></div>`;
-    cardsHtml+=`<div class="card" style="border-left:3px solid var(--green);"><div class="label">🛡️ Capital Segurado</div><div class="value" style="font-size:1rem;">${fmtBRL(totalCapital)}</div></div>`;
+    cardsHtml+=`<div class="card clickable" style="border-left:3px solid var(--red);" onclick="showCoverageModal('sinistros')"><div class="label">🏥 Sinistros Pagos</div><div class="value" style="font-size:1rem;">${fmtBRL(totalSinistros)}</div></div>`;
+    cardsHtml+=`<div class="card clickable" style="border-left:3px solid var(--green);" onclick="showCoverageModal('capital')"><div class="label">🛡️ Capital Segurado</div><div class="value" style="font-size:1rem;">${fmtBRL(totalCapital)}</div></div>`;
   }
   renderQuickBar();
   document.getElementById('hojeStats').innerHTML=cardsHtml;
@@ -2063,6 +2064,55 @@ function toggleAngariacao(id, currentPaga){
     .then(()=>{ showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success'); showMetaModal(); })
     .catch(err=>alert('Erro: '+err.message));
 }
+function updateCapSubTotal(prefix, totalId){
+  const total=COVERAGE_TYPES.reduce((s,t)=>s+(parseFloat(document.getElementById(prefix+t.key)?.value)||0),0);
+  const el=document.getElementById(totalId);
+  if(el) el.value=total.toFixed(2);
+}
+function showCoverageModal(type){
+  const isSin=type==='sinistros';
+  const title=isSin?'🏥 Sinistros Pagos':'🛡️ Capital Segurado';
+  const prefix=isSin?'sinistros':'capital';
+  const activeClients=state.clients.filter(c=>c.status!=='cancelado');
+  const totals=Object.fromEntries(COVERAGE_TYPES.map(t=>[t.key, activeClients.reduce((s,c)=>s+(c[prefix+t.key]||0),0)]));
+  const grandTotal=Object.values(totals).reduce((a,b)=>a+b,0);
+  let rows='';
+  COVERAGE_TYPES.forEach(t=>{
+    if(totals[t.key]>0) rows+=`<tr><td>${t.label}</td><td style="text-align:right;font-weight:600;">${fmtBRL(totals[t.key])}</td></tr>`;
+  });
+  if(!rows) rows=`<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:12px;">Nenhum valor registrado ainda.</td></tr>`;
+  // Client breakdown
+  let clientRows='';
+  activeClients.filter(c=>COVERAGE_TYPES.some(t=>c[prefix+t.key]>0)||(isSin?c.sinistrosPagos:c.capitalSegurado)>0)
+    .sort((a,b)=>(COVERAGE_TYPES.reduce((s,t)=>s+(b[prefix+t.key]||0),0)||(isSin?b.sinistrosPagos:b.capitalSegurado)||0)-(COVERAGE_TYPES.reduce((s,t)=>s+(a[prefix+t.key]||0),0)||(isSin?a.sinistrosPagos:a.capitalSegurado)||0))
+    .forEach(c=>{
+      const subtypes=COVERAGE_TYPES.filter(t=>c[prefix+t.key]>0).map(t=>`${t.label}: ${fmtBRL(c[prefix+t.key])}`).join(' · ');
+      const total=COVERAGE_TYPES.reduce((s,t)=>s+(c[prefix+t.key]||0),0)||(isSin?c.sinistrosPagos:c.capitalSegurado)||0;
+      clientRows+=`<tr><td>${esc(c.nome)}</td><td style="font-size:.8rem;color:var(--muted);">${subtypes||'—'}</td><td style="text-align:right;font-weight:600;">${fmtBRL(total)}</td></tr>`;
+    });
+  const overlay=document.createElement('div');
+  overlay.id='coverageModalOverlay';
+  overlay.className='meta-modal-overlay';
+  overlay.innerHTML=`<div class="meta-modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h2 style="margin:0;">${title}</h2>
+      <button class="icon-btn" onclick="document.getElementById('coverageModalOverlay')?.remove()">✕</button>
+    </div>
+    <table class="meta-table" style="margin-bottom:20px;">
+      <thead><tr><th>Cobertura</th><th style="text-align:right;">Total</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="font-size:.95rem;"><td><strong>Total Geral</strong></td><td style="text-align:right;"><strong>${fmtBRL(grandTotal)}</strong></td></tr></tfoot>
+    </table>
+    ${clientRows?`<div style="font-weight:600;margin-bottom:8px;">Por cliente</div>
+    <table class="meta-table">
+      <thead><tr><th>Cliente</th><th>Detalhamento</th><th style="text-align:right;">Total</th></tr></thead>
+      <tbody>${clientRows}</tbody>
+    </table>`:''}
+  </div>`;
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) overlay.remove(); });
+  document.getElementById('coverageModalOverlay')?.remove();
+  document.body.appendChild(overlay);
+}
 function archiveMissingMetaReports(){
   const now=new Date();
   const prevMonth=new Date(now.getFullYear(),now.getMonth()-1,1);
@@ -2401,12 +2451,18 @@ function showClientForm(client, containerId){
       <div><label>Plano</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: VG Flex MAG Seguros"></div>
       <div><label>Valor de cobertura (R$)</label><input type="number" id="cliValorCobertura" step="0.01" min="0" value="${client.valorCobertura||0}"></div>
       <div><label>Valor de contribuição (R$) <span class="muted" style="font-weight:400;">— prêmio mensal</span></label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}"></div>
-      <div><label>Valor segurado (R$)</label><input type="number" id="cliCapitalSegurado" step="0.01" min="0" value="${client.capitalSegurado||(client.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0)||0}"></div>
       <div><label>Valor da angariação (R$)</label><input type="number" id="cliValorAngariacao" step="0.01" min="0" value="${client.valorAngariacao||client.comissaoValor||0}"></div>
       <div><label>Valor da carteira (R$)</label><input type="number" id="cliValorCarteira" step="0.01" min="0" value="${client.valorCarteira||0}"></div>
       <div><label>Banco / Forma de pagamento</label><input type="text" id="cliBanco" value="${esc(client.banco||'')}" placeholder="Ex: Banco do Brasil Ag. 5964 CC 1307-2"></div>
-      <div><label>Sinistros Pagos (R$)</label><div class="input-icon-wrap"><span class="input-icon">R$</span><input type="number" id="cliSinistros" step="0.01" min="0" value="${client.sinistrosPagos||0}" placeholder="0,00"></div></div>
       <div><label>Dia de vencimento</label><input type="text" id="cliDiaVenc" maxlength="2" value="${esc(client.diaVencimento||'')}" placeholder="05"></div>
+
+      <div class="full cli-sec-header" style="margin-top:4px;">🛡️ Capital Segurado por cobertura</div>
+      ${COVERAGE_TYPES.map(t=>`<div><label>${t.label}</label><input type="number" id="cliCap${t.key}" step="0.01" min="0" value="${client['capital'+t.key]||0}" oninput="updateCapSubTotal('cliCap','cliCapTotal')"></div>`).join('')}
+      <div><label>Total Capital Segurado</label><input type="number" id="cliCapTotal" readonly style="background:var(--bg2);" value="${COVERAGE_TYPES.reduce((s,t)=>s+(client['capital'+t.key]||0),0)||client.capitalSegurado||(client.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0)||0}"></div>
+
+      <div class="full cli-sec-header" style="margin-top:4px;">🏥 Sinistros Pagos por cobertura</div>
+      ${COVERAGE_TYPES.map(t=>`<div><label>${t.label}</label><input type="number" id="cliSin${t.key}" step="0.01" min="0" value="${client['sinistros'+t.key]||0}" oninput="updateCapSubTotal('cliSin','cliSinTotal')"></div>`).join('')}
+      <div><label>Total Sinistros Pagos</label><input type="number" id="cliSinTotal" readonly style="background:var(--bg2);" value="${COVERAGE_TYPES.reduce((s,t)=>s+(client['sinistros'+t.key]||0),0)||client.sinistrosPagos||0}"></div>
 
       <!-- Saúde só para PF -->
       <div class="full cli-sec-header" id="hdrSaude" style="${!isPF?'display:none':''}">🏥 Saúde (DPS)</div>
@@ -2450,11 +2506,13 @@ function showClientForm(client, containerId){
         plano:document.getElementById('cliPlano')?.value||'',
         valorCobertura:parseFloat(document.getElementById('cliValorCobertura')?.value)||0,
         valorPagamento:parseFloat(document.getElementById('cliValor')?.value)||0,
-        capitalSegurado:parseFloat(document.getElementById('cliCapitalSegurado')?.value)||0,
         valorAngariacao:parseFloat(document.getElementById('cliValorAngariacao')?.value)||0,
         valorCarteira:parseFloat(document.getElementById('cliValorCarteira')?.value)||0,
+        ...Object.fromEntries(COVERAGE_TYPES.map(t=>['capital'+t.key, parseFloat(document.getElementById('cliCap'+t.key)?.value)||0])),
+        capitalSegurado:parseFloat(document.getElementById('cliCapTotal')?.value)||0,
+        ...Object.fromEntries(COVERAGE_TYPES.map(t=>['sinistros'+t.key, parseFloat(document.getElementById('cliSin'+t.key)?.value)||0])),
+        sinistrosPagos:parseFloat(document.getElementById('cliSinTotal')?.value)||0,
         banco:document.getElementById('cliBanco')?.value||'',
-        sinistrosPagos:parseFloat(document.getElementById('cliSinistros')?.value)||0,
         diaVencimento:document.getElementById('cliDiaVenc')?.value||'',
         observacoesSaude:document.getElementById('cliSaude')?.value||'',
         historico:client.historico||[]
@@ -2499,12 +2557,14 @@ function showClientForm(client, containerId){
       plano: document.getElementById('cliPlano').value.trim(),
       valorCobertura: parseFloat(document.getElementById('cliValorCobertura').value)||0,
       valorPagamento: parseFloat(document.getElementById('cliValor').value)||0,
-      capitalSegurado: parseFloat(document.getElementById('cliCapitalSegurado').value)||0,
       valorAngariacao: parseFloat(document.getElementById('cliValorAngariacao').value)||0,
       comissaoValor: parseFloat(document.getElementById('cliValorAngariacao').value)||0,
       valorCarteira: parseFloat(document.getElementById('cliValorCarteira').value)||0,
+      ...Object.fromEntries(COVERAGE_TYPES.map(t=>['capital'+t.key, parseFloat(document.getElementById('cliCap'+t.key)?.value)||0])),
+      capitalSegurado: parseFloat(document.getElementById('cliCapTotal')?.value)||0,
+      ...Object.fromEntries(COVERAGE_TYPES.map(t=>['sinistros'+t.key, parseFloat(document.getElementById('cliSin'+t.key)?.value)||0])),
+      sinistrosPagos: parseFloat(document.getElementById('cliSinTotal')?.value)||0,
       banco: document.getElementById('cliBanco').value.trim(),
-      sinistrosPagos: parseFloat(document.getElementById('cliSinistros')?.value)||0,
       diaVencimento: document.getElementById('cliDiaVenc').value.trim(),
       observacoesSaude: isPFsub ? document.getElementById('cliSaude').value.trim() : '',
       historico: client.historico||[]
@@ -2650,11 +2710,20 @@ function renderClients(){
           ${(c.produtos&&c.produtos.length>1)?`<div style="font-size:.82rem;color:var(--muted);margin:2px 0 6px 0;">${c.produtos.slice(1).map(p=>esc(p.cobertura||p.nota||'')).filter(Boolean).join(' · ')}</div>`:''}
           ${isOwner?row('Valor de cobertura',c.valorCobertura?fmtBRL(c.valorCobertura):''):''}
           ${row('Valor de contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
-          ${(()=>{const cs=c.capitalSegurado||(c.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0);return isOwner?row('Valor segurado',cs?fmtBRL(cs):''):'';})()}
           ${isOwner?row('Valor da angariação',c.valorAngariacao?fmtBRL(c.valorAngariacao):(c.comissaoValor?fmtBRL(c.comissaoValor):'')):''}
           ${isOwner?row('Valor da carteira',c.valorCarteira?fmtBRL(c.valorCarteira):''):''}
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
         </div>
+        ${isOwner?(()=>{
+          const capLines=COVERAGE_TYPES.filter(t=>c['capital'+t.key]>0).map(t=>`<div class="cdp-row"><div class="cdp-label">${t.label}</div><div class="cdp-value">${fmtBRL(c['capital'+t.key])}</div></div>`).join('');
+          const capTotal=c.capitalSegurado||(c.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0)||0;
+          return capTotal?`<div class="cdp-section cdp-full"><div class="cdp-title">🛡️ Capital Segurado</div>${capLines||''}${row('Total',fmtBRL(capTotal))}</div>`:'';
+        })():''}
+        ${isOwner?(()=>{
+          const sinLines=COVERAGE_TYPES.filter(t=>c['sinistros'+t.key]>0).map(t=>`<div class="cdp-row"><div class="cdp-label">${t.label}</div><div class="cdp-value">${fmtBRL(c['sinistros'+t.key])}</div></div>`).join('');
+          const sinTotal=c.sinistrosPagos||0;
+          return sinTotal?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Sinistros Pagos</div>${sinLines||''}${row('Total',fmtBRL(sinTotal))}</div>`:'';
+        })():''}
         ${isPFc&&c.observacoesSaude?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Saúde (DPS)</div><div class="cdp-value">${esc(c.observacoesSaude)}</div></div>`:''}
         <div class="cdp-section cdp-full">
           <div class="cdp-title">📋 Histórico de Contato (${(c.historico||[]).length})</div>
