@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260706-03';
+  var BUILD='20260706-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1893,14 +1893,23 @@ function activitiesTableHtml(items){
   html+='</tbody></table>';
   return html;
 }
+function isActividadeExecutada(actId){
+  // Verifica se existe alguma ocorrência 'finalizada' para esta atividade
+  if(state.occToday[actId]&&state.occToday[actId].status==='finalizada') return true;
+  return Object.values(state.occRange||{}).some(occ=>occ.activityId===actId&&occ.status==='finalizada');
+}
 function renderActivitiesList(){
-  if(state.activities.length===0){
+  // Filtrar: atividades sem recorrência já executadas não devem aparecer
+  const visibleActivities=state.activities.filter(act=>
+    act.recurrence!=='nenhuma' || !isActividadeExecutada(act.id)
+  );
+  if(visibleActivities.length===0){
     document.getElementById('activitiesList').innerHTML='<div class="empty">Nenhuma atividade cadastrada ainda.</div>';
     return;
   }
   // Agrupar por responsável e ordenar por prioridade (alta > média > baixa)
   const groups={};
-  state.activities.forEach(act=>{
+  visibleActivities.forEach(act=>{
     (groups[act.assignedTo]=groups[act.assignedTo]||[]).push(act);
   });
   let html='';
