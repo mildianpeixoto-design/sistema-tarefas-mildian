@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260706-04';
+  var BUILD='20260706-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1203,6 +1203,7 @@ function subscribeToday(){
   todayUnsubs.push(db.collection('occurrences').where('date','==',ds).onSnapshot(snap=>{
     state.occToday={}; snap.forEach(d=>state.occToday[d.data().activityId]=d.data());
     renderHoje();
+    const _el=document.getElementById('activitiesList');if(_el)renderActivitiesList();
   },err=>console.error(err)));
   todayUnsubs.push(db.collection('timeLogs').where('date','==',ds).onSnapshot(snap=>{
     state.logsToday={}; snap.forEach(d=>state.logsToday[d.data().uid]=d.data());
@@ -1221,6 +1222,7 @@ function subscribeOverdue(){
     state.occRange={};
     snap.forEach(d=>{ const data=d.data(); state.occRange[`${data.date}_${data.activityId}`]=data; });
     renderHoje();
+    const _el2=document.getElementById('activitiesList');if(_el2)renderActivitiesList();
   },err=>console.error(err)));
 }
 function computeOverdue(){
@@ -1317,7 +1319,9 @@ function setStatus(actId,status){
         // Atividade única: remove do cadastro após finalizar (ocorrência fica no histórico/relatório)
         const act=state.activities.find(a=>a.id===actId);
         if(act&&act.recurrence==='nenhuma'){
-          db.collection('activities').doc(actId).delete().catch(()=>{});
+          // Marca finalizada no doc antes de deletar; se o delete falhar, o filtro da aba Atividades ainda oculta a tarefa
+          db.collection('activities').doc(actId).set({finalizada:true},{merge:true})
+            .finally(()=>db.collection('activities').doc(actId).delete().catch(()=>{}));
         }
       }
       else if(status==='pendente') showToast('↺ Tarefa reaberta');
@@ -1894,14 +1898,15 @@ function activitiesTableHtml(items){
   return html;
 }
 function isActividadeExecutada(actId){
-  // Verifica se existe alguma ocorrência 'finalizada' para esta atividade
-  if(state.occToday[actId]&&state.occToday[actId].status==='finalizada') return true;
+  // Verifica se existe alguma ocorrência 'finalizada' para esta atividade (fallback: últimos 7 dias)
+  const occToday=state.occToday||{};
+  if(occToday[actId]&&occToday[actId].status==='finalizada') return true;
   return Object.values(state.occRange||{}).some(occ=>occ.activityId===actId&&occ.status==='finalizada');
 }
 function renderActivitiesList(){
-  // Filtrar: atividades sem recorrência já executadas não devem aparecer
+  // Filtrar: atividades sem recorrência já executadas (flag finalizada OU ocorrência encontrada)
   const visibleActivities=state.activities.filter(act=>
-    act.recurrence!=='nenhuma' || !isActividadeExecutada(act.id)
+    act.recurrence!=='nenhuma' || (act.finalizada!==true && !isActividadeExecutada(act.id))
   );
   if(visibleActivities.length===0){
     document.getElementById('activitiesList').innerHTML='<div class="empty">Nenhuma atividade cadastrada ainda.</div>';
