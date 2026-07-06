@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-13';
+  var BUILD='20260701-14';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3304,21 +3304,19 @@ function renderFunil(){
             ${isOwner?`<button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>`:''}
             ${isOwner&&stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
           </div>
-          ${!isOwner?`
-            <select onchange="moveLead('${l.id}',this.value)">
-              ${STAGE_ORDER.map(s=>`<option value="${s}" ${l.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
-            </select>
-            <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
-            ${expandedLeadHist.has(l.id)?`
-              <div class="hist-list" style="margin-top:6px;">
-                ${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}
-                <div class="row" style="margin-top:6px;">
-                  <input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadHistorico('${l.id}')}">
-                  <button class="btn" onclick="addLeadHistorico('${l.id}')">Salvar</button>
-                </div>
+          <select onchange="moveLead('${l.id}',this.value)">
+            ${STAGE_ORDER.map(s=>`<option value="${s}" ${l.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
+          </select>
+          <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
+          ${expandedLeadHist.has(l.id)?`
+            <div class="hist-list" style="margin-top:6px;">
+              ${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}
+              <div class="row" style="margin-top:6px;">
+                <input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadHistorico('${l.id}')}">
+                <button class="btn" onclick="addLeadHistorico('${l.id}')">Salvar</button>
               </div>
-            `:''}
-          `}
+            </div>
+          `:''}
         </div>
         `:''}
       </div>`;
@@ -3326,13 +3324,11 @@ function renderFunil(){
     html+='</div>';
   });
   document.getElementById('funilBoard').innerHTML=html;
-  if(isOwner){
-    expandedLeadCard.forEach(id=>{
-      const l=state.leads.find(x=>x.id===id);
-      const wrap=document.getElementById('leadEditWrap-'+id);
-      if(l&&wrap) showLeadForm(l,'leadEditWrap-'+id);
-    });
-  }
+  expandedLeadCard.forEach(id=>{
+    const l=state.leads.find(x=>x.id===id);
+    const wrap=document.getElementById('leadEditWrap-'+id);
+    if(l&&wrap) showLeadForm(l,'leadEditWrap-'+id);
+  });
 }
 document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
 
