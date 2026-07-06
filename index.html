@@ -2742,7 +2742,14 @@ function renderClients(){
       if(isOpen && editingClientId===c.id){
         h+=`<div class="client-detail-panel"><div id="clientEditWrap-${c.id}"></div></div>`;
       } else if(isOpen){
-        const plano=[c.plano,c.coberturas].filter(Boolean).join(' — ');
+        // Pre-compute coberturas HTML (avoids deeply nested template literals)
+        const _dispCobs=c.coberturas&&c.coberturas.length>0?c.coberturas:
+          (c.plano||c.valorPagamento?[{plano:c.plano||'',valorPlano:c.valorPagamento||0,percentCarteira:0,valorCarteira:c.valorCarteira||0}]:[]);
+        const _cobHtml=_dispCobs.map(function(cob){
+          const cartLabel=isOwner&&cob.valorCarteira?' <span style="color:var(--muted);font-size:.82em;">· carteira '+fmtBRL(cob.valorCarteira)+'</span>':'';
+          return '<div class="cdp-row"><div class="cdp-label">'+esc(cob.plano||'Plano')+'</div><div class="cdp-value">'+fmtBRL(cob.valorPlano||0)+'/mês'+cartLabel+'</div></div>';
+        }).join('');
+        const _angLabel=isOwner&&(c.valorAngariacao||c.comissaoValor)?fmtBRL(c.valorAngariacao||c.comissaoValor||0)+(c.percentAngariacao?' ('+c.percentAngariacao+'%)':''):'';
         const waTel=c.telefone?`${esc(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;margin-left:4px;">WhatsApp ↗</a>`:'';
         const mailLink=c.email?`${esc(c.email)} <a href="mailto:${esc(c.email)}" style="color:var(--gold);text-decoration:none;margin-left:4px;">Enviar ↗</a>`:'';
         h+=`<div class="client-detail-panel"><div class="cdp-grid">`;
@@ -2773,13 +2780,9 @@ function renderClients(){
         <div class="cdp-section cdp-full">
           <div class="cdp-title">🛡️ Produtos Contratados</div>
           ${row('Nº proposta',c.numeroProposta)}
-          ${(()=>{
-            const cobs=c.coberturas&&c.coberturas.length>0?c.coberturas:
-              (c.plano||c.valorPagamento?[{plano:c.plano||'',valorPlano:c.valorPagamento||0,percentCarteira:0,valorCarteira:c.valorCarteira||0}]:[]);
-            return cobs.map(cob=>`<div class="cdp-row"><div class="cdp-label">${esc(cob.plano||'Plano')}</div><div class="cdp-value">${fmtBRL(cob.valorPlano||0)}/mês${isOwner&&cob.valorCarteira?` <span style="color:var(--muted);font-size:.82em;">· carteira ${fmtBRL(cob.valorCarteira)}</span>`:''}</div></div>`).join('');
-          })()}
+          ${_cobHtml}
           ${row('Total contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
-          ${isOwner?row('Angariação',(c.valorAngariacao||c.comissaoValor)?fmtBRL(c.valorAngariacao||c.comissaoValor||0)+(c.percentAngariacao?` (${c.percentAngariacao}%)`:''):''):''}
+          ${isOwner?row('Angariação',_angLabel):''}
           ${isOwner&&c.valorCarteira?row('Carteira total',fmtBRL(c.valorCarteira)+'/mês'):''}
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
         </div>
