@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-14';
+  var BUILD='20260701-15';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -329,6 +329,15 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .pdf-loading-card{background:var(--card);border-radius:16px;padding:40px 56px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.25);}
 .pdf-loading-spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 18px;}
 .cli-sec-header{color:var(--gold);font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:4px;margin-bottom:2px;}
+.cob-row{display:flex;gap:6px;align-items:flex-end;margin-bottom:8px;flex-wrap:wrap;}
+.cob-f-plano{flex:2;min-width:130px;}
+.cob-f-valor,.cob-f-pct,.cob-f-cart{flex:1;min-width:75px;}
+.cob-f-rm{width:28px;display:flex;align-items:flex-end;padding-bottom:2px;}
+.btn-rm{background:none;border:none;color:var(--danger,#c0392b);cursor:pointer;font-size:1rem;padding:3px 6px;border-radius:4px;}
+.btn-rm:hover{background:rgba(192,57,43,.1);}
+.cob-summary-row{display:flex;gap:6px;margin-top:4px;padding-top:10px;border-top:2px dashed var(--border);flex-wrap:wrap;}
+.cob-f-total{flex:2;min-width:130px;}
+.cob-f-ang-pct,.cob-f-ang-val{flex:1;min-width:75px;}
 .hidden-group{display:none!important;}
 .contents-wrap{display:contents;}
 /* ---- Client section header ---- */
@@ -2070,6 +2079,52 @@ function updateCapSubTotal(prefix, totalId){
   const el=document.getElementById(totalId);
   if(el) el.value=total.toFixed(2);
 }
+function recalcCobRow(inp){
+  const row=inp.closest('.cob-row');
+  if(!row) return;
+  const valor=parseFloat(row.querySelector('.cob-valor')?.value)||0;
+  const pct=parseFloat(row.querySelector('.cob-pct')?.value)||0;
+  const cartEl=row.querySelector('.cob-cart');
+  if(cartEl) cartEl.value=(valor*pct/100).toFixed(2);
+  recalcAngariacao();
+}
+function recalcAngariacao(){
+  let total=0;
+  document.querySelectorAll('#cliCoberturasWrap .cob-row').forEach(r=>{
+    total+=parseFloat(r.querySelector('.cob-valor')?.value)||0;
+  });
+  const totEl=document.getElementById('cliValor');
+  if(totEl) totEl.value=total.toFixed(2);
+  const pct=parseFloat(document.getElementById('cliPctAngariacao')?.value)||0;
+  const angEl=document.getElementById('cliValorAngariacao');
+  if(angEl) angEl.value=(total*pct/100).toFixed(2);
+}
+function addCoberturaRow(){
+  const wrap=document.getElementById('cliCoberturasWrap');
+  if(!wrap) return;
+  const div=document.createElement('div');
+  div.className='cob-row';
+  div.innerHTML=`<div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" placeholder="Nome do plano"></div><div class="cob-f-valor"><label>Valor R$</label><input type="number" class="cob-valor" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="0" readonly style="background:var(--bg2)"></div><div class="cob-f-rm"><button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button></div>`;
+  wrap.appendChild(div);
+  div.querySelector('.cob-plano').focus();
+}
+function removeCoberturaRow(btn){
+  const row=btn.closest('.cob-row');
+  if(!row) return;
+  row.remove();
+  recalcAngariacao();
+}
+function getCoberturas(){
+  const result=[];
+  document.querySelectorAll('#cliCoberturasWrap .cob-row').forEach(r=>{
+    const plano=(r.querySelector('.cob-plano')?.value||'').trim();
+    const valorPlano=parseFloat(r.querySelector('.cob-valor')?.value)||0;
+    const percentCarteira=parseFloat(r.querySelector('.cob-pct')?.value)||0;
+    const valorCarteira=parseFloat(r.querySelector('.cob-cart')?.value)||0;
+    result.push({plano,valorPlano,percentCarteira,valorCarteira});
+  });
+  return result.length>0?result:[{plano:'',valorPlano:0,percentCarteira:0,valorCarteira:0}];
+}
 function showCoverageModal(type){
   const isSin=type==='sinistros';
   const title=isSin?'🏥 Sinistros Pagos':'🛡️ Capital Segurado';
@@ -2395,8 +2450,14 @@ function showClientForm(client, containerId){
     else { document.getElementById('clientFormWrap').innerHTML=''; }
   }
   const isEdit=!!(client&&client.id);
-  client=client||{id:null,tipo:'PF',nome:'',cpf:'',cnpj:'',responsavel:'',cargo:'',telefone:'',email:'',dataNascimento:'',sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',segmento:'',rendaMensal:'',empresa:'',endereco:'',numeroProposta:'',plano:'',valorCobertura:0,valorPagamento:0,capitalSegurado:0,valorAngariacao:0,valorCarteira:0,banco:'',diaVencimento:'',observacoesSaude:'',historico:[]};
+  client=client||{id:null,tipo:'PF',nome:'',cpf:'',cnpj:'',responsavel:'',cargo:'',telefone:'',email:'',dataNascimento:'',sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',segmento:'',rendaMensal:'',empresa:'',endereco:'',numeroProposta:'',coberturas:[],plano:'',valorPagamento:0,percentAngariacao:0,valorAngariacao:0,valorCarteira:0,banco:'',diaVencimento:'',observacoesSaude:'',historico:[]};
   const tipo=client.tipo||'PF';
+  // Backward compat: if no coberturas array, seed from old single-field data
+  const _initCobs=(client.coberturas&&client.coberturas.length>0)?client.coberturas:
+    (client.plano||client.valorPagamento?[{plano:client.plano||'',valorPlano:client.valorPagamento||0,percentCarteira:0,valorCarteira:client.valorCarteira||0}]:[{plano:'',valorPlano:0,percentCarteira:0,valorCarteira:0}]);
+  const _initTotal=_initCobs.reduce((s,c)=>s+(c.valorPlano||0),0);
+  const _initPctAng=client.percentAngariacao||0;
+  const _initValAng=client.valorAngariacao||client.comissaoValor||0;
   const isPF=tipo==='PF';
   document.getElementById(containerId).innerHTML=`
     <form class="form-grid" id="clientForm">
@@ -2449,11 +2510,13 @@ function showClientForm(client, containerId){
       <div class="full cli-sec-header">🛡️ Produtos Contratados</div>
       <div><label>Nº da proposta (principal)</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
       <div><label>Data da proposta <span class="muted" style="font-weight:400;">— deixe em branco para usar hoje</span></label><input type="date" id="cliDataProposta" value="${client.createdAt?(client.createdAt.toDate?client.createdAt.toDate():new Date((client.createdAt.seconds||0)*1000)).toISOString().slice(0,10):new Date().toISOString().slice(0,10)}"></div>
-      <div><label>Plano</label><input type="text" id="cliPlano" value="${esc(client.plano||'')}" placeholder="Ex: VG Flex MAG Seguros"></div>
-      <div><label>Valor de cobertura (R$)</label><input type="number" id="cliValorCobertura" step="0.01" min="0" value="${client.valorCobertura||0}"></div>
-      <div><label>Valor de contribuição (R$) <span class="muted" style="font-weight:400;">— prêmio mensal</span></label><input type="number" id="cliValor" step="0.01" min="0" value="${client.valorPagamento||0}"></div>
-      <div><label>Valor da angariação (R$)</label><input type="number" id="cliValorAngariacao" step="0.01" min="0" value="${client.valorAngariacao||client.comissaoValor||0}"></div>
-      <div><label>Valor da carteira (R$)</label><input type="number" id="cliValorCarteira" step="0.01" min="0" value="${client.valorCarteira||0}"></div>
+      <div class="full" id="cliCoberturasWrap">${_initCobs.map((cob,idx)=>`<div class="cob-row"><div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" value="${esc(cob.plano||'')}" placeholder="Nome do plano"></div><div class="cob-f-valor"><label>Valor R$</label><input type="number" class="cob-valor" step="0.01" min="0" value="${cob.valorPlano||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="${cob.percentCarteira||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="${(cob.valorCarteira||0).toFixed(2)}" readonly style="background:var(--bg2)"></div><div class="cob-f-rm">${idx>0?'<button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button>':''}</div></div>`).join('')}</div>
+      <div class="full" style="padding:0 0 4px 0;"><button type="button" class="btn" style="font-size:.83rem;padding:4px 12px;" onclick="addCoberturaRow()">+ Adicionar cobertura</button></div>
+      <div class="full cob-summary-row">
+        <div class="cob-f-total"><label>Total contribuição (R$)</label><input type="number" id="cliValor" readonly style="background:var(--bg2);" value="${_initTotal.toFixed(2)}"></div>
+        <div class="cob-f-ang-pct"><label>% angariação</label><input type="number" id="cliPctAngariacao" step="0.01" min="0" value="${_initPctAng}" oninput="recalcAngariacao()"></div>
+        <div class="cob-f-ang-val"><label>Angariação R$</label><input type="number" id="cliValorAngariacao" readonly style="background:var(--bg2);" value="${_initValAng}"></div>
+      </div>
       <div><label>Banco / Forma de pagamento</label><input type="text" id="cliBanco" value="${esc(client.banco||'')}" placeholder="Ex: Banco do Brasil Ag. 5964 CC 1307-2"></div>
       <div><label>Dia de vencimento</label><input type="text" id="cliDiaVenc" maxlength="2" value="${esc(client.diaVencimento||'')}" placeholder="05"></div>
 
@@ -2504,11 +2567,12 @@ function showClientForm(client, containerId){
         rendaMensal:parseFloat(document.getElementById('cliRendaMensal')?.value)||0,
         endereco:document.getElementById('cliEndereco')?.value||'',
         numeroProposta:document.getElementById('cliNumeroProposta')?.value||'',
-        plano:document.getElementById('cliPlano')?.value||'',
-        valorCobertura:parseFloat(document.getElementById('cliValorCobertura')?.value)||0,
+        coberturas:getCoberturas(),
+        plano:(getCoberturas()[0]?.plano||''),
         valorPagamento:parseFloat(document.getElementById('cliValor')?.value)||0,
+        percentAngariacao:parseFloat(document.getElementById('cliPctAngariacao')?.value)||0,
         valorAngariacao:parseFloat(document.getElementById('cliValorAngariacao')?.value)||0,
-        valorCarteira:parseFloat(document.getElementById('cliValorCarteira')?.value)||0,
+        valorCarteira:getCoberturas().reduce((s,c)=>s+(c.valorCarteira||0),0),
         ...Object.fromEntries(COVERAGE_TYPES.map(t=>['capital'+t.key, parseFloat(document.getElementById('cliCap'+t.key)?.value)||0])),
         capitalSegurado:parseFloat(document.getElementById('cliCapTotal')?.value)||0,
         ...Object.fromEntries(COVERAGE_TYPES.map(t=>['sinistros'+t.key, parseFloat(document.getElementById('cliSin'+t.key)?.value)||0])),
@@ -2555,12 +2619,13 @@ function showClientForm(client, containerId){
       rendaMensal: isPFsub ? parseFloat(document.getElementById('cliRendaMensal').value)||0 : 0,
       endereco: document.getElementById('cliEndereco').value.trim(),
       numeroProposta: document.getElementById('cliNumeroProposta').value.trim(),
-      plano: document.getElementById('cliPlano').value.trim(),
-      valorCobertura: parseFloat(document.getElementById('cliValorCobertura').value)||0,
-      valorPagamento: parseFloat(document.getElementById('cliValor').value)||0,
-      valorAngariacao: parseFloat(document.getElementById('cliValorAngariacao').value)||0,
-      comissaoValor: parseFloat(document.getElementById('cliValorAngariacao').value)||0,
-      valorCarteira: parseFloat(document.getElementById('cliValorCarteira').value)||0,
+      coberturas: getCoberturas(),
+      plano: (getCoberturas()[0]?.plano||''),
+      valorPagamento: parseFloat(document.getElementById('cliValor')?.value)||0,
+      percentAngariacao: parseFloat(document.getElementById('cliPctAngariacao')?.value)||0,
+      valorAngariacao: parseFloat(document.getElementById('cliValorAngariacao')?.value)||0,
+      comissaoValor: parseFloat(document.getElementById('cliValorAngariacao')?.value)||0,
+      valorCarteira: getCoberturas().reduce((s,c)=>s+(c.valorCarteira||0),0),
       ...Object.fromEntries(COVERAGE_TYPES.map(t=>['capital'+t.key, parseFloat(document.getElementById('cliCap'+t.key)?.value)||0])),
       capitalSegurado: parseFloat(document.getElementById('cliCapTotal')?.value)||0,
       ...Object.fromEntries(COVERAGE_TYPES.map(t=>['sinistros'+t.key, parseFloat(document.getElementById('cliSin'+t.key)?.value)||0])),
@@ -2707,12 +2772,15 @@ function renderClients(){
         </div>
         <div class="cdp-section cdp-full">
           <div class="cdp-title">🛡️ Produtos Contratados</div>
-          ${row('Nº proposta',c.numeroProposta)}${row('Plano',c.plano||(c.produtos&&c.produtos[0]&&c.produtos[0].cobertura)||'')}
-          ${(c.produtos&&c.produtos.length>1)?`<div style="font-size:.82rem;color:var(--muted);margin:2px 0 6px 0;">${c.produtos.slice(1).map(p=>esc(p.cobertura||p.nota||'')).filter(Boolean).join(' · ')}</div>`:''}
-          ${isOwner?row('Valor de cobertura',c.valorCobertura?fmtBRL(c.valorCobertura):''):''}
-          ${row('Valor de contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
-          ${isOwner?row('Valor da angariação',c.valorAngariacao?fmtBRL(c.valorAngariacao):(c.comissaoValor?fmtBRL(c.comissaoValor):'')):''}
-          ${isOwner?row('Valor da carteira',c.valorCarteira?fmtBRL(c.valorCarteira):''):''}
+          ${row('Nº proposta',c.numeroProposta)}
+          ${(()=>{
+            const cobs=c.coberturas&&c.coberturas.length>0?c.coberturas:
+              (c.plano||c.valorPagamento?[{plano:c.plano||'',valorPlano:c.valorPagamento||0,percentCarteira:0,valorCarteira:c.valorCarteira||0}]:[]);
+            return cobs.map(cob=>`<div class="cdp-row"><div class="cdp-label">${esc(cob.plano||'Plano')}</div><div class="cdp-value">${fmtBRL(cob.valorPlano||0)}/mês${isOwner&&cob.valorCarteira?` <span style="color:var(--muted);font-size:.82em;">· carteira ${fmtBRL(cob.valorCarteira)}</span>`:''}</div></div>`).join('');
+          })()}
+          ${row('Total contribuição',c.valorPagamento?fmtBRL(c.valorPagamento)+'/mês':'')}
+          ${isOwner?row('Angariação',(c.valorAngariacao||c.comissaoValor)?fmtBRL(c.valorAngariacao||c.comissaoValor||0)+(c.percentAngariacao?` (${c.percentAngariacao}%)`:''):''):''}
+          ${isOwner&&c.valorCarteira?row('Carteira total',fmtBRL(c.valorCarteira)+'/mês'):''}
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
         </div>
         ${isOwner?(()=>{
@@ -3235,7 +3303,7 @@ function convertLeadToClient(id){
   if(!l) return;
   switchTab('clientes');
   selecionarTipoCliente('PF');
-  showClientForm({id:null,nome:l.nome,cpf:'',telefone:l.telefone||l.contato||'',email:l.email||'',dataNascimento:'',endereco:'',plano:'',valorCobertura:0,valorPagamento:l.valorEstimado||0,capitalSegurado:0,valorAngariacao:0,valorCarteira:0,historico:l.historico||[]});
+  showClientForm({id:null,nome:l.nome,cpf:'',telefone:l.telefone||l.contato||'',email:l.email||'',dataNascimento:'',endereco:'',plano:'',coberturas:[{plano:'',valorPlano:l.valorEstimado||0,percentCarteira:0,valorCarteira:0}],valorPagamento:l.valorEstimado||0,percentAngariacao:0,valorAngariacao:0,valorCarteira:0,historico:l.historico||[]});
 }
 function convertClientToLead(id){
   const c=state.clients.find(x=>x.id===id);
