@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260701-15';
+  var BUILD='20260706-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2453,7 +2453,7 @@ function showClientForm(client, containerId){
   client=client||{id:null,tipo:'PF',nome:'',cpf:'',cnpj:'',responsavel:'',cargo:'',telefone:'',email:'',dataNascimento:'',sexo:'',estadoCivil:'',numFilhos:'',ocupacao:'',segmento:'',rendaMensal:'',empresa:'',endereco:'',numeroProposta:'',coberturas:[],plano:'',valorPagamento:0,percentAngariacao:0,valorAngariacao:0,valorCarteira:0,banco:'',diaVencimento:'',observacoesSaude:'',historico:[]};
   const tipo=client.tipo||'PF';
   // Backward compat: if no coberturas array, seed from old single-field data
-  const _initCobs=(client.coberturas&&client.coberturas.length>0)?client.coberturas:
+  const _initCobs=(Array.isArray(client.coberturas)&&client.coberturas.length>0)?client.coberturas:
     (client.plano||client.valorPagamento?[{plano:client.plano||'',valorPlano:client.valorPagamento||0,percentCarteira:0,valorCarteira:client.valorCarteira||0}]:[{plano:'',valorPlano:0,percentCarteira:0,valorCarteira:0}]);
   const _initTotal=_initCobs.reduce((s,c)=>s+(c.valorPlano||0),0);
   const _initPctAng=client.percentAngariacao||0;
@@ -2743,7 +2743,7 @@ function renderClients(){
         h+=`<div class="client-detail-panel"><div id="clientEditWrap-${c.id}"></div></div>`;
       } else if(isOpen){
         // Pre-compute coberturas HTML (avoids deeply nested template literals)
-        const _dispCobs=c.coberturas&&c.coberturas.length>0?c.coberturas:
+        const _dispCobs=(Array.isArray(c.coberturas)&&c.coberturas.length>0)?c.coberturas:
           (c.plano||c.valorPagamento?[{plano:c.plano||'',valorPlano:c.valorPagamento||0,percentCarteira:0,valorCarteira:c.valorCarteira||0}]:[]);
         const _cobHtml=_dispCobs.map(function(cob){
           const cartLabel=isOwner&&cob.valorCarteira?' <span style="color:var(--muted);font-size:.82em;">· carteira '+fmtBRL(cob.valorCarteira)+'</span>':'';
