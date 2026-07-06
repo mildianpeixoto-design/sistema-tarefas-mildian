@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260706-01';
+  var BUILD='20260706-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -469,6 +469,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       </div>
       <span id="clientSearchCount" style="color:var(--text-muted);font-size:.88rem;align-self:center;white-space:nowrap;"></span>
     </div>
+    <div id="cobFiltroBar" style="margin:6px 0 8px;"></div>
     <div id="clientFormWrap"></div>
     <div id="clientsList"></div>
   </div>
@@ -875,6 +876,8 @@ let clientSearchQuery='';
 let selectedClientId=null;
 let editingClientId=null;
 let clientesTipoFiltro=null; // null=selector, 'PF' ou 'PJ'
+let coberturaFiltro=null; // null=todas, ou key: 'Dit','Morte','Invalidez','DG','Cirurgias'
+let coberturaFiltroMode='tem'; // 'tem' ou 'naoTem'
 let creatingActivityForClientId=null;
 let expandedActDetail=new Set();
 let expandedHojeGroups=new Set();
@@ -2664,6 +2667,15 @@ function deleteClient(id){
   if(!confirm('Excluir este cliente?')) return;
   db.collection('clients').doc(id).delete().catch(err=>alert('Erro: '+err.message));
 }
+function setCoberturaFiltro(key){
+  coberturaFiltro=(coberturaFiltro===key)?null:key;
+  if(coberturaFiltro) coberturaFiltroMode='tem';
+  renderClients();
+}
+function setCoberturaFiltroMode(mode){
+  coberturaFiltroMode=mode;
+  renderClients();
+}
 function filterClients(q){
   clientSearchQuery=q.trim().toLowerCase();
   // preserve the search box value and re-render
@@ -2692,7 +2704,7 @@ function renderClients(){
   if(searchBox && searchBox.value!==clientSearchQuery && document.activeElement!==searchBox) searchBox.value=clientSearchQuery;
   // filter
   const q=clientSearchQuery;
-  const filtered = q
+  let filtered = q
     ? activeClients.filter(c=>{
         const textHaystack=[c.nome,c.cpf,c.cnpj,c.telefone].filter(Boolean).join(' ').toLowerCase();
         if(textHaystack.includes(q)) return true;
@@ -2705,15 +2717,41 @@ function renderClients(){
       })
     : activeClients;
   // update count label
+  // Render cobertura filter bar
+  const cobFiltroEl=document.getElementById('cobFiltroBar');
+  if(cobFiltroEl){
+    let fbar='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:2px 0;">';
+    fbar+='<span style="font-size:.82rem;color:var(--text2);white-space:nowrap;">🔎 Cobertura:</span>';
+    COVERAGE_TYPES.forEach(t=>{
+      const active=coberturaFiltro===t.key;
+      fbar+=`<button onclick="setCoberturaFiltro('${t.key}')" class="btn" style="font-size:.78rem;padding:3px 10px;${active?'background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700;':''}">${t.label}</button>`;
+    });
+    if(coberturaFiltro){
+      fbar+='<span style="margin:0 2px;color:var(--border)">|</span>';
+      fbar+=`<button onclick="setCoberturaFiltroMode('tem')" class="btn" style="font-size:.78rem;padding:3px 10px;${coberturaFiltroMode==='tem'?'background:#27ae60;color:#fff;border-color:#27ae60;font-weight:700;':''}">✅ Tem</button>`;
+      fbar+=`<button onclick="setCoberturaFiltroMode('naoTem')" class="btn" style="font-size:.78rem;padding:3px 10px;${coberturaFiltroMode==='naoTem'?'background:var(--amber,#e67e22);color:#fff;border-color:var(--amber,#e67e22);font-weight:700;':''}">❌ Não tem</button>`;
+      fbar+=`<button onclick="setCoberturaFiltro(null)" class="btn" style="font-size:.78rem;padding:3px 8px;color:var(--text2);" title="Limpar filtro">✕</button>`;
+    }
+    fbar+='</div>';
+    cobFiltroEl.innerHTML=fbar;
+  }
+  // Apply cobertura filter
+  if(coberturaFiltro){
+    filtered=filtered.filter(c=>{
+      const hasIt=(c['capital'+coberturaFiltro]||0)>0;
+      return coberturaFiltroMode==='tem'?hasIt:!hasIt;
+    });
+  }
   const countEl=document.getElementById('clientSearchCount');
-  if(countEl) countEl.textContent = q ? `${filtered.length} de ${total} cliente${total!==1?'s':''}` : '';
+  if(countEl) countEl.textContent = (q||coberturaFiltro) ? `${filtered.length} de ${total} cliente${total!==1?'s':''}` : '';
   const listEl=document.getElementById('clientsList');
   if(total===0){
     listEl.innerHTML='<div class="empty">Nenhum cliente cadastrado ainda.</div>';
     return;
   }
   if(filtered.length===0){
-    listEl.innerHTML=`<div class="empty">Nenhum cliente encontrado para "<strong>${esc(clientSearchQuery)}</strong>".</div>`;
+    const msgFiltro=coberturaFiltro?` com filtro de cobertura`:'';
+    listEl.innerHTML=`<div class="empty">Nenhum cliente encontrado${msgFiltro}.</div>`;
     return;
   }
   // ---- Separar PF e PJ ----
