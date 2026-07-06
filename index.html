@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260706-02';
+  var BUILD='20260706-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -816,7 +816,21 @@ function markContatoFeito(id){
 
 /* ====================== Constantes: Clientes e Funil ====================== */
 const COMMISSION_OPTIONS=[5,6,9,10,12,14,14.16,15,17,20,25,29,30,33.33,35,40,50,70,100,150,200];
-const COVERAGE_TYPES=[{key:'Dit',label:'DIT'},{key:'Morte',label:'Morte'},{key:'Invalidez',label:'Invalidez'},{key:'DG',label:'Doenças Graves'},{key:'Cirurgias',label:'Cirurgias'}];
+const COVERAGE_TYPES=[
+  {key:'Dit',label:'DIT'},
+  {key:'Morte',label:'Morte'},
+  {key:'Invalidez',label:'Invalidez'},
+  {key:'DG',label:'Doenças Graves'},
+  {key:'Cirurgias',label:'Cirurgias'},
+  {key:'Saf',label:'SAF'},
+  {key:'AssistResidencial',label:'Assist. Residencial'},
+  {key:'AssistPet',label:'Assist. Pet'},
+  {key:'Pensao',label:'Pensão'},
+  {key:'RendaInvalidez',label:'Renda Invalidez'},
+  {key:'Dih',label:'DIH'},
+  {key:'Pgbl',label:'PGBL'},
+  {key:'Vgbl',label:'VGBL'}
+];
 const SEGUROS_LIST=[
   'PGBL PRIVATE FREE 812','VGBL PRIVATE FREE 813',
   'PGBL VIDA TODA 1800','VGBL VIDA TODA 1801','PGBL PRIVATE 1808','VGBL PRIVATE 1809','PGBL PRIVATE TOP 1810','VGBL PRIVATE TOP 1811',
