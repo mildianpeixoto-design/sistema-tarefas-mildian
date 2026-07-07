@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260707-06';
+  var BUILD='20260707-07';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2154,6 +2154,41 @@ function updateCapSubTotal(prefix, totalId){
   const el=document.getElementById(totalId);
   if(el) el.value=total.toFixed(2);
 }
+function recalcCapTotal(){
+  const total=[...document.querySelectorAll('#cliCapDynamicWrap .cob-cap-inp')].reduce((s,i)=>s+(parseFloat(i.value)||0),0);
+  const el=document.getElementById('cliCapTotal');
+  if(el) el.value=total.toFixed(2);
+}
+function recalcSinTotal(){
+  const total=[...document.querySelectorAll('#cliSinDynamicWrap .cob-sin-inp')].reduce((s,i)=>s+(parseFloat(i.value)||0),0);
+  const el=document.getElementById('cliSinTotal');
+  if(el) el.value=total.toFixed(2);
+}
+function syncCapitalSinistros(){
+  const capWrap=document.getElementById('cliCapDynamicWrap');
+  const sinWrap=document.getElementById('cliSinDynamicWrap');
+  if(!capWrap&&!sinWrap) return;
+  const rows=[...document.querySelectorAll('#cliCoberturasWrap .cob-row')];
+  const prevCaps=[...document.querySelectorAll('#cliCapDynamicWrap .cob-cap-inp')].map(i=>parseFloat(i.value)||0);
+  const prevSins=[...document.querySelectorAll('#cliSinDynamicWrap .cob-sin-inp')].map(i=>parseFloat(i.value)||0);
+  const empty='<div style="color:var(--muted);font-size:.85rem;padding:4px 0;">Adicione produtos acima para preencher.</div>';
+  if(capWrap){
+    capWrap.innerHTML=rows.length?rows.map((row,idx)=>{
+      const plano=row.querySelector('.cob-plano')?.value.trim()||('Produto '+(idx+1));
+      const val=prevCaps.length>idx?prevCaps[idx]:(parseFloat(row.dataset.cap)||0);
+      return `<div><label>${esc(plano)}</label><input type="number" class="cob-cap-inp" step="0.01" min="0" value="${val}" oninput="recalcCapTotal()"></div>`;
+    }).join(''):empty;
+  }
+  if(sinWrap){
+    sinWrap.innerHTML=rows.length?rows.map((row,idx)=>{
+      const plano=row.querySelector('.cob-plano')?.value.trim()||('Produto '+(idx+1));
+      const val=prevSins.length>idx?prevSins[idx]:(parseFloat(row.dataset.sin)||0);
+      return `<div><label>${esc(plano)}</label><input type="number" class="cob-sin-inp" step="0.01" min="0" value="${val}" oninput="recalcSinTotal()"></div>`;
+    }).join(''):empty;
+  }
+  recalcCapTotal();
+  recalcSinTotal();
+}
 function recalcCobRow(inp){
   const row=inp.closest('.cob-row');
   if(!row) return;
@@ -2179,8 +2214,11 @@ function addCoberturaRow(){
   if(!wrap) return;
   const div=document.createElement('div');
   div.className='cob-row';
-  div.innerHTML=`<div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" placeholder="Nome do plano"></div><div class="cob-f-valor"><label>Valor R$</label><input type="number" class="cob-valor" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="0" readonly style="background:var(--bg2)"></div><div class="cob-f-rm"><button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button></div>`;
+  div.dataset.cap='0';
+  div.dataset.sin='0';
+  div.innerHTML=`<div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="number" class="cob-valor" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="0" readonly style="background:var(--bg2)"></div><div class="cob-f-rm"><button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button></div>`;
   wrap.appendChild(div);
+  syncCapitalSinistros();
   div.querySelector('.cob-plano').focus();
 }
 function removeCoberturaRow(btn){
@@ -2188,17 +2226,22 @@ function removeCoberturaRow(btn){
   if(!row) return;
   row.remove();
   recalcAngariacao();
+  syncCapitalSinistros();
 }
 function getCoberturas(){
   const result=[];
-  document.querySelectorAll('#cliCoberturasWrap .cob-row').forEach(r=>{
+  const capInputs=[...document.querySelectorAll('#cliCapDynamicWrap .cob-cap-inp')];
+  const sinInputs=[...document.querySelectorAll('#cliSinDynamicWrap .cob-sin-inp')];
+  document.querySelectorAll('#cliCoberturasWrap .cob-row').forEach((r,idx)=>{
     const plano=(r.querySelector('.cob-plano')?.value||'').trim();
     const valorPlano=parseFloat(r.querySelector('.cob-valor')?.value)||0;
     const percentCarteira=parseFloat(r.querySelector('.cob-pct')?.value)||0;
     const valorCarteira=parseFloat(r.querySelector('.cob-cart')?.value)||0;
-    result.push({plano,valorPlano,percentCarteira,valorCarteira});
+    const capitalSegurado=parseFloat(capInputs[idx]?.value)||0;
+    const sinistrosPagos=parseFloat(sinInputs[idx]?.value)||0;
+    result.push({plano,valorPlano,percentCarteira,valorCarteira,capitalSegurado,sinistrosPagos});
   });
-  return result.length>0?result:[{plano:'',valorPlano:0,percentCarteira:0,valorCarteira:0}];
+  return result.length>0?result:[{plano:'',valorPlano:0,percentCarteira:0,valorCarteira:0,capitalSegurado:0,sinistrosPagos:0}];
 }
 function showCoverageModal(type){
   const isSin=type==='sinistros';
@@ -2585,7 +2628,7 @@ function showClientForm(client, containerId){
       <div class="full cli-sec-header">🛡️ Produtos Contratados</div>
       <div><label>Nº da proposta (principal)</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
       <div><label>Data da proposta <span class="muted" style="font-weight:400;">— deixe em branco para usar hoje</span></label><input type="date" id="cliDataProposta" value="${client.createdAt?(client.createdAt.toDate?client.createdAt.toDate():new Date((client.createdAt.seconds||0)*1000)).toISOString().slice(0,10):new Date().toISOString().slice(0,10)}"></div>
-      <div class="full" id="cliCoberturasWrap">${_initCobs.map((cob,idx)=>`<div class="cob-row"><div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" value="${esc(cob.plano||'')}" placeholder="Nome do plano"></div><div class="cob-f-valor"><label>Valor R$</label><input type="number" class="cob-valor" step="0.01" min="0" value="${cob.valorPlano||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="${cob.percentCarteira||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="${(cob.valorCarteira||0).toFixed(2)}" readonly style="background:var(--bg2)"></div><div class="cob-f-rm">${idx>0?'<button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button>':''}</div></div>`).join('')}</div>
+      <div class="full" id="cliCoberturasWrap">${_initCobs.map((cob,idx)=>`<div class="cob-row" data-cap="${cob.capitalSegurado||0}" data-sin="${cob.sinistrosPagos||0}"><div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" value="${esc(cob.plano||'')}" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="number" class="cob-valor" step="0.01" min="0" value="${cob.valorPlano||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="${cob.percentCarteira||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="${(cob.valorCarteira||0).toFixed(2)}" readonly style="background:var(--bg2)"></div><div class="cob-f-rm">${idx>0?'<button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button>':''}</div></div>`).join('')}</div>
       <div class="full" style="padding:0 0 4px 0;"><button type="button" class="btn" style="font-size:.83rem;padding:4px 12px;" onclick="addCoberturaRow()">+ Adicionar cobertura</button></div>
       <div class="full cob-summary-row">
         <div class="cob-f-total"><label>Total contribuição (R$)</label><input type="number" id="cliValor" readonly style="background:var(--bg2);" value="${_initTotal.toFixed(2)}"></div>
@@ -2595,13 +2638,13 @@ function showClientForm(client, containerId){
       <div><label>Banco / Forma de pagamento</label><input type="text" id="cliBanco" value="${esc(client.banco||'')}" placeholder="Ex: Banco do Brasil Ag. 5964 CC 1307-2"></div>
       <div><label>Dia de vencimento</label><input type="text" id="cliDiaVenc" maxlength="2" value="${esc(client.diaVencimento||'')}" placeholder="05"></div>
 
-      <div class="full cli-sec-header" style="margin-top:4px;">🛡️ Capital Segurado por cobertura</div>
-      ${COVERAGE_TYPES.map(t=>`<div><label>${t.label}</label><input type="number" id="cliCap${t.key}" step="0.01" min="0" value="${client['capital'+t.key]||0}" oninput="updateCapSubTotal('cliCap','cliCapTotal')"></div>`).join('')}
-      <div><label>Total Capital Segurado</label><input type="number" id="cliCapTotal" readonly style="background:var(--bg2);" value="${COVERAGE_TYPES.reduce((s,t)=>s+(client['capital'+t.key]||0),0)||client.capitalSegurado||(client.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0)||0}"></div>
+      <div class="full cli-sec-header" style="margin-top:4px;">🛡️ Capital Segurado por produto</div>
+      <div class="full" id="cliCapDynamicWrap"></div>
+      <div><label>Total Capital Segurado</label><input type="number" id="cliCapTotal" readonly style="background:var(--bg2);" value="0"></div>
 
-      <div class="full cli-sec-header" style="margin-top:4px;">🏥 Sinistros Pagos por cobertura</div>
-      ${COVERAGE_TYPES.map(t=>`<div><label>${t.label}</label><input type="number" id="cliSin${t.key}" step="0.01" min="0" value="${client['sinistros'+t.key]||0}" oninput="updateCapSubTotal('cliSin','cliSinTotal')"></div>`).join('')}
-      <div><label>Total Sinistros Pagos</label><input type="number" id="cliSinTotal" readonly style="background:var(--bg2);" value="${COVERAGE_TYPES.reduce((s,t)=>s+(client['sinistros'+t.key]||0),0)||client.sinistrosPagos||0}"></div>
+      <div class="full cli-sec-header" style="margin-top:4px;">🏥 Sinistros Pagos por produto</div>
+      <div class="full" id="cliSinDynamicWrap"></div>
+      <div><label>Total Sinistros Pagos</label><input type="number" id="cliSinTotal" readonly style="background:var(--bg2);" value="0"></div>
 
       <!-- Saúde só para PF -->
       <div class="full cli-sec-header" id="hdrSaude" style="${!isPF?'display:none':''}">🏥 Saúde (DPS)</div>
@@ -2617,6 +2660,7 @@ function showClientForm(client, containerId){
       </div>
     </form>
   `;
+  syncCapitalSinistros();
   // Tipo toggle logic
   document.querySelectorAll('#cliTipoToggle button').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -2648,9 +2692,7 @@ function showClientForm(client, containerId){
         percentAngariacao:parseFloat(document.getElementById('cliPctAngariacao')?.value)||0,
         valorAngariacao:parseFloat(document.getElementById('cliValorAngariacao')?.value)||0,
         valorCarteira:getCoberturas().reduce((s,c)=>s+(c.valorCarteira||0),0),
-        ...Object.fromEntries(COVERAGE_TYPES.map(t=>['capital'+t.key, parseFloat(document.getElementById('cliCap'+t.key)?.value)||0])),
         capitalSegurado:parseFloat(document.getElementById('cliCapTotal')?.value)||0,
-        ...Object.fromEntries(COVERAGE_TYPES.map(t=>['sinistros'+t.key, parseFloat(document.getElementById('cliSin'+t.key)?.value)||0])),
         sinistrosPagos:parseFloat(document.getElementById('cliSinTotal')?.value)||0,
         banco:document.getElementById('cliBanco')?.value||'',
         diaVencimento:document.getElementById('cliDiaVenc')?.value||'',
@@ -2701,9 +2743,7 @@ function showClientForm(client, containerId){
       valorAngariacao: parseFloat(document.getElementById('cliValorAngariacao')?.value)||0,
       comissaoValor: parseFloat(document.getElementById('cliValorAngariacao')?.value)||0,
       valorCarteira: getCoberturas().reduce((s,c)=>s+(c.valorCarteira||0),0),
-      ...Object.fromEntries(COVERAGE_TYPES.map(t=>['capital'+t.key, parseFloat(document.getElementById('cliCap'+t.key)?.value)||0])),
       capitalSegurado: parseFloat(document.getElementById('cliCapTotal')?.value)||0,
-      ...Object.fromEntries(COVERAGE_TYPES.map(t=>['sinistros'+t.key, parseFloat(document.getElementById('cliSin'+t.key)?.value)||0])),
       sinistrosPagos: parseFloat(document.getElementById('cliSinTotal')?.value)||0,
       banco: document.getElementById('cliBanco').value.trim(),
       diaVencimento: document.getElementById('cliDiaVenc').value.trim(),
@@ -2981,14 +3021,16 @@ function renderClients(){
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
         </div>
         ${isOwner?(()=>{
-          const capLines=COVERAGE_TYPES.filter(t=>c['capital'+t.key]>0).map(t=>`<div class="cdp-row"><div class="cdp-label">${t.label}</div><div class="cdp-value">${fmtBRL(c['capital'+t.key])}</div></div>`).join('');
+          const capLines=(c.coberturas||[]).filter(cob=>(cob.capitalSegurado||0)>0).map(cob=>`<div class="cdp-row"><div class="cdp-label">${esc(cob.plano||'—')}</div><div class="cdp-value">${fmtBRL(cob.capitalSegurado)}</div></div>`).join('')
+            ||COVERAGE_TYPES.filter(t=>c['capital'+t.key]>0).map(t=>`<div class="cdp-row"><div class="cdp-label">${t.label}</div><div class="cdp-value">${fmtBRL(c['capital'+t.key])}</div></div>`).join('');
           const capTotal=c.capitalSegurado||(c.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0)||0;
-          return capTotal?`<div class="cdp-section cdp-full"><div class="cdp-title">🛡️ Capital Segurado</div>${capLines||''}${row('Total',fmtBRL(capTotal))}</div>`:'';
+          return capTotal?`<div class="cdp-section cdp-full"><div class="cdp-title">🛡️ Capital Segurado</div>${capLines}${row('Total',fmtBRL(capTotal))}</div>`:'';
         })():''}
         ${isOwner?(()=>{
-          const sinLines=COVERAGE_TYPES.filter(t=>c['sinistros'+t.key]>0).map(t=>`<div class="cdp-row"><div class="cdp-label">${t.label}</div><div class="cdp-value">${fmtBRL(c['sinistros'+t.key])}</div></div>`).join('');
+          const sinLines=(c.coberturas||[]).filter(cob=>(cob.sinistrosPagos||0)>0).map(cob=>`<div class="cdp-row"><div class="cdp-label">${esc(cob.plano||'—')}</div><div class="cdp-value">${fmtBRL(cob.sinistrosPagos)}</div></div>`).join('')
+            ||COVERAGE_TYPES.filter(t=>c['sinistros'+t.key]>0).map(t=>`<div class="cdp-row"><div class="cdp-label">${t.label}</div><div class="cdp-value">${fmtBRL(c['sinistros'+t.key])}</div></div>`).join('');
           const sinTotal=c.sinistrosPagos||0;
-          return sinTotal?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Sinistros Pagos</div>${sinLines||''}${row('Total',fmtBRL(sinTotal))}</div>`:'';
+          return sinTotal?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Sinistros Pagos</div>${sinLines}${row('Total',fmtBRL(sinTotal))}</div>`:'';
         })():''}
         ${isPFc&&c.observacoesSaude?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Saúde (DPS)</div><div class="cdp-value">${esc(c.observacoesSaude)}</div></div>`:''}
         <div class="cdp-section cdp-full">
