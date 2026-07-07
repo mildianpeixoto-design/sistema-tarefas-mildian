@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260707-05';
+  var BUILD='20260707-06';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1077,10 +1077,10 @@ function initApp(){
     });
   },err=>console.error(err)));
 
-  listeners.push(db.collection('clientDocuments').onSnapshot(snap=>{
-    state.clientDocs=[]; snap.forEach(d=>state.clientDocs.push({id:d.id,...d.data()}));
-    const _cEl=document.getElementById('clientsList'); if(_cEl) renderClients();
-  }));
+  listeners.push(db.collection('clientDocuments').onSnapshot(
+    snap=>{ state.clientDocs=[]; snap.forEach(d=>state.clientDocs.push({id:d.id,...d.data()})); const _cEl=document.getElementById('clientsList'); if(_cEl) renderClients(); },
+    err=>console.warn('clientDocuments listener:', err.message)
+  ));
   listeners.push(db.collection('clients').onSnapshot(snap=>{
     state.clients=[]; snap.forEach(d=>state.clients.push({id:d.id,...d.data()}));
     renderClients();
