@@ -4806,4 +4806,131 @@ function _notifyNewChatMessage(senderName,text){
 function updateNotifBtn(){
   const btn=document.getElementById('notifBtn');
   if(!btn) return;
-  if(!('Notification' in window)){ btn.style.display='none'
+  if(!('Notification' in window)){ btn.style.display='none'; return; }
+  if(Notification.permission==='granted'){ btn.textContent='🔔 Ativas'; btn.disabled=true; }
+  else if(Notification.permission==='denied'){ btn.textContent='🔕 Bloqueadas'; btn.disabled=true; }
+  else { btn.textContent='🔔 Notificações'; btn.disabled=false; }
+}
+document.getElementById('notifBtn')?.addEventListener('click',()=>{
+  if('Notification' in window) Notification.requestPermission().then(updateNotifBtn);
+});
+updateNotifBtn();
+
+// --- Chat flutuante ---
+let _chatOpen=false;
+function _setChatBadge(n){
+  const badge=document.getElementById('floatChatBadge');
+  if(!badge) return;
+  if(n>0){ badge.textContent=n>9?'9+':n; badge.classList.add('show'); }
+  else { badge.classList.remove('show'); }
+}
+function _updateChatPresence(){
+  if(!currentUser) return;
+  db.collection('chatPresence').doc(currentUser.uid).set({
+    name: currentUser.name,
+    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+  },{merge:true}).catch(()=>{});
+}
+function _openChat(){
+  _chatOpen=true;
+  document.getElementById('floatChatPanel').classList.add('open');
+  _unreadChat=0; _setChatBadge(0);
+  // Remove animação pulsante ao abrir o chat
+  const btn=document.getElementById('floatChatBtn');
+  if(btn) btn.classList.remove('has-unread');
+  _flashTitleStop();
+  _updateChatPresence();
+  // scroll to bottom
+  const el=document.getElementById('chatMessages');
+  if(el) setTimeout(()=>{ el.scrollTop=el.scrollHeight; },30);
+  document.getElementById('chatInput')?.focus();
+}
+function _closeChat(){
+  _chatOpen=false;
+  document.getElementById('floatChatPanel').classList.remove('open');
+}
+// floatChatBtn usa onclick direto no HTML — não adicionar listener aqui para evitar duplo disparo
+
+function renderChat(msgs){
+  const el=document.getElementById('chatMessages');
+  if(!el) return;
+  const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  if(msgs.length===0){
+    el.innerHTML='<div class="empty">Nenhuma mensagem ainda. Diga olá!</div>';
+    chatInitialized=true;
+    return;
+  }
+  const last=msgs[msgs.length-1];
+  if(chatInitialized && last.id!==lastChatMsgId && last.uid!==currentUser.uid){
+    _notifyNewChatMessage(last.name,last.text);
+  }
+  lastChatMsgId=last.id;
+  el.innerHTML=msgs.map(m=>{
+    const isMine=m.uid===currentUser.uid;
+    let receipt='';
+    if(isMine && m.createdAt){
+      const msgTime=m.createdAt.toDate?m.createdAt.toDate():new Date(m.createdAt);
+      const viewers=Object.values(chatPresenceMap).filter(p=>p.lastSeen && p.lastSeen>msgTime);
+      if(viewers.length>0){
+        const names=viewers.map(p=>p.name.split(' ')[0]).join(', ');
+        receipt=`<div class="chat-receipt seen">✓✓ Visto por ${esc(names)}</div>`;
+      } else {
+        receipt=`<div class="chat-receipt">✓ Enviado</div>`;
+      }
+    }
+    return `<div class="chat-msg ${isMine?'mine':''}">
+      <div class="chat-meta">${esc(m.name)}${m.createdAt?' · '+fmtDateTime(m.createdAt):''}</div>
+      <div>${esc(m.text)}</div>
+      ${receipt}
+    </div>`;
+  }).join('');
+  if(wasNearBottom || !chatInitialized) el.scrollTop=el.scrollHeight;
+  chatInitialized=true;
+}
+document.getElementById('chatForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const input=document.getElementById('chatInput');
+  const text=input.value.trim();
+  if(!text) return;
+  input.value='';
+  _updateChatPresence();
+  db.collection('chatMessages').add({
+    text, uid:currentUser.uid, name:currentUser.name,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(err=>alert('Erro: '+err.message));
+});
+
+/* Videoconferência — abre Jitsi em nova aba (sem limite de tempo) */
+document.getElementById('startVideoBtn').addEventListener('click',()=>{
+  let room=document.getElementById('videoRoomName').value.trim();
+  if(!room){
+    room='sala-'+Math.random().toString(36).slice(2,8);
+    document.getElementById('videoRoomName').value=room;
+  }
+  room=room.replace(/[^a-zA-Z0-9-_]/g,'-');
+  const url=`https://meet.jit.si/${encodeURIComponent(room)}`;
+  document.getElementById('videoShareLink').value=url;
+  document.getElementById('videoShareWrap').style.display='block';
+  window.open(url,'_blank','noopener');
+});
+document.getElementById('copyVideoLinkBtn').addEventListener('click',()=>{
+  const input=document.getElementById('videoShareLink');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(()=>{
+    const btn=document.getElementById('copyVideoLinkBtn');
+    const orig=btn.textContent; btn.textContent='Copiado!';
+    setTimeout(()=>btn.textContent=orig,1500);
+  }).catch(()=>{});
+});
+
+/* PWA: registra o service worker para permitir instalação no celular
+   (ícone na tela inicial, abre em tela cheia). Os dados continuam
+   sincronizados em tempo real pelo Firestore, normalmente. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js').catch(err=>console.error('SW erro:',err));
+  });
+}
+</script>
+</body>
+</html>
