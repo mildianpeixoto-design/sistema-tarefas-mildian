@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260707-04';
+  var BUILD='20260707-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -29,6 +29,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -661,6 +662,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+const storage = firebase.storage();
 
 /* ====================== Constantes e helpers ====================== */
 const PRIORITY_LABELS={alta:'Alta',media:'Média',baixa:'Baixa'};
@@ -920,7 +922,8 @@ let state={
   payablesArchive:[],
   boletosClientes:[],
   metas:{},
-  metaAtual:null
+  metaAtual:null,
+  clientDocs:[]
 };
 let boletosViewMes=new Date().toISOString().slice(0,7);
 let selectedBoletoId=null;
@@ -1074,6 +1077,10 @@ function initApp(){
     });
   },err=>console.error(err)));
 
+  listeners.push(db.collection('clientDocuments').onSnapshot(snap=>{
+    state.clientDocs=[]; snap.forEach(d=>state.clientDocs.push({id:d.id,...d.data()}));
+    const _cEl=document.getElementById('clientsList'); if(_cEl) renderClients();
+  }));
   listeners.push(db.collection('clients').onSnapshot(snap=>{
     state.clients=[]; snap.forEach(d=>state.clients.push({id:d.id,...d.data()}));
     renderClients();
@@ -2715,6 +2722,90 @@ function showClientForm(client, containerId){
   });
 }
 function cancelClientForm(){ document.getElementById('clientFormWrap').innerHTML=''; }
+/* ===== Documentos do cliente ===== */
+function docTypeIcon(tipo){
+  if(!tipo) return '📄';
+  if(tipo.includes('pdf')) return '📕';
+  if(tipo.includes('image')) return '🖼️';
+  if(tipo.includes('spreadsheet')||tipo.includes('excel')||tipo.includes('csv')) return '📊';
+  if(tipo.includes('presentation')||tipo.includes('powerpoint')) return '📊';
+  if(tipo.includes('word')||tipo.includes('document')) return '📝';
+  if(tipo.includes('zip')||tipo.includes('rar')||tipo.includes('compress')) return '🗜️';
+  return '📄';
+}
+function fmtBytes(b){
+  if(!b) return '';
+  if(b<1024) return b+'B';
+  if(b<1048576) return (b/1024).toFixed(1)+'KB';
+  return (b/1048576).toFixed(1)+'MB';
+}
+function clientDocsHtml(clientId){
+  const docs=(state.clientDocs||[]).filter(d=>d.clientId===clientId).sort((a,b)=>(b.uploadedAt||0)-(a.uploadedAt||0));
+  let h=`<div class="cdp-section cdp-full" id="clientDocsSection-${clientId}">
+    <div class="cdp-title" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>📎 Documentos (${docs.length})</span>
+      <label class="btn" style="cursor:pointer;font-size:.82rem;padding:4px 10px;" title="Enviar documento">
+        ＋ Adicionar
+        <input type="file" multiple style="display:none;" onchange="uploadClientDocs('${clientId}',this)">
+      </label>
+    </div>`;
+  if(docs.length===0){
+    h+=`<div class="muted" style="font-size:.85rem;margin-top:6px;">Nenhum documento ainda. Clique em "+ Adicionar" para enviar arquivos.</div>`;
+  } else {
+    h+=`<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">`;
+    docs.forEach(doc=>{
+      const icon=docTypeIcon(doc.tipo);
+      const size=fmtBytes(doc.tamanho);
+      const date=doc.uploadedAt?new Date(doc.uploadedAt).toLocaleDateString('pt-BR'):'';
+      const who=doc.uploadedByName||'';
+      h+=`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2,var(--bg2));border-radius:8px;border:1px solid var(--border);">
+        <span style="font-size:1.4rem;">${icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(doc.nome)}">${esc(doc.nome)}</div>
+          <div class="muted" style="font-size:.75rem;">${[size,date,who].filter(Boolean).join(' · ')}</div>
+        </div>
+        <a href="${doc.url}" target="_blank" rel="noopener" class="btn" style="font-size:.78rem;padding:4px 8px;text-decoration:none;" title="Abrir/Baixar">⬇ Abrir</a>
+        ${isOwner||doc.uploadedBy===currentUser?.uid?`<button class="icon-btn" style="color:var(--red,#c0392b);" onclick="deleteClientDoc('${doc.id}','${esc(doc.storePath||'')}');event.stopPropagation();" title="Excluir documento">🗑️</button>`:''}
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`<div id="clientDocsProgress-${clientId}" style="margin-top:6px;font-size:.82rem;color:var(--gold);display:none;"></div>`;
+  h+=`</div>`;
+  return h;
+}
+function uploadClientDocs(clientId, input){
+  const files=[...input.files];
+  if(!files.length) return;
+  const progress=document.getElementById('clientDocsProgress-'+clientId);
+  if(progress){ progress.style.display=''; progress.textContent=`Enviando ${files.length} arquivo(s)...`; }
+  let done=0;
+  files.forEach(file=>{
+    const safeName=file.name.replace(/[^a-zA-Z0-9._\-]/g,'_');
+    const path=`clientDocs/${clientId}/${Date.now()}_${safeName}`;
+    const ref=storage.ref(path);
+    ref.put(file).then(snap=>snap.ref.getDownloadURL()).then(url=>{
+      return db.collection('clientDocuments').add({
+        clientId, nome:file.name, tipo:file.type||'', url, storePath:path,
+        tamanho:file.size, uploadedAt:Date.now(),
+        uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
+      });
+    }).then(()=>{
+      done++;
+      if(progress){ if(done===files.length){ progress.style.display='none'; } else { progress.textContent=`Enviando... (${done}/${files.length})`; } }
+    }).catch(err=>{
+      done++;
+      if(progress){ progress.textContent=`Erro: ${err.message}`; setTimeout(()=>{ progress.style.display='none'; },4000); }
+    });
+  });
+  input.value='';
+}
+function deleteClientDoc(docId, storePath){
+  if(!confirm('Excluir este documento permanentemente?')) return;
+  const del1=storePath?storage.ref(storePath).delete().catch(()=>{}) : Promise.resolve();
+  del1.then(()=>db.collection('clientDocuments').doc(docId).delete()).catch(err=>alert('Erro: '+err.message));
+}
+/* ===== Fim Documentos ===== */
 function editClient(id){
   const c=state.clients.find(x=>x.id===id);
   if(!c) return;
@@ -2908,6 +2999,7 @@ function renderClients(){
             <button class="btn" onclick="addClientHistorico('${c.id}')">Adicionar</button>
           </div>
         </div>
+        ${clientDocsHtml(c.id)}
         </div>
         <div class="cdp-actions row">
           <button class="btn primary" onclick="editClient('${c.id}');event.stopPropagation()">✏️ Editar</button>
@@ -4714,131 +4806,4 @@ function _notifyNewChatMessage(senderName,text){
 function updateNotifBtn(){
   const btn=document.getElementById('notifBtn');
   if(!btn) return;
-  if(!('Notification' in window)){ btn.style.display='none'; return; }
-  if(Notification.permission==='granted'){ btn.textContent='🔔 Ativas'; btn.disabled=true; }
-  else if(Notification.permission==='denied'){ btn.textContent='🔕 Bloqueadas'; btn.disabled=true; }
-  else { btn.textContent='🔔 Notificações'; btn.disabled=false; }
-}
-document.getElementById('notifBtn')?.addEventListener('click',()=>{
-  if('Notification' in window) Notification.requestPermission().then(updateNotifBtn);
-});
-updateNotifBtn();
-
-// --- Chat flutuante ---
-let _chatOpen=false;
-function _setChatBadge(n){
-  const badge=document.getElementById('floatChatBadge');
-  if(!badge) return;
-  if(n>0){ badge.textContent=n>9?'9+':n; badge.classList.add('show'); }
-  else { badge.classList.remove('show'); }
-}
-function _updateChatPresence(){
-  if(!currentUser) return;
-  db.collection('chatPresence').doc(currentUser.uid).set({
-    name: currentUser.name,
-    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-  },{merge:true}).catch(()=>{});
-}
-function _openChat(){
-  _chatOpen=true;
-  document.getElementById('floatChatPanel').classList.add('open');
-  _unreadChat=0; _setChatBadge(0);
-  // Remove animação pulsante ao abrir o chat
-  const btn=document.getElementById('floatChatBtn');
-  if(btn) btn.classList.remove('has-unread');
-  _flashTitleStop();
-  _updateChatPresence();
-  // scroll to bottom
-  const el=document.getElementById('chatMessages');
-  if(el) setTimeout(()=>{ el.scrollTop=el.scrollHeight; },30);
-  document.getElementById('chatInput')?.focus();
-}
-function _closeChat(){
-  _chatOpen=false;
-  document.getElementById('floatChatPanel').classList.remove('open');
-}
-// floatChatBtn usa onclick direto no HTML — não adicionar listener aqui para evitar duplo disparo
-
-function renderChat(msgs){
-  const el=document.getElementById('chatMessages');
-  if(!el) return;
-  const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-  if(msgs.length===0){
-    el.innerHTML='<div class="empty">Nenhuma mensagem ainda. Diga olá!</div>';
-    chatInitialized=true;
-    return;
-  }
-  const last=msgs[msgs.length-1];
-  if(chatInitialized && last.id!==lastChatMsgId && last.uid!==currentUser.uid){
-    _notifyNewChatMessage(last.name,last.text);
-  }
-  lastChatMsgId=last.id;
-  el.innerHTML=msgs.map(m=>{
-    const isMine=m.uid===currentUser.uid;
-    let receipt='';
-    if(isMine && m.createdAt){
-      const msgTime=m.createdAt.toDate?m.createdAt.toDate():new Date(m.createdAt);
-      const viewers=Object.values(chatPresenceMap).filter(p=>p.lastSeen && p.lastSeen>msgTime);
-      if(viewers.length>0){
-        const names=viewers.map(p=>p.name.split(' ')[0]).join(', ');
-        receipt=`<div class="chat-receipt seen">✓✓ Visto por ${esc(names)}</div>`;
-      } else {
-        receipt=`<div class="chat-receipt">✓ Enviado</div>`;
-      }
-    }
-    return `<div class="chat-msg ${isMine?'mine':''}">
-      <div class="chat-meta">${esc(m.name)}${m.createdAt?' · '+fmtDateTime(m.createdAt):''}</div>
-      <div>${esc(m.text)}</div>
-      ${receipt}
-    </div>`;
-  }).join('');
-  if(wasNearBottom || !chatInitialized) el.scrollTop=el.scrollHeight;
-  chatInitialized=true;
-}
-document.getElementById('chatForm').addEventListener('submit',e=>{
-  e.preventDefault();
-  const input=document.getElementById('chatInput');
-  const text=input.value.trim();
-  if(!text) return;
-  input.value='';
-  _updateChatPresence();
-  db.collection('chatMessages').add({
-    text, uid:currentUser.uid, name:currentUser.name,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(err=>alert('Erro: '+err.message));
-});
-
-/* Videoconferência — abre Jitsi em nova aba (sem limite de tempo) */
-document.getElementById('startVideoBtn').addEventListener('click',()=>{
-  let room=document.getElementById('videoRoomName').value.trim();
-  if(!room){
-    room='sala-'+Math.random().toString(36).slice(2,8);
-    document.getElementById('videoRoomName').value=room;
-  }
-  room=room.replace(/[^a-zA-Z0-9-_]/g,'-');
-  const url=`https://meet.jit.si/${encodeURIComponent(room)}`;
-  document.getElementById('videoShareLink').value=url;
-  document.getElementById('videoShareWrap').style.display='block';
-  window.open(url,'_blank','noopener');
-});
-document.getElementById('copyVideoLinkBtn').addEventListener('click',()=>{
-  const input=document.getElementById('videoShareLink');
-  input.select();
-  navigator.clipboard.writeText(input.value).then(()=>{
-    const btn=document.getElementById('copyVideoLinkBtn');
-    const orig=btn.textContent; btn.textContent='Copiado!';
-    setTimeout(()=>btn.textContent=orig,1500);
-  }).catch(()=>{});
-});
-
-/* PWA: registra o service worker para permitir instalação no celular
-   (ícone na tela inicial, abre em tela cheia). Os dados continuam
-   sincronizados em tempo real pelo Firestore, normalmente. */
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('./sw.js').catch(err=>console.error('SW erro:',err));
-  });
-}
-</script>
-</body>
-</html>
+  if(!('Notification' in window)){ btn.style.display='none'
