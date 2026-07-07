@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260707-01';
+  var BUILD='20260707-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1319,9 +1319,8 @@ function setStatus(actId,status){
         // Atividade única: remove do cadastro após finalizar (ocorrência fica no histórico/relatório)
         const act=state.activities.find(a=>a.id===actId);
         if(act&&act.recurrence==='nenhuma'){
-          // Marca finalizada no doc antes de deletar; se o delete falhar, o filtro da aba Atividades ainda oculta a tarefa
-          db.collection('activities').doc(actId).set({finalizada:true},{merge:true})
-            .finally(()=>db.collection('activities').doc(actId).delete().catch(()=>{}));
+          // Marca como finalizada — atividade sai da lista principal e vai para "Concluídas" automaticamente
+          db.collection('activities').doc(actId).set({finalizada:true},{merge:true}).catch(()=>{});
         }
       }
       else if(status==='pendente') showToast('↺ Tarefa reaberta');
