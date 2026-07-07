@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260707-02';
+  var BUILD='20260707-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1879,12 +1879,22 @@ function deleteActivity(id){
   if(!confirm('Excluir esta atividade? O histórico de ocorrências passadas será mantido, mas ela deixará de aparecer nos próximos dias.')) return;
   db.collection('activities').doc(id).delete().catch(err=>alert('Erro: '+err.message));
 }
+var concluidasAberta=true; // começa expandida por padrão
 function marcarExecutada(actId){
-  if(!confirm('Marcar esta atividade como executada? Ela sairá da lista principal e ficará em "Concluídas".')) return;
-  db.collection('activities').doc(actId).set({finalizada:true},{merge:true}).catch(err=>alert('Erro: '+err.message));
+  db.collection('activities').doc(actId).set({finalizada:true},{merge:true})
+    .then(()=>{
+      const act=state.activities.find(a=>a.id===actId);
+      if(act){ act.finalizada=true; concluidasAberta=true; renderActivitiesList(); }
+    })
+    .catch(err=>alert('Erro ao marcar como executada: '+err.message));
 }
 function reabrirAtividade(actId){
-  db.collection('activities').doc(actId).set({finalizada:false},{merge:true}).catch(err=>alert('Erro: '+err.message));
+  db.collection('activities').doc(actId).set({finalizada:false},{merge:true})
+    .then(()=>{
+      const act=state.activities.find(a=>a.id===actId);
+      if(act){ act.finalizada=false; renderActivitiesList(); }
+    })
+    .catch(err=>alert('Erro ao reabrir: '+err.message));
 }
 function activitiesTableHtml(items, showReopen=false){
   let html='<table><thead><tr><th>Título</th><th>Cliente/Apólice</th><th>Prioridade</th><th>Recorrência</th><th></th></tr></thead><tbody>';
@@ -1947,26 +1957,18 @@ function renderActivitiesList(){
 
   // Seção "Concluídas" colapsável
   if(concluidas.length>0){
-    const open=document.getElementById('concluidasOpen')?.value==='1';
     html+=`<div style="margin-top:18px;">
       <button class="btn" onclick="toggleConcluidas()" style="background:none;border:1px solid var(--border);color:var(--text2);font-size:.85rem;padding:6px 14px;">
-        ${open?'▼':'▶'} Concluídas (${concluidas.length})
+        ${concluidasAberta?'▼':'▶'} Concluídas (${concluidas.length})
       </button>
-      <input type="hidden" id="concluidasOpen" value="${open?'1':'0'}">
-      ${open?`<div style="margin-top:8px;">${activitiesTableHtml(concluidas,true)}</div>`:''}
+      ${concluidasAberta?`<div style="margin-top:8px;">${activitiesTableHtml(concluidas,true)}</div>`:''}
     </div>`;
   }
 
   document.getElementById('activitiesList').innerHTML=html;
 }
 function toggleConcluidas(){
-  const el=document.getElementById('concluidasOpen');
-  const nowOpen=el?el.value==='1':false;
-  // Re-render com estado invertido
-  const fakeEl=document.createElement('input');
-  fakeEl.id='concluidasOpen';
-  fakeEl.value=nowOpen?'0':'1';
-  document.getElementById('activitiesList').prepend(fakeEl);
+  concluidasAberta=!concluidasAberta;
   renderActivitiesList();
 }
 
