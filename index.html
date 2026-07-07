@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260707-03';
+  var BUILD='20260707-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3343,14 +3343,6 @@ function showLeadForm(lead,containerId){
       <div><label>Próximo contato</label><input type="date" id="leadProximoContato" value="${esc(lead.proximoContato||'')}"></div>
       <div class="full"><label>Indicado por</label><input type="text" id="leadIndicadoPor" value="${esc(lead.indicadoPor||'')}" placeholder="Nome de quem indicou (opcional)"></div>
       ${!isEdit?`<div class="full"><label>Anotação inicial (opcional)</label><textarea id="leadObsInicial" placeholder="Será registrada nas anotações com a data de hoje"></textarea></div>`:''}
-      ${isEdit?`
-      <div class="full" style="margin-top:6px;border-top:1px solid var(--border);padding-top:14px;">
-        <div style="font-weight:600;margin-bottom:8px;">📝 Anotações (${(lead.historico||[]).length})</div>
-        <div id="leadFormHistList" class="hist-list" style="margin-bottom:10px;">
-          ${(lead.historico&&lead.historico.length)?historicoListHtml(lead.historico):'<div class="muted" style="font-size:12px;">Nenhuma anotação ainda.</div>'}
-        </div>
-        <input type="text" id="leadFormHistInput" placeholder="Nova anotação (opcional, salva junto com o botão Salvar abaixo)...">
-      </div>`:''}
       <div class="full row">
         <button class="btn primary" type="submit">${isEdit?'Salvar':'Adicionar lead'}</button>
         <button class="btn" type="button" id="cancelLeadBtn">Cancelar</button>
@@ -3377,10 +3369,6 @@ function showLeadForm(lead,containerId){
     if(!isEdit){
       const obsInicial=document.getElementById('leadObsInicial').value.trim();
       if(obsInicial) obj.historico=[{texto:obsInicial,at:ts(),uid:currentUser.uid,name:currentUser.name}];
-    }else{
-      const histInput=document.getElementById('leadFormHistInput');
-      const newNote=histInput?histInput.value.trim():'';
-      if(newNote) obj.historico=(obj.historico||[]).concat([{texto:newNote,at:ts(),uid:currentUser.uid,name:currentUser.name}]);
     }
     const p = isEdit
       ? db.collection('leads').doc(lead.id).set(obj,{merge:true})
