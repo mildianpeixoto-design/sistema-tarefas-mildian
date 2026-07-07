@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260706-05';
+  var BUILD='20260707-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1880,15 +1880,27 @@ function deleteActivity(id){
   if(!confirm('Excluir esta atividade? O histórico de ocorrências passadas será mantido, mas ela deixará de aparecer nos próximos dias.')) return;
   db.collection('activities').doc(id).delete().catch(err=>alert('Erro: '+err.message));
 }
-function activitiesTableHtml(items){
+function marcarExecutada(actId){
+  if(!confirm('Marcar esta atividade como executada? Ela sairá da lista principal e ficará em "Concluídas".')) return;
+  db.collection('activities').doc(actId).set({finalizada:true},{merge:true}).catch(err=>alert('Erro: '+err.message));
+}
+function reabrirAtividade(actId){
+  db.collection('activities').doc(actId).set({finalizada:false},{merge:true}).catch(err=>alert('Erro: '+err.message));
+}
+function activitiesTableHtml(items, showReopen=false){
   let html='<table><thead><tr><th>Título</th><th>Cliente/Apólice</th><th>Prioridade</th><th>Recorrência</th><th></th></tr></thead><tbody>';
   items.forEach(act=>{
+    const isNaoRecorrente=act.recurrence==='nenhuma';
     html+=`<tr>
       <td>${esc(act.title)}</td>
       <td>${esc(act.cliente||'')}</td>
       <td><span class="badge ${act.priority}">${PRIORITY_LABELS[act.priority]}</span></td>
       <td>${RECUR_LABELS[act.recurrence]}</td>
       <td class="row">
+        ${showReopen
+          ? `<button class="icon-btn" onclick="reabrirAtividade('${act.id}')" title="Reabrir atividade" style="color:var(--gold)">↺ Reabrir</button>`
+          : (isNaoRecorrente ? `<button class="icon-btn" onclick="marcarExecutada('${act.id}')" title="Marcar como executada" style="color:#27ae60">✓ Executada</button>` : '')
+        }
         <button class="icon-btn" onclick="editActivity('${act.id}')">Editar</button>
         <button class="icon-btn" onclick="deleteActivity('${act.id}')">Excluir</button>
       </td>
@@ -1904,35 +1916,59 @@ function isActividadeExecutada(actId){
   return Object.values(state.occRange||{}).some(occ=>occ.activityId===actId&&occ.status==='finalizada');
 }
 function renderActivitiesList(){
-  // Filtrar: atividades sem recorrência já executadas (flag finalizada OU ocorrência encontrada)
-  const visibleActivities=state.activities.filter(act=>
+  // Separar: pendentes (visíveis) e concluídas (não recorrentes com finalizada=true)
+  const pendentes=state.activities.filter(act=>
     act.recurrence!=='nenhuma' || (act.finalizada!==true && !isActividadeExecutada(act.id))
   );
-  if(visibleActivities.length===0){
-    document.getElementById('activitiesList').innerHTML='<div class="empty">Nenhuma atividade cadastrada ainda.</div>';
-    return;
-  }
-  // Agrupar por responsável e ordenar por prioridade (alta > média > baixa)
-  const groups={};
-  visibleActivities.forEach(act=>{
-    (groups[act.assignedTo]=groups[act.assignedTo]||[]).push(act);
-  });
+  const concluidas=state.activities.filter(act=>
+    act.recurrence==='nenhuma' && (act.finalizada===true || isActividadeExecutada(act.id))
+  );
+
   let html='';
-  const handled=new Set();
-  state.users.forEach(u=>{
-    const items=groups[u.id];
-    if(!items || items.length===0) return;
-    handled.add(u.id);
-    items.sort((a,b)=>prioRank(a.priority)-prioRank(b.priority));
-    html+=`<div class="group"><h3>${avatarHtml(u.id)} ${esc(u.name)} <span class="muted">(${items.length})</span></h3>${activitiesTableHtml(items)}</div>`;
-  });
-  // Responsáveis que não existem mais na lista de usuários
-  Object.keys(groups).forEach(uid=>{
-    if(handled.has(uid)) return;
-    const items=groups[uid].sort((a,b)=>prioRank(a.priority)-prioRank(b.priority));
-    html+=`<div class="group"><h3>${avatarHtml(uid)} ${esc(userName(uid))} <span class="muted">(${items.length})</span></h3>${activitiesTableHtml(items)}</div>`;
-  });
+
+  if(pendentes.length===0){
+    html='<div class="empty">Nenhuma atividade pendente.</div>';
+  } else {
+    const groups={};
+    pendentes.forEach(act=>{ (groups[act.assignedTo]=groups[act.assignedTo]||[]).push(act); });
+    const handled=new Set();
+    state.users.forEach(u=>{
+      const items=groups[u.id];
+      if(!items||items.length===0) return;
+      handled.add(u.id);
+      items.sort((a,b)=>prioRank(a.priority)-prioRank(b.priority));
+      html+=`<div class="group"><h3>${avatarHtml(u.id)} ${esc(u.name)} <span class="muted">(${items.length})</span></h3>${activitiesTableHtml(items)}</div>`;
+    });
+    Object.keys(groups).forEach(uid=>{
+      if(handled.has(uid)) return;
+      const items=groups[uid].sort((a,b)=>prioRank(a.priority)-prioRank(b.priority));
+      html+=`<div class="group"><h3>${avatarHtml(uid)} ${esc(userName(uid))} <span class="muted">(${items.length})</span></h3>${activitiesTableHtml(items)}</div>`;
+    });
+  }
+
+  // Seção "Concluídas" colapsável
+  if(concluidas.length>0){
+    const open=document.getElementById('concluidasOpen')?.value==='1';
+    html+=`<div style="margin-top:18px;">
+      <button class="btn" onclick="toggleConcluidas()" style="background:none;border:1px solid var(--border);color:var(--text2);font-size:.85rem;padding:6px 14px;">
+        ${open?'▼':'▶'} Concluídas (${concluidas.length})
+      </button>
+      <input type="hidden" id="concluidasOpen" value="${open?'1':'0'}">
+      ${open?`<div style="margin-top:8px;">${activitiesTableHtml(concluidas,true)}</div>`:''}
+    </div>`;
+  }
+
   document.getElementById('activitiesList').innerHTML=html;
+}
+function toggleConcluidas(){
+  const el=document.getElementById('concluidasOpen');
+  const nowOpen=el?el.value==='1':false;
+  // Re-render com estado invertido
+  const fakeEl=document.createElement('input');
+  fakeEl.id='concluidasOpen';
+  fakeEl.value=nowOpen?'0':'1';
+  document.getElementById('activitiesList').prepend(fakeEl);
+  renderActivitiesList();
 }
 
 /* ====================== Colaboradores (administradora) ====================== */
