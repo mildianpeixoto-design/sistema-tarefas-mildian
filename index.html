@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260707-07';
+  var BUILD='20260708-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3021,13 +3021,15 @@ function renderClients(){
           ${row('Banco / Pagamento',c.banco)}${row('Dia vencimento',c.diaVencimento?'Dia '+c.diaVencimento:'')}
         </div>
         ${isOwner?(()=>{
-          const capLines=(c.coberturas||[]).filter(cob=>(cob.capitalSegurado||0)>0).map(cob=>`<div class="cdp-row"><div class="cdp-label">${esc(cob.plano||'—')}</div><div class="cdp-value">${fmtBRL(cob.capitalSegurado)}</div></div>`).join('')
+          const _cobs=Array.isArray(c.coberturas)?c.coberturas:[];
+          const capLines=_cobs.filter(cob=>(cob.capitalSegurado||0)>0).map(cob=>`<div class="cdp-row"><div class="cdp-label">${esc(cob.plano||'—')}</div><div class="cdp-value">${fmtBRL(cob.capitalSegurado)}</div></div>`).join('')
             ||COVERAGE_TYPES.filter(t=>c['capital'+t.key]>0).map(t=>`<div class="cdp-row"><div class="cdp-label">${t.label}</div><div class="cdp-value">${fmtBRL(c['capital'+t.key])}</div></div>`).join('');
           const capTotal=c.capitalSegurado||(c.produtos||[]).reduce((s,p)=>s+(p.capitalSegurado||0),0)||0;
           return capTotal?`<div class="cdp-section cdp-full"><div class="cdp-title">🛡️ Capital Segurado</div>${capLines}${row('Total',fmtBRL(capTotal))}</div>`:'';
         })():''}
         ${isOwner?(()=>{
-          const sinLines=(c.coberturas||[]).filter(cob=>(cob.sinistrosPagos||0)>0).map(cob=>`<div class="cdp-row"><div class="cdp-label">${esc(cob.plano||'—')}</div><div class="cdp-value">${fmtBRL(cob.sinistrosPagos)}</div></div>`).join('')
+          const _cobs=Array.isArray(c.coberturas)?c.coberturas:[];
+          const sinLines=_cobs.filter(cob=>(cob.sinistrosPagos||0)>0).map(cob=>`<div class="cdp-row"><div class="cdp-label">${esc(cob.plano||'—')}</div><div class="cdp-value">${fmtBRL(cob.sinistrosPagos)}</div></div>`).join('')
             ||COVERAGE_TYPES.filter(t=>c['sinistros'+t.key]>0).map(t=>`<div class="cdp-row"><div class="cdp-label">${t.label}</div><div class="cdp-value">${fmtBRL(c['sinistros'+t.key])}</div></div>`).join('');
           const sinTotal=c.sinistrosPagos||0;
           return sinTotal?`<div class="cdp-section cdp-full"><div class="cdp-title">🏥 Sinistros Pagos</div>${sinLines}${row('Total',fmtBRL(sinTotal))}</div>`:'';
