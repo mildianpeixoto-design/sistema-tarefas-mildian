@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260708-01';
+  var BUILD='20260708-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2755,9 +2755,10 @@ function showClientForm(client, containerId){
     const createdAtValue = dataPropostaStr
       ? firebase.firestore.Timestamp.fromDate(new Date(dataPropostaStr+'T12:00:00'))
       : firebase.firestore.FieldValue.serverTimestamp();
+    const _now = firebase.firestore.FieldValue.serverTimestamp();
     const p = isEdit
-      ? db.collection('clients').doc(client.id).set({...obj, createdAt: createdAtValue},{merge:true})
-      : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: createdAtValue});
+      ? db.collection('clients').doc(client.id).set({...obj, createdAt: createdAtValue, updatedAt: _now},{merge:true})
+      : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: createdAtValue, updatedAt: _now});
     p.then(()=>closeThisForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
@@ -3010,6 +3011,7 @@ function renderClients(){
         h+=`<div class="cdp-section">
           <div class="cdp-title">📞 Contato & Endereço</div>
           ${row('Telefone',waTel)}${row('E-mail',mailLink)}${row('Endereço',c.endereco)}
+          ${(()=>{const _up=c.updatedAt||c.createdAt; if(!_up) return ''; const _d=_up.toDate?_up.toDate():new Date((_up.seconds||0)*1000); const _limit=new Date(); _limit.setFullYear(_limit.getFullYear()-2); const _stale=_d<_limit; return row('Última atualização',`<span style="${_stale?'color:var(--amber);font-weight:600;':''}">${_d.toLocaleDateString('pt-BR')}${_stale?' ⚠️ desatualizado':''}</span>`);})()}
         </div>
         <div class="cdp-section cdp-full">
           <div class="cdp-title">🛡️ Produtos Contratados</div>
@@ -3111,6 +3113,13 @@ function getClientPendencias(c){
   const semNomeNums=[...new Set((c.produtos||[]).filter(p=>(p.cobertura||'').startsWith('(nome a definir)')).map(p=>p.numero))];
   if(semNomeNums.length) issues.push(`Produto sem nome (nº ${semNomeNums.join(', ')})`);
   if(!c.plano && !c.valorPagamento) issues.push('Plano/produto não cadastrado');
+  // Verificação de desatualização: 2 anos sem edição
+  const _lastUp=c.updatedAt||c.createdAt;
+  if(_lastUp){
+    const _d=_lastUp.toDate?_lastUp.toDate():new Date((_lastUp.seconds||0)*1000);
+    const _limit=new Date(); _limit.setFullYear(_limit.getFullYear()-2);
+    if(_d<_limit) issues.push('⏰ Revisão cadastral (+2 anos)');
+  }
   return issues;
 }
 async function migrarNomesProdutos(){
@@ -3187,7 +3196,7 @@ function renderPendencias(){
     return `<div class="pendencia-item">
       <div class="pendencia-info">
         <div class="pendencia-nome">${esc(c.nome)} ${sub?`<span class="muted">· ${esc(sub)}</span>`:''}</div>
-        <div class="pendencia-badges">${issues.map(i=>`<span class="pendencia-badge">${esc(i)}</span>`).join('')}</div>
+        <div class="pendencia-badges">${issues.map(i=>i.startsWith('⏰')?`<span class="pendencia-badge" style="background:var(--amber,#e67e22);color:#fff;">${esc(i)}</span>`:`<span class="pendencia-badge">${esc(i)}</span>`).join('')}</div>
       </div>
       <button class="btn primary" onclick="goEditClientFromPendencias('${c.id}')">✏️ Editar</button>
     </div>`;
