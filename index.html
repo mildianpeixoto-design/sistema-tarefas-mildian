@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260709-02';
+  var BUILD='20260709-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2914,40 +2914,37 @@ function uploadClientDocs(clientId, input){
   const handleDone=(err)=>{
     done++;
     if(err){
-      const msg=err.code==='storage/unauthorized'?'Sem permissão no Storage — verifique as regras no Firebase Console.'
-                :err.code==='storage/canceled'?'Upload cancelado (tempo esgotado). Arquivo muito grande ou sem conexão.'
-                :(err.message||err.code||'Erro desconhecido');
-      setProgress(`❌ ${msg}`, true);
+      setProgress(`❌ ${err.message||'Erro desconhecido'}`, true);
       setTimeout(()=>{ if(progress) progress.style.display='none'; },8000);
       console.error('[uploadClientDocs]', err);
     } else {
-      if(done===files.length) { if(progress) progress.style.display='none'; }
+      if(done===files.length){ if(progress) progress.style.display='none'; }
       else setProgress(`Enviando... (${done}/${files.length})`);
     }
   };
   files.forEach(file=>{
-    const safeName=file.name.replace(/[^a-zA-Z0-9._\-]/g,'_');
-    const path=`clientDocs/${clientId}/${Date.now()}_${safeName}`;
-    const storRef=storage.ref(path);
-    const task=storRef.put(file);
-    const timeout=setTimeout(()=>{
-      task.cancel();
-    },45000);
-    task.then(snap=>{ clearTimeout(timeout); return snap.ref.getDownloadURL(); })
-      .then(url=>db.collection('clientDocuments').add({
-        clientId, nome:file.name, tipo:file.type||'', url, storePath:path,
-        tamanho:file.size, uploadedAt:Date.now(),
-        uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
-      }))
-      .then(()=>{ clearTimeout(timeout); handleDone(null); })
-      .catch(err=>{ clearTimeout(timeout); handleDone(err); });
+    const fd=new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', 'sistema_mildian');
+    fd.append('folder', 'clientDocs/'+clientId);
+    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/auto/upload',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.error) throw new Error(data.error.message);
+        return db.collection('clientDocuments').add({
+          clientId, nome:file.name, tipo:file.type||'', url:data.secure_url,
+          publicId:data.public_id||'', tamanho:file.size, uploadedAt:Date.now(),
+          uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
+        });
+      })
+      .then(()=>handleDone(null))
+      .catch(err=>handleDone(err));
   });
   input.value='';
 }
 function deleteClientDoc(docId, storePath){
   if(!confirm('Excluir este documento permanentemente?')) return;
-  const del1=storePath?storage.ref(storePath).delete().catch(()=>{}) : Promise.resolve();
-  del1.then(()=>db.collection('clientDocuments').doc(docId).delete()).catch(err=>alert('Erro: '+err.message));
+  db.collection('clientDocuments').doc(docId).delete().catch(err=>alert('Erro: '+err.message));
 }
 /* ===== Fim Documentos ===== */
 function editClient(id){
