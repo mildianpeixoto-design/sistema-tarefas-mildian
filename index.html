@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260708-02';
+  var BUILD='20260709-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2058,7 +2058,7 @@ function renderQuickBar(){
   if(currentUser.role==='owner'){
     const mk=currentMonthKey();
     const metaValor=state.metaAtual?.valor||0;
-    const thisMonthClients=getMetaClients(mk);
+    const thisMonthClients=getMetaEntries(mk);
     const acumulado=thisMonthClients.reduce((s,c)=>s+(c.valorPagamento||0),0);
     const pct=metaValor>0?acumulado/metaValor:0;
     const cor=pct>=1?'#16a34a':pct>=0.7?'#d97706':'#dc2626';
@@ -2073,36 +2073,54 @@ function renderQuickBar(){
 }
 
 /* ====================== Meta de Vendas ====================== */
-function getMetaClients(mk){
-  return state.clients.filter(c=>{
-    if(c.status==='cancelado') return false;
-    if(!c.createdAt) return false;
-    const d=c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000);
-    return monthKeyOf(d.toISOString().slice(0,10))===mk;
+function getMetaEntries(mk){
+  const entries=[];
+  state.clients.filter(c=>c.status!=='cancelado').forEach(c=>{
+    // Clientes novos criados neste mês
+    if(c.createdAt){
+      const d=c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000);
+      if(monthKeyOf(d.toISOString().slice(0,10))===mk){
+        entries.push({nome:c.nome,id:c.id,valorPagamento:c.valorPagamento||0,valorAngariacao:c.valorAngariacao||c.comissaoValor||0,numeroProposta:c.numeroProposta||'',banco:c.banco||'',data:d,tipo:'novo',angariacacaoPaga:!!c.angariacacaoPaga});
+      }
+    }
+    // Vendas adicionais em clientes existentes
+    (c.vendasAdicionais||[]).forEach((v,idx)=>{
+      if(!v.data) return;
+      const vd=v.data.toDate?v.data.toDate():new Date((v.data.seconds||0)*1000);
+      if(monthKeyOf(vd.toISOString().slice(0,10))===mk){
+        entries.push({nome:c.nome,id:c.id,vendaIdx:idx,valorPagamento:v.valorPlano||0,valorAngariacao:v.valorAngariacao||0,numeroProposta:v.numeroProposta||'',banco:c.banco||'',data:vd,tipo:'adicional',planoLabel:v.plano||'Cobertura adicional',angariacacaoPaga:!!v.angariacacaoPaga});
+      }
+    });
   });
+  return entries;
 }
+// Compat: ainda exposto para qualquer uso legado
+function getMetaClients(mk){ return getMetaEntries(mk).filter(e=>e.tipo==='novo').map(e=>({...e,valorPagamento:e.valorPagamento})); }
 function showMetaModal(){
   const mk=currentMonthKey();
   const metaValor=state.metaAtual?.valor||0;
-  const clients=getMetaClients(mk);
-  const acumulado=clients.reduce((s,c)=>s+(c.valorPagamento||0),0);
+  const entries=getMetaEntries(mk);
+  const acumulado=entries.reduce((s,e)=>s+(e.valorPagamento||0),0);
   const pct=metaValor>0?Math.min(acumulado/metaValor,1):0;
   const cor=pct>=1?'#16a34a':pct>=0.7?'#d97706':'#dc2626';
   const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const [ano,mes]=mk.split('-');
   const nomeMes=MESES[parseInt(mes,10)-1]+' '+ano;
   let rows='';
-  clients.slice().sort((a,b)=>(b.valorPagamento||0)-(a.valorPagamento||0)).forEach(c=>{
-    const dt=c.createdAt?(c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000)):null;
-    const paga=!!c.angariacacaoPaga;
+  entries.slice().sort((a,b)=>(b.valorPagamento||0)-(a.valorPagamento||0)).forEach(e=>{
+    const dt=e.data instanceof Date?e.data:null;
+    const paga=!!e.angariacacaoPaga;
+    const isAdicional=e.tipo==='adicional';
+    const nomeLabel=isAdicional?`${esc(e.nome)} <span style="font-size:.75rem;background:var(--accent,#2563eb);color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px;">+ ${esc(e.planoLabel||'venda adicional')}</span>`:esc(e.nome);
+    const toggleFn=isAdicional?`toggleAngariacaoAdicional('${e.id}',${e.vendaIdx},${paga})`:`toggleAngariacao('${e.id}',${paga})`;
     rows+=`<tr>
-      <td>${esc(c.nome)}</td>
-      <td>${fmtBRL(c.valorPagamento||0)}</td>
+      <td>${nomeLabel}</td>
+      <td>${fmtBRL(e.valorPagamento||0)}</td>
       <td>${dt?dt.toLocaleDateString('pt-BR'):'-'}</td>
-      <td>${esc(c.numeroProposta||'-')}</td>
-      <td>${esc(c.banco||'-')}</td>
-      <td>${fmtBRL(c.valorAngariacao||c.comissaoValor||0)}</td>
-      <td><button class="btn" style="font-size:.78rem;padding:3px 9px;background:${paga?'#16a34a':'#dc2626'};color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="toggleAngariacao('${c.id}',${paga})">${paga?'✅ Paga':'⏳ Pendente'}</button></td>
+      <td>${esc(e.numeroProposta||'-')}</td>
+      <td>${esc(e.banco||'-')}</td>
+      <td>${fmtBRL(e.valorAngariacao||0)}</td>
+      <td><button class="btn" style="font-size:.78rem;padding:3px 9px;background:${paga?'#16a34a':'#dc2626'};color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="${toggleFn}">${paga?'✅ Paga':'⏳ Pendente'}</button></td>
     </tr>`;
   });
   const overlay=document.createElement('div');
@@ -2127,7 +2145,7 @@ function showMetaModal(){
       </div>
       ${metaValor?`<div class="meta-progress-bar"><div class="meta-progress-fill" style="width:${Math.round(pct*100)}%;background:${cor};"></div></div>`:''}
       <table class="meta-table">
-        <thead><tr><th>Cliente</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th><th>Angariação</th></tr></thead>
+        <thead><tr><th>Cliente / Produto</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th><th>Angariação</th></tr></thead>
         <tbody>${rows||'<tr><td colspan="7" class="empty" style="padding:12px;">Nenhum cliente cadastrado neste mês ainda.</td></tr>'}</tbody>
       </table>
     </div>`;
@@ -2146,8 +2164,74 @@ function saveMeta(){
 }
 function toggleAngariacao(id, currentPaga){
   db.collection('clients').doc(id).update({angariacacaoPaga: !currentPaga})
-    .then(()=>{ showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success'); showMetaModal(); })
+    .then(()=>{ showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success'); closeMetaModal(); showMetaModal(); })
     .catch(err=>alert('Erro: '+err.message));
+}
+function toggleAngariacaoAdicional(clientId, vendaIdx, currentPaga){
+  const client=state.clients.find(c=>c.id===clientId);
+  if(!client) return;
+  const vendas=[...(client.vendasAdicionais||[])];
+  if(!vendas[vendaIdx]) return;
+  vendas[vendaIdx]={...vendas[vendaIdx], angariacacaoPaga:!currentPaga};
+  db.collection('clients').doc(clientId).update({vendasAdicionais:vendas})
+    .then(()=>{ showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success'); closeMetaModal(); showMetaModal(); })
+    .catch(err=>alert('Erro: '+err.message));
+}
+function registrarNovaVenda(clientId){
+  const client=state.clients.find(c=>c.id===clientId);
+  if(!client){ showToast('Cliente não encontrado','error'); return; }
+  const today=new Date().toISOString().slice(0,10);
+  const overlay=document.createElement('div');
+  overlay.className='meta-modal-overlay';
+  overlay.id='novaVendaOverlay';
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) overlay.remove(); });
+  overlay.innerHTML=`
+    <div class="meta-modal" style="max-width:460px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2>💰 Nova venda — ${esc(client.nome)}</h2>
+        <button class="icon-btn" onclick="document.getElementById('novaVendaOverlay').remove()">✕</button>
+      </div>
+      <div class="form-grid" style="gap:10px;">
+        <div class="full"><label>Plano / Produto</label><input id="nvPlano" type="text" placeholder="Ex: Vida Sênior, Odonto Família…"></div>
+        <div><label>Valor mensal (R$)</label><input id="nvValor" type="number" min="0" step="0.01" placeholder="0,00"></div>
+        <div><label>% Angariação</label><input id="nvPct" type="number" min="0" max="100" step="0.01" placeholder="0"></div>
+        <div><label>Nº Proposta</label><input id="nvProposta" type="text" placeholder="Número da proposta"></div>
+        <div><label>Data</label><input id="nvData" type="date" value="${today}"></div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('novaVendaOverlay').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveNovaVenda('${clientId}')">💾 Salvar venda</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function saveNovaVenda(clientId){
+  const plano=(document.getElementById('nvPlano')?.value||'').trim();
+  const valorPlano=parseFloat(document.getElementById('nvValor')?.value)||0;
+  const percentAngariacao=parseFloat(document.getElementById('nvPct')?.value)||0;
+  const valorAngariacao=parseFloat((valorPlano*percentAngariacao/100).toFixed(2));
+  const numeroProposta=(document.getElementById('nvProposta')?.value||'').trim();
+  const dataStr=document.getElementById('nvData')?.value||new Date().toISOString().slice(0,10);
+  if(!plano){ showToast('Informe o nome do plano/produto','error'); return; }
+  if(!valorPlano){ showToast('Informe o valor mensal','error'); return; }
+  const client=state.clients.find(c=>c.id===clientId);
+  if(!client){ showToast('Cliente não encontrado','error'); return; }
+  const dataTs=firebase.firestore.Timestamp.fromDate(new Date(dataStr+'T12:00:00'));
+  const novaVenda={plano,valorPlano,percentAngariacao,valorAngariacao,numeroProposta,data:dataTs,angariacacaoPaga:false};
+  const vendas=[...(client.vendasAdicionais||[]),novaVenda];
+  const novaCob={plano,valorPlano,percentCarteira:0,valorCarteira:0,capitalSegurado:0,sinistrosPagos:0};
+  const cobs=Array.isArray(client.coberturas)?[...client.coberturas,novaCob]:[novaCob];
+  const totalVal=(client.valorPagamento||0)+valorPlano;
+  const _now=firebase.firestore.FieldValue.serverTimestamp();
+  db.collection('clients').doc(clientId).update({
+    vendasAdicionais:vendas,
+    coberturas:cobs,
+    valorPagamento:totalVal,
+    updatedAt:_now
+  }).then(()=>{
+    document.getElementById('novaVendaOverlay')?.remove();
+    showToast('✅ Venda registrada com sucesso!','success');
+  }).catch(err=>alert('Erro: '+err.message));
 }
 function updateCapSubTotal(prefix, totalId){
   const total=COVERAGE_TYPES.reduce((s,t)=>s+(parseFloat(document.getElementById(prefix+t.key)?.value)||0),0);
@@ -3049,6 +3133,7 @@ function renderClients(){
         </div>
         <div class="cdp-actions row">
           <button class="btn primary" onclick="editClient('${c.id}');event.stopPropagation()">✏️ Editar</button>
+          <button class="btn" style="color:#16a34a;border-color:#16a34a;" onclick="registrarNovaVenda('${c.id}');event.stopPropagation()">💰 Nova venda</button>
           <button class="btn" onclick="toggleClientActivityForm('${c.id}');event.stopPropagation()">🗓️ Nova atividade</button>
           <button class="btn" onclick="convertClientToLead('${c.id}');event.stopPropagation()">🔄 Converter em lead</button>
           <button class="btn" style="color:var(--amber);border-color:var(--amber);" onclick="cancelarClienteDireto('${c.id}','${esc(c.nome)}');event.stopPropagation()">❌ Cliente cancelado</button>
