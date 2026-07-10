@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260710-01';
+  var BUILD='20260710-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2902,23 +2902,22 @@ function clientDocsHtml(clientId){
 function uploadClientDocs(clientId, input){
   const files=[...input.files];
   if(!files.length) return;
-  const progress=document.getElementById('clientDocsProgress-'+clientId);
-  const setProgress=(msg,isErr)=>{
-    if(!progress) return;
-    progress.style.display='';
-    progress.style.color=isErr?'var(--danger,#c0392b)':'var(--gold)';
-    progress.textContent=msg;
+  const setProgress=(msg)=>{
+    const p=document.getElementById('clientDocsProgress-'+clientId);
+    if(!p) return;
+    p.style.display=''; p.style.color='var(--gold)'; p.textContent=msg;
   };
+  const hideProgress=()=>{ const p=document.getElementById('clientDocsProgress-'+clientId); if(p) p.style.display='none'; };
   setProgress(`Enviando ${files.length} arquivo(s)...`);
   let done=0;
   const handleDone=(err)=>{
     done++;
     if(err){
-      setProgress(`❌ ${err.message||'Erro desconhecido'}`, true);
-      setTimeout(()=>{ if(progress) progress.style.display='none'; },30000);
+      hideProgress();
+      showToast('❌ Upload falhou: '+(err.message||'Erro desconhecido'),'error');
       console.error('[uploadClientDocs]', err);
     } else {
-      if(done===files.length){ if(progress) progress.style.display='none'; }
+      if(done===files.length) hideProgress();
       else setProgress(`Enviando... (${done}/${files.length})`);
     }
   };
@@ -2930,7 +2929,7 @@ function uploadClientDocs(clientId, input){
       .then(r=>r.json())
       .then(data=>{
         if(data.error) throw new Error('Cloudinary: '+data.error.message);
-        if(!data.secure_url) throw new Error('Cloudinary: resposta inválida');
+        if(!data.secure_url) throw new Error('Cloudinary: URL não retornada');
         return db.collection('clientDocuments').add({
           clientId, nome:file.name, tipo:file.type||'', url:data.secure_url,
           publicId:data.public_id||'', tamanho:file.size, uploadedAt:Date.now(),
@@ -5088,3 +5087,4 @@ if('serviceWorker' in navigator){
 </script>
 </body>
 </html>
+                       
