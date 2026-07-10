@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260709-03';
+  var BUILD='20260710-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2915,7 +2915,7 @@ function uploadClientDocs(clientId, input){
     done++;
     if(err){
       setProgress(`❌ ${err.message||'Erro desconhecido'}`, true);
-      setTimeout(()=>{ if(progress) progress.style.display='none'; },8000);
+      setTimeout(()=>{ if(progress) progress.style.display='none'; },30000);
       console.error('[uploadClientDocs]', err);
     } else {
       if(done===files.length){ if(progress) progress.style.display='none'; }
@@ -2926,11 +2926,11 @@ function uploadClientDocs(clientId, input){
     const fd=new FormData();
     fd.append('file', file);
     fd.append('upload_preset', 'sistema_mildian');
-    fd.append('folder', 'clientDocs/'+clientId);
     fetch('https://api.cloudinary.com/v1_1/f1jndqvo/auto/upload',{method:'POST',body:fd})
       .then(r=>r.json())
       .then(data=>{
-        if(data.error) throw new Error(data.error.message);
+        if(data.error) throw new Error('Cloudinary: '+data.error.message);
+        if(!data.secure_url) throw new Error('Cloudinary: resposta inválida');
         return db.collection('clientDocuments').add({
           clientId, nome:file.name, tipo:file.type||'', url:data.secure_url,
           publicId:data.public_id||'', tamanho:file.size, uploadedAt:Date.now(),
