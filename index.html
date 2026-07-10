@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260710-03';
+  var BUILD='20260710-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3711,9 +3711,6 @@ function renderFunil(){
             ${isOwner?`<button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>`:''}
             ${isOwner&&stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
           </div>
-          <select onchange="moveLead('${l.id}',this.value)">
-            ${STAGE_ORDER.map(s=>`<option value="${s}" ${l.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
-          </select>
           <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
           ${expandedLeadHist.has(l.id)?`
             <div class="hist-list" style="margin-top:6px;">
