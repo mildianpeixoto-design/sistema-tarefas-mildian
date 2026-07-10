@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260710-02';
+  var BUILD='20260710-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2890,7 +2890,7 @@ function clientDocsHtml(clientId){
           <div class="muted" style="font-size:.75rem;">${[size,date,who].filter(Boolean).join(' · ')}</div>
         </div>
         <a href="${doc.url}" target="_blank" rel="noopener" class="btn" style="font-size:.78rem;padding:4px 8px;text-decoration:none;" title="Abrir/Baixar">⬇ Abrir</a>
-        ${isOwner||doc.uploadedBy===currentUser?.uid?`<button class="icon-btn" style="color:var(--red,#c0392b);" onclick="deleteClientDoc('${doc.id}','${esc(doc.storePath||'')}');event.stopPropagation();" title="Excluir documento">🗑️</button>`:''}
+        ${currentUser?.role==='owner'||doc.uploadedBy===currentUser?.uid?`<button class="icon-btn" style="color:var(--red,#c0392b);" onclick="deleteClientDoc('${doc.id}','${doc.publicId||''}');event.stopPropagation();" title="Excluir documento">🗑️</button>`:''}
       </div>`;
     });
     h+=`</div>`;
@@ -5087,4 +5087,3 @@ if('serviceWorker' in navigator){
 </script>
 </body>
 </html>
-                       
