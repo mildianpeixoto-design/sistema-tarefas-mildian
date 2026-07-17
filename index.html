@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260710-04';
+  var BUILD='20260710-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4659,11 +4659,23 @@ function renderPayablesMonthList(){
     Object.keys(grupos).sort().forEach(due=>{
       const dia=due.slice(-2).replace(/^0/,'');
       const nomeMes=new Date(due+'T12:00:00').toLocaleDateString('pt-BR',{month:'long'});
-      const subtotal=grupos[due].reduce((s,p)=>s+(p.value||0),0);
+      const subtotalPago=grupos[due].reduce((s,p)=>{
+        const occ=occMap[p.id]||{status:'pendente'};
+        return s+(occ.status==='pago'?(p.value||0):0);
+      },0);
+      const subtotalPendente=grupos[due].reduce((s,p)=>{
+        const occ=occMap[p.id]||{status:'pendente'};
+        return s+(occ.status!=='pago'?(p.value||0):0);
+      },0);
       html+=`<div style="margin-bottom:18px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:6px 0;border-bottom:2px solid var(--gold);">
-          <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Dia ${dia} de ${nomeMes}</span>
-          <span style="font-size:.8rem;color:var(--text2);margin-left:auto;">${fmtBRL(subtotal)}</span>
+        <div style="margin-bottom:6px;padding:6px 0;border-bottom:2px solid var(--gold);">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Vencimento dia ${dia} de ${nomeMes}</span>
+          </div>
+          <div style="display:flex;gap:16px;margin-top:4px;font-size:.82rem;">
+            <span style="color:#16a34a;">✅ Pago: <strong>${fmtBRL(subtotalPago)}</strong></span>
+            <span style="color:var(--amber,#e67e22);">⏳ Pendente: <strong>${fmtBRL(subtotalPendente)}</strong></span>
+          </div>
         </div>
         <table><thead><tr><th>Conta</th><th>Valor</th><th>Recorrência</th><th>Status</th><th></th></tr></thead><tbody>`;
       grupos[due].forEach(p=>{
@@ -4680,8 +4692,13 @@ function renderPayablesMonthList(){
       html+=`</tbody></table></div>`;
     });
   }
-  html+=`<div style="padding:10px 0;border-top:2px solid var(--border);font-size:.9rem;color:var(--text2);">
-    <strong>Total do mês: ${fmtBRL(totalMes)}</strong> · Pago: ${fmtBRL(totalPago)} · Pendente: ${fmtBRL(totalMes-totalPago)}
+  html+=`<div style="padding:12px 0;border-top:2px solid var(--border);margin-top:8px;">
+    <div style="font-size:.85rem;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Total do mês</div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <span style="color:#16a34a;font-size:.95rem;">✅ Total pago: <strong>${fmtBRL(totalPago)}</strong></span>
+      <span style="color:var(--amber,#e67e22);font-size:.95rem;">⏳ Total pendente: <strong>${fmtBRL(totalMes-totalPago)}</strong></span>
+      <span style="color:var(--text2);font-size:.95rem;">📋 Total geral: <strong>${fmtBRL(totalMes)}</strong></span>
+    </div>
   </div>`;
   el.innerHTML=html;
 }
