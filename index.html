@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260710-05';
+  var BUILD='20260710-06';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3672,10 +3672,11 @@ function addLeadHistorico(id){
   if(!input) return;
   const text=input.value.trim();
   if(!text) return;
-  const l=state.leads.find(x=>x.id===id);
-  const historico=((l&&l.historico)||[]).concat([{texto:text,at:ts(),uid:currentUser.uid,name:currentUser.name}]);
   input.value='';
-  db.collection('leads').doc(id).set({historico},{merge:true}).catch(err=>alert('Erro: '+err.message));
+  const newEntry={texto:text,at:ts(),uid:currentUser.uid,name:currentUser.name,_id:Date.now().toString(36)+Math.random().toString(36).slice(2,6)};
+  db.collection('leads').doc(id).update({
+    historico: firebase.firestore.FieldValue.arrayUnion(newEntry)
+  }).catch(err=>alert('Erro: '+err.message));
 }
 function renderFunil(){
   let html='';
