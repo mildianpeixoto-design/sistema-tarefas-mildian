@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260721-05';
+  var BUILD='20260721-06';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3714,7 +3714,7 @@ function addLeadHistorico(id){
 function renderFunil(){
   let html='';
   const isOwner=currentUser.role==='owner';
-  STAGE_ORDER.forEach(stage=>{
+  STAGE_ORDER.filter(s=>s!=='fechado').forEach(stage=>{
     const items=state.leads.filter(l=>l.etapa===stage);
     html+=`<div class="kanban-col${stage==='espera'?' espera':''}"><h4>${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
     items.forEach(l=>{
