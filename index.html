@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260721-06';
+  var BUILD='20260721-07';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3812,7 +3812,7 @@ function renderLeadsFinalizados(){
     </tr></thead><tbody>`;
   fechados.forEach(l=>{
     const creatorName=l.createdByName||userName(l.createdBy)||'—';
-    const dataStr=l.createdAt?(l.createdAt.toDate?fmtDate(l.createdAt.toDate()):fmtDate(new Date(l.createdAt))):'—';
+    const dataStr=l.createdAt?(l.createdAt.toDate?fmtDateTime(l.createdAt):fmtDateTime(new Date(l.createdAt))):'—';
     html+=`<tr>
       <td><strong>${esc(l.nome)}</strong>${l.telefone?`<div class="muted" style="font-size:11px;">${esc(l.telefone)}</div>`:''}</td>
       <td>${esc(creatorName)}</td>
