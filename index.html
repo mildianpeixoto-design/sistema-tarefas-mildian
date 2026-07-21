@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260721-01';
+  var BUILD='20260721-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -448,7 +448,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   </div>
 </section>
 
-<section id="tab-atividades" class="section owner-only">
+<section id="tab-atividades" class="section">
   <div class="row" style="margin-bottom:12px;">
     <button class="btn primary" id="newActivityBtn">+ Nova atividade</button>
   </div>
@@ -1181,6 +1181,7 @@ function setupNav(){
   }else{
     nav.innerHTML=`
       <button data-tab="hoje" class="active">Minhas tarefas</button>
+      <button data-tab="atividades">Atividades</button>
       <button data-tab="cancelados">Cancelados</button>
       <button data-tab="cards">Cards</button>
       <button data-tab="clientes">Clientes</button>
@@ -1777,7 +1778,7 @@ function renderHoje(){
         <div class="activity-controls">
           <button class="btn" onclick="markOverdueDone('${act.id}','${date}')">✓ Finalizar</button>
           <button class="btn" onclick="toggleRescheduleForm('${date}_${act.id}')">Reagendar</button>
-          ${isOwner?`<button class="btn" onclick="showActivityForm(state.activities.find(a=>a.id==='${act.id}'))">✏️ Editar</button>`:''}
+          ${(isOwner||act.assignedTo===currentUser.uid)?`<button class="btn" onclick="showActivityForm(state.activities.find(a=>a.id==='${act.id}'))">✏️ Editar</button>`:''}
         </div>
         ${expandedReschedule.has(`${date}_${act.id}`)?`<div class="row" style="margin-top:6px;">
           <input type="date" id="reschedule-${date}_${act.id}" value="${todayStr()}">
@@ -1844,9 +1845,15 @@ function showActivityForm(act, containerId){
       <div class="full"><label>Título</label><input type="text" id="actTitle" value="${esc(act.title)}" required></div>
       <div class="full"><label>Descrição (opcional)</label><textarea id="actDesc">${esc(act.description)}</textarea></div>
       <div class="full"><label>Cliente/Apólice (opcional)</label><input type="text" id="actCliente" value="${esc(act.cliente)}" placeholder="Ex: João Silva - Apólice 12345"></div>
-      <div><label>Responsável</label><select id="actAssignee">
-        ${state.users.map(u=>`<option value="${u.id}" ${act.assignedTo===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}
-      </select></div>
+      ${currentUser.role==='owner'
+        ? `<div><label>Responsável</label><select id="actAssignee">
+            ${state.users.map(u=>`<option value="${u.id}" ${act.assignedTo===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}
+           </select></div>`
+        : `<div><label>Responsável</label>
+            <input type="hidden" id="actAssignee" value="${currentUser.uid}">
+            <span style="font-size:13px;color:var(--text2);">${esc(currentUser.name)}</span>
+           </div>`
+      }
       <div><label>Prioridade</label><select id="actPriority">
         ${Object.keys(PRIORITY_LABELS).map(p=>`<option value="${p}" ${act.priority===p?'selected':''}>${PRIORITY_LABELS[p]}</option>`).join('')}
       </select></div>
