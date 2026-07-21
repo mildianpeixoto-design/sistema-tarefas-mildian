@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260710-06';
+  var BUILD='20260721-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -161,6 +161,21 @@ table th{color:var(--text2);font-weight:500;font-size:12px;}
 .chat-msg .chat-receipt.seen{color:var(--green);}
 .chat-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);}
 .chat-form input{flex:1;}
+.chat-msg{position:relative;}
+.chat-msg-actions{display:none;position:absolute;top:4px;right:4px;gap:3px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 4px;z-index:2;}
+.chat-msg:hover .chat-msg-actions{display:flex;}
+.chat-msg.mine .chat-msg-actions{right:auto;left:4px;}
+.chat-msg-actions button{background:none;border:none;cursor:pointer;font-size:13px;padding:1px 3px;color:var(--text2);line-height:1;}
+.chat-msg-actions button:hover{color:var(--accent);}
+.chat-reply-quote{background:var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:4px 8px;margin-bottom:4px;font-size:12px;color:var(--text2);}
+.chat-reply-quote .rq-name{font-weight:600;color:var(--accent);display:block;margin-bottom:1px;}
+.chat-reply-quote .rq-text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;}
+.chat-edited{font-size:10px;color:var(--text3);font-style:italic;margin-left:4px;}
+.chat-reply-bar{display:none;padding:6px 10px;background:var(--accent-bg);border-top:1px solid var(--border);font-size:12px;color:var(--text2);align-items:center;gap:8px;}
+.chat-reply-bar.visible{display:flex;}
+.chat-reply-bar .rb-content{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chat-reply-bar .rb-name{font-weight:600;color:var(--accent);}
+.chat-reply-bar .rb-cancel{background:none;border:none;cursor:pointer;color:var(--text2);font-size:18px;padding:0 2px;line-height:1;}
 /* Layout da tela inicial (Hoje) — sem coluna de chat */
 .home-layout{display:block;}
 .home-main{min-width:0;}
@@ -639,6 +654,11 @@ textarea{width:100%;min-height:60px;resize:vertical;}
     </div>
   </div>
   <div id="chatMessages" class="chat-messages"></div>
+  <div id="chatReplyBar" class="chat-reply-bar">
+    <span>↩️</span>
+    <span class="rb-content"><span class="rb-name" id="chatReplyName"></span>: <span id="chatReplyText"></span></span>
+    <button class="rb-cancel" onclick="_cancelReply()" title="Cancelar resposta">✕</button>
+  </div>
   <form id="chatForm" class="chat-form">
     <input type="text" id="chatInput" placeholder="Digite uma mensagem..." autocomplete="off" required>
     <button class="btn primary" type="submit" style="padding:0 14px;">↑</button>
@@ -4868,6 +4888,8 @@ const CHAT_LIMIT=200;
 let chatInitialized=false;
 let lastChatMsgId=null;
 let chatPresenceMap={}; // {uid: {name, lastSeen (Date)}} — presenças dos outros usuários
+let _chatMsgs=[]; // cache das mensagens atuais para edição/resposta
+let _chatReplyTo=null; // {id,name,text} — mensagem sendo respondida
 let _audioCtx=null;
 const _origTitle=document.title;
 let _titleFlashTimer=null;
@@ -5022,6 +5044,7 @@ function _closeChat(){
 function renderChat(msgs){
   const el=document.getElementById('chatMessages');
   if(!el) return;
+  _chatMsgs=msgs;
   const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
   if(msgs.length===0){
     el.innerHTML='<div class="empty">Nenhuma mensagem ainda. Diga olá!</div>';
@@ -5046,9 +5069,17 @@ function renderChat(msgs){
         receipt=`<div class="chat-receipt">✓ Enviado</div>`;
       }
     }
-    return `<div class="chat-msg ${isMine?'mine':''}">
+    const replyQ=m.replyTo?`<div class="chat-reply-quote"><span class="rq-name">${esc(m.replyTo.name)}</span><span class="rq-text">${esc((m.replyTo.text||'').slice(0,80))}${(m.replyTo.text||'').length>80?'…':''}</span></div>`:'';
+    const editedTag=m.editedAt?`<span class="chat-edited">(editado)</span>`:'';
+    const actBtns=`<div class="chat-msg-actions">
+      <button onclick="replyChatMsg('${m.id}')" title="Responder">↩️</button>
+      ${isMine?`<button onclick="editChatMsg('${m.id}')" title="Editar">✏️</button>`:''}
+    </div>`;
+    return `<div class="chat-msg ${isMine?'mine':''}" id="chatmsg-${m.id}">
+      ${actBtns}
       <div class="chat-meta">${esc(m.name)}${m.createdAt?' · '+fmtDateTime(m.createdAt):''}</div>
-      <div>${esc(m.text)}</div>
+      ${replyQ}
+      <div class="chat-msg-body">${esc(m.text||'')}${editedTag}</div>
       ${receipt}
     </div>`;
   }).join('');
@@ -5062,11 +5093,55 @@ document.getElementById('chatForm').addEventListener('submit',e=>{
   if(!text) return;
   input.value='';
   _updateChatPresence();
-  db.collection('chatMessages').add({
-    text, uid:currentUser.uid, name:currentUser.name,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(err=>alert('Erro: '+err.message));
+  const payload={text, uid:currentUser.uid, name:currentUser.name,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()};
+  if(_chatReplyTo){ payload.replyTo=_chatReplyTo; _cancelReply(); }
+  db.collection('chatMessages').add(payload).catch(err=>alert('Erro: '+err.message));
 });
+
+function replyChatMsg(id){
+  const m=_chatMsgs.find(x=>x.id===id);
+  if(!m) return;
+  _chatReplyTo={id:m.id, name:m.name, text:m.text||''};
+  const nameEl=document.getElementById('chatReplyName');
+  const textEl=document.getElementById('chatReplyText');
+  const bar=document.getElementById('chatReplyBar');
+  if(nameEl) nameEl.textContent=m.name;
+  if(textEl) textEl.textContent=(m.text||'').slice(0,80)+((m.text||'').length>80?'…':'');
+  if(bar) bar.classList.add('visible');
+  document.getElementById('chatInput')?.focus();
+}
+function _cancelReply(){
+  _chatReplyTo=null;
+  const bar=document.getElementById('chatReplyBar');
+  if(bar) bar.classList.remove('visible');
+}
+function editChatMsg(id){
+  const m=_chatMsgs.find(x=>x.id===id);
+  if(!m) return;
+  const msgEl=document.getElementById('chatmsg-'+id);
+  if(!msgEl) return;
+  const body=msgEl.querySelector('.chat-msg-body');
+  if(!body) return;
+  const orig=m.text||'';
+  body.innerHTML=`<div style="display:flex;gap:4px;margin-top:4px;">
+    <input id="chatEdit-${id}" type="text" style="flex:1;font-size:13px;padding:3px 6px;" onkeydown="if(event.key==='Enter'){saveChatMsg('${id}');event.preventDefault();}if(event.key==='Escape'){renderChat(_chatMsgs);}">
+    <button class="btn btn-primary" style="padding:2px 8px;font-size:12px;" onclick="saveChatMsg('${id}')">✓</button>
+    <button class="btn" style="padding:2px 8px;font-size:12px;" onclick="renderChat(_chatMsgs)">✕</button>
+  </div>`;
+  const inp=document.getElementById('chatEdit-'+id);
+  if(inp){ inp.value=orig; inp.focus(); inp.select(); }
+}
+function saveChatMsg(id){
+  const input=document.getElementById('chatEdit-'+id);
+  if(!input) return;
+  const newText=input.value.trim();
+  if(!newText){ showToast('Mensagem não pode estar vazia','error'); return; }
+  db.collection('chatMessages').doc(id).update({
+    text: newText,
+    editedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(err=>alert('Erro: '+err.message));
+}
 
 /* Videoconferência — abre Jitsi em nova aba (sem limite de tempo) */
 document.getElementById('startVideoBtn').addEventListener('click',()=>{
