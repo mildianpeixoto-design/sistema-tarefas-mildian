@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260721-03';
+  var BUILD='20260721-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -525,6 +525,12 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   </div>
   <div id="leadFormWrap"></div>
   <div class="kanban" id="funilBoard"></div>
+</section>
+
+<section id="tab-leadsfinalizados" class="section">
+  <h2 style="margin-top:0;margin-bottom:4px;">🏆 Leads Finalizados</h2>
+  <p class="muted" style="margin-bottom:16px;">Leads com venda fechada — controle de origem por colaborador.</p>
+  <div id="leadsFinalizadosList"></div>
 </section>
 
 <section id="tab-colaboradores" class="section owner-only">
@@ -1112,6 +1118,7 @@ function initApp(){
   listeners.push(db.collection('leads').onSnapshot(snap=>{
     state.leads=[]; snap.forEach(d=>state.leads.push({id:d.id,...d.data()}));
     renderFunil();
+    renderLeadsFinalizados();
     renderHoje();
   },err=>console.error(err)));
 
@@ -1175,6 +1182,8 @@ function setupNav(){
       <button data-tab="colaboradores">Colaboradores</button>
       <button data-tab="contas">Contas a Pagar</button>
       <button data-tab="pendencias">Dados Incompletos</button>
+      <button data-tab="funil">Funil</button>
+      <button data-tab="leadsfinalizados">Leads Finalizados</button>
       <button data-tab="links">Links</button>
       <button data-tab="relatorios">Relatórios</button>
     `;
@@ -1187,6 +1196,7 @@ function setupNav(){
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
       <button data-tab="funil">Funil</button>
+      <button data-tab="leadsfinalizados">Leads Finalizados</button>
       <button data-tab="pendencias">Dados Incompletos</button>
       <button data-tab="links">Links</button>
     `;
@@ -3638,7 +3648,7 @@ function showLeadForm(lead,containerId){
     }
     const p = isEdit
       ? db.collection('leads').doc(lead.id).set(obj,{merge:true})
-      : db.collection('leads').add({...obj, createdBy:currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+      : db.collection('leads').add({...obj, createdBy:currentUser.uid, createdByName:currentUser.name, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
     p.then(()=>closeThisForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
@@ -3716,6 +3726,7 @@ function renderFunil(){
         ${isExpanded?`
         <div style="margin-top:8px;">
           ${l.valorEstimado?`<div class="kc-value">${fmtBRL(l.valorEstimado)}</div>`:''}
+          ${l.createdBy?`<div class="muted" style="font-size:11px;">👤 Criado por: <strong>${esc(l.createdByName||userName(l.createdBy))}</strong></div>`:''}
           ${l.indicadoPor?`<div class="muted">🤝 Indicado por: ${esc(l.indicadoPor)}</div>`:''}
           ${l.telefone?`<div class="muted" style="display:flex;align-items:center;gap:6px;">📞 ${esc(l.telefone)} <a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:12px;text-decoration:none;" title="Abrir WhatsApp">WhatsApp ↗</a></div>`:''}
           ${l.email?`<div class="muted" style="display:flex;align-items:center;gap:6px;">✉ ${esc(l.email)} <a href="mailto:${esc(l.email)}" style="font-size:12px;color:var(--gold);text-decoration:none;" title="Enviar e-mail">E-mail ↗</a></div>`:''}
@@ -3757,6 +3768,60 @@ function renderFunil(){
   });
 }
 document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
+
+function renderLeadsFinalizados(){
+  const el=document.getElementById('leadsFinalizadosList');
+  if(!el) return;
+  const fechados=(state.leads||[]).filter(l=>l.etapa==='fechado')
+    .slice().sort((a,b)=>{
+      const ta=a.createdAt?.toDate?a.createdAt.toDate():new Date(a.createdAt||0);
+      const tb=b.createdAt?.toDate?b.createdAt.toDate():new Date(b.createdAt||0);
+      return tb-ta;
+    });
+  if(fechados.length===0){
+    el.innerHTML='<div class="empty">Nenhum lead com venda fechada ainda.</div>';
+    return;
+  }
+  // Agrupar por colaborador criador
+  const byCreator={};
+  fechados.forEach(l=>{
+    const uid=l.createdBy||'desconhecido';
+    const name=l.createdByName||userName(uid)||'Desconhecido';
+    if(!byCreator[uid]) byCreator[uid]={name,leads:[]};
+    byCreator[uid].leads.push(l);
+  });
+  let html='';
+  // Resumo por colaborador
+  html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">`;
+  Object.values(byCreator).forEach(g=>{
+    const total=g.leads.reduce((s,l)=>s+(l.valorEstimado||0),0);
+    html+=`<div class="card" style="min-width:180px;">
+      <div class="label">👤 ${esc(g.name)}</div>
+      <div class="value" style="font-size:18px;">${g.leads.length} lead${g.leads.length>1?'s':''}</div>
+      ${total?`<div class="muted" style="font-size:12px;">${fmtBRL(total)} estimado</div>`:''}
+    </div>`;
+  });
+  html+=`</div>`;
+  // Tabela completa
+  html+=`<table>
+    <thead><tr>
+      <th>Lead</th><th>Criado por</th><th>Valor estimado</th><th>Data</th>
+      ${currentUser.role==='owner'?'<th></th>':''}
+    </tr></thead><tbody>`;
+  fechados.forEach(l=>{
+    const creatorName=l.createdByName||userName(l.createdBy)||'—';
+    const dataStr=l.createdAt?(l.createdAt.toDate?fmtDate(l.createdAt.toDate()):fmtDate(new Date(l.createdAt))):'—';
+    html+=`<tr>
+      <td><strong>${esc(l.nome)}</strong>${l.telefone?`<div class="muted" style="font-size:11px;">${esc(l.telefone)}</div>`:''}</td>
+      <td>${esc(creatorName)}</td>
+      <td>${l.valorEstimado?fmtBRL(l.valorEstimado):'—'}</td>
+      <td class="muted" style="font-size:12px;">${dataStr}</td>
+      ${currentUser.role==='owner'?`<td><button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button></td>`:''}
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
+  el.innerHTML=html;
+}
 
 /* ====================== Links úteis ====================== */
 function showLinkForm(link){
