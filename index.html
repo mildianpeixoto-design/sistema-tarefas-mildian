@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260721-04';
+  var BUILD='20260721-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1212,6 +1212,8 @@ function switchTab(tab,btn){
   const navBtn = btn || document.querySelector(`#mainNav button[data-tab="${tab}"]`);
   if(navBtn) navBtn.classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
+  // Leads Finalizados: re-renderiza sempre ao entrar na aba
+  if(tab==='leadsfinalizados') renderLeadsFinalizados();
   // Clique no nav de Clientes: sempre volta ao seletor de tipo
   if(tab==='clientes' && btn){
     clientesTipoFiltro=null;
