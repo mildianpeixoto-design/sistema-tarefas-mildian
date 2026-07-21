@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260721-02';
+  var BUILD='20260721-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1845,15 +1845,9 @@ function showActivityForm(act, containerId){
       <div class="full"><label>Título</label><input type="text" id="actTitle" value="${esc(act.title)}" required></div>
       <div class="full"><label>Descrição (opcional)</label><textarea id="actDesc">${esc(act.description)}</textarea></div>
       <div class="full"><label>Cliente/Apólice (opcional)</label><input type="text" id="actCliente" value="${esc(act.cliente)}" placeholder="Ex: João Silva - Apólice 12345"></div>
-      ${currentUser.role==='owner'
-        ? `<div><label>Responsável</label><select id="actAssignee">
-            ${state.users.map(u=>`<option value="${u.id}" ${act.assignedTo===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}
-           </select></div>`
-        : `<div><label>Responsável</label>
-            <input type="hidden" id="actAssignee" value="${currentUser.uid}">
-            <span style="font-size:13px;color:var(--text2);">${esc(currentUser.name)}</span>
-           </div>`
-      }
+      <div><label>Responsável</label><select id="actAssignee">
+        ${state.users.map(u=>`<option value="${u.id}" ${act.assignedTo===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}
+      </select></div>
       <div><label>Prioridade</label><select id="actPriority">
         ${Object.keys(PRIORITY_LABELS).map(p=>`<option value="${p}" ${act.priority===p?'selected':''}>${PRIORITY_LABELS[p]}</option>`).join('')}
       </select></div>
