@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260721-08';
+  var BUILD='20260721-09';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1196,7 +1196,6 @@ function setupNav(){
       <button data-tab="clientes">Clientes</button>
       <button data-tab="boletos">Cobranças</button>
       <button data-tab="funil">Funil</button>
-      <button data-tab="leadsfinalizados">Leads Finalizados</button>
       <button data-tab="pendencias">Dados Incompletos</button>
       <button data-tab="links">Links</button>
     `;
