@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-02';
+  var BUILD='20260722-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -70,9 +70,11 @@ body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:
 .userbar .btn{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.18);color:#fff;}
 .userbar .btn:hover{background:rgba(255,255,255,0.16);}
 nav{display:flex;flex-direction:column;gap:2px;}
-nav button{background:none;border:none;padding:10px 12px;font-size:13.5px;cursor:pointer;color:rgba(255,255,255,0.65);border-left:3px solid transparent;font-weight:500;text-align:left;border-radius:0 6px 6px 0;letter-spacing:.2px;}
+nav button{background:none;border:none;padding:8px 12px;font-size:13px;cursor:pointer;color:rgba(255,255,255,0.65);border-left:3px solid transparent;font-weight:500;text-align:left;border-radius:0 6px 6px 0;letter-spacing:.2px;display:flex;align-items:center;gap:7px;}
 nav button:hover{background:rgba(255,255,255,0.06);color:#fff;}
 nav button.active{color:#fff;border-left-color:var(--gold);background:rgba(255,255,255,0.1);font-weight:600;}
+.nav-icon{font-size:15px;flex-shrink:0;opacity:.8;}
+.nav-group-label{font-size:10px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.08em;padding:10px 12px 3px;margin-top:4px;}
 .logo-wrap{margin-bottom:12px;background:#fff;border-radius:8px;padding:8px;display:inline-block;}
 .logo-wrap img{max-width:100%;max-height:56px;display:block;}
 .sidebar h1{border-top:none;border-bottom:2px solid var(--gold);padding-bottom:10px;margin-bottom:10px;}
@@ -139,8 +141,9 @@ table th{color:var(--text2);font-weight:500;font-size:12px;}
 .qa-btn:hover{opacity:.85;}
 .qa-in{background:#16a34a;color:#fff;}
 .qa-out{background:#dc2626;color:#fff;}
-.qa-nav{background:var(--gold);color:#fff;}
-.qa-meta{color:#fff;}
+.qa-nav{background:rgba(255,255,255,.55);color:var(--text2,#6b5e3a);border:1px solid rgba(0,0,0,.12);}
+.qa-meta{color:#fff;font-size:.85rem;padding:6px 16px;}
+.qa-timer{font-size:.78rem;color:var(--text2,#6b5e3a);padding:4px 10px;background:rgba(0,0,0,.06);border-radius:6px;white-space:nowrap;}
 /* ---- Meta Modal ---- */
 .meta-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto;}
 .meta-modal{background:var(--card);border-radius:12px;padding:24px;width:min(720px,96vw);max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.3);}
@@ -902,6 +905,7 @@ const SEGUROS_LIST=[
 ];
 const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida'};
 const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido'];
+const STAGE_COLORS={lead:'#3b82f6',contato:'#eab308',proposta:'#ec4899',negociacao:'#f97316',espera:'#6b7280',perdido:'#ef4444',fechado:'#16a34a'};
 
 /* ====================== Estado global ====================== */
 let currentUser=null; // {uid,name,email,role}
@@ -1172,32 +1176,41 @@ function setupNav(){
   const nav=document.getElementById('mainNav');
   if(currentUser.role==='owner'){
     nav.innerHTML=`
-      <button data-tab="hoje" class="active">Hoje</button>
-      <button data-tab="arquivo">Arquivo</button>
-      <button data-tab="atividades">Atividades</button>
-      <button data-tab="cancelados">Cancelados</button>
-      <button data-tab="cards">Cards</button>
-      <button data-tab="clientes">Clientes</button>
-      <button data-tab="boletos">Cobranças</button>
-      <button data-tab="colaboradores">Colaboradores</button>
-      <button data-tab="contas">Contas a Pagar</button>
-      <button data-tab="pendencias">Dados Incompletos</button>
-      <button data-tab="funil">Funil</button>
-      <button data-tab="leadsfinalizados">Leads Finalizados</button>
-      <button data-tab="links">Links</button>
-      <button data-tab="relatorios">Relatórios</button>
+      <div class="nav-group-label">Geral</div>
+      <button data-tab="hoje" class="active"><span class="nav-icon">📅</span>Hoje</button>
+      <button data-tab="arquivo"><span class="nav-icon">🗂️</span>Arquivo</button>
+      <button data-tab="atividades"><span class="nav-icon">✅</span>Atividades</button>
+      <div class="nav-group-label">Vendas</div>
+      <button data-tab="funil"><span class="nav-icon">📊</span>Funil</button>
+      <button data-tab="leadsfinalizados"><span class="nav-icon">🏆</span>Leads Finalizados</button>
+      <div class="nav-group-label">Clientes</div>
+      <button data-tab="clientes"><span class="nav-icon">👥</span>Clientes</button>
+      <button data-tab="cancelados"><span class="nav-icon">⛔</span>Cancelados</button>
+      <button data-tab="cards"><span class="nav-icon">🃏</span>Cards</button>
+      <button data-tab="boletos"><span class="nav-icon">💸</span>Cobranças</button>
+      <button data-tab="pendencias"><span class="nav-icon">⚠️</span>Dados Incompletos</button>
+      <div class="nav-group-label">Financeiro</div>
+      <button data-tab="contas"><span class="nav-icon">💰</span>Contas a Pagar</button>
+      <div class="nav-group-label">Equipe</div>
+      <button data-tab="colaboradores"><span class="nav-icon">👤</span>Colaboradores</button>
+      <button data-tab="relatorios"><span class="nav-icon">📈</span>Relatórios</button>
+      <button data-tab="links"><span class="nav-icon">🔗</span>Links</button>
     `;
   }else{
     nav.innerHTML=`
-      <button data-tab="hoje" class="active">Minhas tarefas</button>
-      <button data-tab="atividades">Atividades</button>
-      <button data-tab="cancelados">Cancelados</button>
-      <button data-tab="cards">Cards</button>
-      <button data-tab="clientes">Clientes</button>
-      <button data-tab="boletos">Cobranças</button>
-      <button data-tab="funil">Funil</button>
-      <button data-tab="pendencias">Dados Incompletos</button>
-      <button data-tab="links">Links</button>
+      <div class="nav-group-label">Geral</div>
+      <button data-tab="hoje" class="active"><span class="nav-icon">📅</span>Minhas tarefas</button>
+      <button data-tab="atividades"><span class="nav-icon">✅</span>Atividades</button>
+      <div class="nav-group-label">Vendas</div>
+      <button data-tab="funil"><span class="nav-icon">📊</span>Funil</button>
+      <div class="nav-group-label">Clientes</div>
+      <button data-tab="clientes"><span class="nav-icon">👥</span>Clientes</button>
+      <button data-tab="cancelados"><span class="nav-icon">⛔</span>Cancelados</button>
+      <button data-tab="cards"><span class="nav-icon">🃏</span>Cards</button>
+      <button data-tab="boletos"><span class="nav-icon">💸</span>Cobranças</button>
+      <button data-tab="pendencias"><span class="nav-icon">⚠️</span>Dados Incompletos</button>
+      <div class="nav-group-label">Outros</div>
+      <button data-tab="links"><span class="nav-icon">🔗</span>Links</button>
     `;
   }
   nav.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab,b)));
@@ -2082,9 +2095,10 @@ function renderQuickBar(){
   if(currentUser.role==='owner'){
     let totalHours=0;
     state.users.forEach(u=>{ totalHours+=logTotalSeconds(state.logsToday[u.id]); });
-    html+=`<span class="qa-info">⏱ Equipe: <strong>${fmtHoursMin(totalHours)}</strong></span>`;
+    html+=`<span class="qa-timer">⏱ <strong>${fmtHoursMin(totalHours)}</strong> equipe &nbsp;·&nbsp; Eu: <strong>${myHours}</strong></span>`;
+  } else {
+    html+=`<span class="qa-timer">⏱ Eu: <strong>${myHours}</strong></span>`;
   }
-  html+=`<span class="qa-info">Eu: <strong>${myHours}</strong></span>`;
   html+=`<button class="qa-btn ${active?'qa-out':'qa-in'}" onclick="toggleClock()">${active?'⏹ Encerrar':'▶ Iniciar'} expediente</button>`;
   html+=`<span class="qa-sep"></span>`;
   if(currentUser.role==='owner'){
@@ -2096,10 +2110,11 @@ function renderQuickBar(){
     const cor=pct>=1?'#16a34a':pct>=0.7?'#d97706':'#dc2626';
     const label=metaValor?`${fmtBRL(acumulado)} / ${fmtBRL(metaValor)}`:`${fmtBRL(acumulado)}`;
     html+=`<button class="qa-btn qa-meta" style="background:${cor};" onclick="showMetaModal()">🎯 ${label}</button>`;
+    html+=`<span style="width:4px;"></span>`;
   }
-  html+=`<button class="qa-btn qa-nav" onclick="switchTab('ponto')">🕐 Ponto</button>`;
-  html+=`<button class="qa-btn qa-nav" onclick="switchTab('funil')">📊 Funil</button>`;
-  html+=`<button class="qa-btn qa-nav" onclick="switchTab('video')">🎥 Vídeo</button>`;
+  html+=`<button class="qa-btn qa-nav" onclick="switchTab('ponto')" title="Ir para Ponto">🕐 Ponto</button>`;
+  html+=`<button class="qa-btn qa-nav" onclick="switchTab('funil')" title="Ir para Funil">📊 Funil</button>`;
+  html+=`<button class="qa-btn qa-nav" onclick="switchTab('video')" title="Ir para Vídeo">🎥 Vídeo</button>`;
   bar.innerHTML=html;
   bar.style.display='flex';
 }
@@ -3753,14 +3768,26 @@ function renderFunil(){
   const isOwner=currentUser.role==='owner';
   STAGE_ORDER.filter(s=>s!=='fechado').forEach(stage=>{
     const items=state.leads.filter(l=>l.etapa===stage);
-    html+=`<div class="kanban-col${stage==='espera'?' espera':''}"><h4>${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
+    const stageColor=STAGE_COLORS[stage]||'#999';
+    html+=`<div class="kanban-col${stage==='espera'?' espera':''}">
+      <h4 style="border-left:4px solid ${stageColor};padding-left:8px;border-radius:0 4px 4px 0;">${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
     items.forEach(l=>{
       const isExpanded=expandedLeadCard.has(l.id);
       const toggleLabel = isExpanded ? 'Fechar ▲' : (isOwner?'Editar ▼':'Ver mais ▼');
-      html+=`<div class="kanban-card">
-        <div class="kc-compact-row" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-          <div class="kc-title" style="margin:0;">${esc(l.nome)}</div>
-          <button class="icon-btn" onclick="toggleLeadCard('${l.id}')">${toggleLabel}</button>
+      const creatorName=l.createdByName||(l.createdBy?userName(l.createdBy):null);
+      const tsMs=l.createdAt?(l.createdAt.toDate?l.createdAt.toDate():new Date((l.createdAt.seconds||0)*1000)).getTime():null;
+      const daysAgo=tsMs!=null?Math.floor((Date.now()-tsMs)/86400000):null;
+      const daysBadge=daysAgo!=null?`<span style="font-size:10px;color:${daysAgo>7?'#dc2626':'var(--text2)'};background:${daysAgo>7?'rgba(220,38,38,.08)':'rgba(0,0,0,.05)'};padding:1px 5px;border-radius:4px;">⏱ ${daysAgo===0?'hoje':daysAgo+'d'}</span>`:'';
+      html+=`<div class="kanban-card" style="border-left:3px solid ${stageColor};border-radius:0 8px 8px 0;padding-left:10px;">
+        <div class="kc-compact-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+          <div>
+            <div class="kc-title" style="margin:0;">${esc(l.nome)}</div>
+            <div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap;align-items:center;">
+              ${creatorName?`<span style="font-size:10px;color:var(--text2);">👤 ${esc(creatorName)}</span>`:''}
+              ${daysBadge}
+            </div>
+          </div>
+          <button class="icon-btn" onclick="toggleLeadCard('${l.id}')" style="flex-shrink:0;">${toggleLabel}</button>
         </div>
         ${isExpanded?`
         <div style="margin-top:8px;">
