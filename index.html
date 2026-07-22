@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-01';
+  var BUILD='20260722-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2874,7 +2874,16 @@ function showClientForm(client, containerId){
     const _now = firebase.firestore.FieldValue.serverTimestamp();
     const p = isEdit
       ? db.collection('clients').doc(client.id).set({...obj, createdAt: createdAtValue, updatedAt: _now},{merge:true})
-      : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: createdAtValue, updatedAt: _now});
+      : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: createdAtValue, updatedAt: _now})
+          .then(docRef=>db.collection('boletosClientes').add({
+            nome: obj.nome,
+            contato: obj.responsavel||'',
+            telefone: obj.telefone||'',
+            email: obj.email||'',
+            diaVencimento: obj.diaVencimento||'',
+            clienteId: docRef.id,
+            ativa: true
+          }));
     p.then(()=>closeThisForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
@@ -3428,7 +3437,9 @@ function renderBoletos(){
   const q=(document.getElementById('boletosSearch')||{value:''}).value.trim().toLowerCase();
   const filtro=(document.getElementById('boletosFiltro')||{value:'todos'}).value;
 
-  let list=state.boletosClientes.filter(c=>{
+  const activeClientes=state.boletosClientes.filter(c=>c.ativa!==false);
+
+  let list=activeClientes.filter(c=>{
     if(!q) return true;
     return (c.nome||'').toLowerCase().includes(q)
       ||(c.contato||'').toLowerCase().includes(q)
@@ -3450,8 +3461,8 @@ function renderBoletos(){
     return (a.nome||'').localeCompare(b.nome||'','pt-BR');
   });
 
-  const total=state.boletosClientes.length;
-  const recebidos=state.boletosClientes.filter(c=>!!(c.boletosStatus&&c.boletosStatus[boletosViewMes])).length;
+  const total=activeClientes.length;
+  const recebidos=activeClientes.filter(c=>!!(c.boletosStatus&&c.boletosStatus[boletosViewMes])).length;
   const pendentes=total-recebidos;
   statsEl.innerHTML=`
     <div class="card" style="padding:14px 18px;display:flex;flex-direction:column;gap:2px;min-width:120px;">
@@ -3467,10 +3478,7 @@ function renderBoletos(){
       <div style="font-size:1.6rem;font-weight:700;color:var(--amber);">${pendentes}</div>
     </div>`;
 
-  if(list.length===0){
-    listEl.innerHTML=`<div class="empty">${q?'Nenhuma empresa encontrada para "'+esc(q)+'"':'Nenhum cliente de cobrança cadastrado. Clique em "+ Nova cobrança" para adicionar.'}</div>`;
-    return;
-  }
+  // (empty check handled at bottom together with inativas section)
 
   const rows=list.map(c=>{
     const recebido=!!(c.boletosStatus&&c.boletosStatus[boletosViewMes]);
@@ -3492,7 +3500,7 @@ function renderBoletos(){
         </div>
         ${currentUser.role==='owner'?`<div class="cdp-actions row">
           <button class="btn btn-primary" onclick="showBoletoForm(state.boletosClientes.find(x=>x.id==='${c.id}'))">✏️ Editar</button>
-          <button class="btn" style="color:var(--red);" onclick="if(confirm('Remover este cliente de cobrança?')) db.collection('boletosClientes').doc('${c.id}').delete()">🗑️ Remover</button>
+          <button class="btn" style="color:var(--red);" onclick="if(confirm('Desativar esta cobrança? A empresa ficará na seção de inativas e pode ser reativada a qualquer momento.')) db.collection('boletosClientes').doc('${c.id}').update({ativa:false})">⛔ Desativar</button>
         </div>`:''}
       </div>`;
     }
@@ -3522,7 +3530,37 @@ function renderBoletos(){
     </div>`;
   }).join('');
 
-  listEl.innerHTML=`<div class="client-name-list">${rows}</div>`;
+  const inativas=state.boletosClientes.filter(c=>c.ativa===false);
+  let inativasHtml='';
+  if(inativas.length>0){
+    inativasHtml=`<div style="margin-top:24px;border-top:2px solid var(--border);padding-top:14px;">
+      <details>
+        <summary style="cursor:pointer;font-weight:600;color:var(--text2);user-select:none;list-style:none;display:flex;align-items:center;gap:8px;">
+          <span>⛔ Inativas (${inativas.length})</span>
+          <span style="font-size:12px;color:var(--text3);">— clique para ver</span>
+        </summary>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+          ${inativas.map(c=>{
+            const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+            return `<div class="client-list-item" style="opacity:.65;">
+              <div class="cli-avatar" style="background:var(--border);color:var(--text2);">${initials}</div>
+              <div class="cli-name-block" style="flex:1;min-width:0;">
+                <div class="cli-name">${esc(c.nome||'—')}</div>
+                ${c.contato?`<div class="cli-sub">${esc(c.contato)}</div>`:''}
+              </div>
+              <button class="icon-btn" onclick="db.collection('boletosClientes').doc('${c.id}').update({ativa:true})">✅ Reativar</button>
+            </div>`;
+          }).join('')}
+        </div>
+      </details>
+    </div>`;
+  }
+  if(list.length===0){
+    const msg=q?`Nenhuma empresa encontrada para "${esc(q)}".`:'Nenhum cliente de cobrança ativo. Clique em "+ Nova cobrança" para adicionar.';
+    listEl.innerHTML=`<div class="empty">${msg}</div>${inativasHtml}`;
+  } else {
+    listEl.innerHTML=`<div class="client-name-list">${rows}</div>${inativasHtml}`;
+  }
 }
 
 function selectBoleto(id){
