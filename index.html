@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-07';
+  var BUILD='20260722-08';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -478,6 +478,10 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       <div class="tipo-selector-card import-card owner-only" id="btnImportarClientes" onclick="importarClientesRelatorio()" style="display:none;">
         <div class="tipo-selector-icon">📥</div>
         <div class="tipo-selector-label">Importar<br>Relatório</div>
+      </div>
+      <div class="tipo-selector-card import-card owner-only" id="btnCorrigirTipos" onclick="corrigirTiposClientes()" style="display:none;">
+        <div class="tipo-selector-icon">🔄</div>
+        <div class="tipo-selector-label">Corrigir<br>PF / PJ</div>
       </div>
     </div>
     <input type="file" id="importarPdfInput" accept="application/pdf" style="display:none" onchange="processarPropostaPdf(this.files[0])">
@@ -4129,6 +4133,31 @@ async function processarPropostaPdf(file){
     showToast('❌ Erro ao ler o PDF: '+(err.message||err),'error');
   }
   document.getElementById('importarPdfInput').value='';
+}
+async function corrigirTiposClientes(){
+  if(!currentUser||currentUser.role!=='owner'){alert('Apenas o responsável pode corrigir.');return;}
+  const card=document.getElementById('btnCorrigirTipos');
+  const lbl=card?card.querySelector('.tipo-selector-label'):null;
+  if(card)card.style.pointerEvents='none';
+  if(lbl)lbl.textContent='⏳ Verificando...';
+  try{
+    const snap=await db.collection('clients').get();
+    let atualizados=0,semAlteracao=0,erros=0;
+    const promises=[];
+    snap.forEach(doc=>{
+      const d=doc.data();
+      const cpfLimpo=(d.cpf||'').replace(/\D/g,'');
+      const tipoCorreto=cpfLimpo.length>=14?'PJ':'PF';
+      if((d.tipo||'PF')!==tipoCorreto){
+        promises.push(db.collection('clients').doc(doc.id).update({tipo:tipoCorreto}).then(()=>atualizados++).catch(()=>erros++));
+      } else {
+        semAlteracao++;
+      }
+    });
+    await Promise.all(promises);
+    alert(`✅ Correção concluída!\n${atualizados} clientes atualizados (PF↔PJ).\n${semAlteracao} já estavam corretos.${erros?'\n⚠️ '+erros+' com erro':''}`);
+  }catch(e){alert('Erro: '+e.message);}
+  if(card){card.style.pointerEvents='';if(lbl)lbl.innerHTML='Corrigir<br>PF / PJ';}
 }
 async function importarClientesRelatorio(){
   if(!currentUser||currentUser.role!=='owner'){alert('Apenas o responsável pode importar.');return;}
