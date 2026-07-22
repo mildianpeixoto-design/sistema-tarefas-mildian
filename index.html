@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-08';
+  var BUILD='20260722-09';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4147,7 +4147,7 @@ async function corrigirTiposClientes(){
     snap.forEach(doc=>{
       const d=doc.data();
       const cpfLimpo=(d.cpf||'').replace(/\D/g,'');
-      const tipoCorreto=cpfLimpo.length>=14?'PJ':'PF';
+      const tipoCorreto=cpfLimpo.length>11?'PJ':'PF';
       if((d.tipo||'PF')!==tipoCorreto){
         promises.push(db.collection('clients').doc(doc.id).update({tipo:tipoCorreto}).then(()=>atualizados++).catch(()=>erros++));
       } else {
