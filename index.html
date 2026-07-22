@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-04';
+  var BUILD='20260722-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -37,21 +37,22 @@
 <style>
 :root{
   color-scheme: light;
-  --bg:#f3f5f8;
+  --bg:#f5f3ff;
+  --bg2:#ede9fe;
   --card:#ffffff;
-  --border:#dde3ec;
-  --text:#1b2638;
-  --text2:#5a6b7d;
-  --text3:#9aa6b8;
-  --accent:#1f3a5f;
-  --accent-bg:#e4eaf2;
-  --lilac:#3d6e8f;
-  --lilac-bg:#e6eef3;
-  --gold:#b8860b;
-  --gold-bg:#f7efd9;
-  --sidebar-bg:#16263b;
-  --sidebar-bg2:#0e1b2c;
-  --gradient: linear-gradient(135deg,#274a73 0%,#0f2238 100%);
+  --border:#ddd5f8;
+  --text:#1a1035;
+  --text2:#5b4d7e;
+  --text3:#9c8fbf;
+  --accent:#4c1d95;
+  --accent-bg:#ede9fe;
+  --lilac:#6d28d9;
+  --lilac-bg:#ede9fe;
+  --gold:#7c3aed;
+  --gold-bg:#ede9fe;
+  --sidebar-bg:#2d1b69;
+  --sidebar-bg2:#1a0f3e;
+  --gradient: linear-gradient(135deg,#3b1fa3 0%,#1a0f3e 100%);
   --green:#0d6b4f; --green-bg:#dff3ec;
   --amber:#946200; --amber-bg:#fbf0db;
   --red:#a02525; --red-bg:#fbe8e8;
@@ -905,7 +906,7 @@ const SEGUROS_LIST=[
 ];
 const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida'};
 const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido'];
-const STAGE_COLORS={lead:'#4472B0',contato:'#B09030',proposta:'#7A54A8',negociacao:'#B06830',espera:'#7A8E9E',perdido:'#B04444',fechado:'#3A8A5A'};
+const STAGE_COLORS={lead:'#3b82f6',contato:'#eab308',proposta:'#ec4899',negociacao:'#f97316',espera:'#6b7280',perdido:'#ef4444',fechado:'#16a34a'};
 
 /* ====================== Estado global ====================== */
 let currentUser=null; // {uid,name,email,role}
