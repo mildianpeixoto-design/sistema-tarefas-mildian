@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260721-09';
+  var BUILD='20260722-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4578,6 +4578,16 @@ function showPayableForm(p,containerId){
       <div><label>Valor da conta</label>
         <div class="input-icon-wrap"><span class="input-icon">R$</span><input type="number" id="payValue" step="0.01" min="0" value="${p.value||0}"></div>
       </div>
+      <div class="full"><label>Tipo de valor</label>
+        <div style="display:flex;gap:18px;align-items:center;padding-top:4px;flex-wrap:wrap;">
+          <label style="display:flex;gap:6px;align-items:center;cursor:pointer;font-weight:400;">
+            <input type="radio" name="payTipoValor" value="fixo" ${(!p.tipoValor||p.tipoValor==='fixo')?'checked':''}> Fixo (mesmo valor todo mês)
+          </label>
+          <label style="display:flex;gap:6px;align-items:center;cursor:pointer;font-weight:400;">
+            <input type="radio" name="payTipoValor" value="variavel" ${p.tipoValor==='variavel'?'checked':''}> Variável (valor diferente a cada mês)
+          </label>
+        </div>
+      </div>
       <div><label>Recorrência</label><select id="payRecurrence">
         <option value="unico" ${p.recurrence==='unico'?'selected':''}>Único</option>
         <option value="mensal" ${p.recurrence==='mensal'?'selected':''}>Mensal</option>
@@ -4629,7 +4639,7 @@ function showPayableForm(p,containerId){
   document.getElementById('payableForm').addEventListener('submit',e=>{
     e.preventDefault();
     const rec=document.getElementById('payRecurrence').value;
-    const obj={ name:document.getElementById('payName').value.trim(), value:parseFloat(document.getElementById('payValue').value)||0, recurrence:rec, active:true };
+    const obj={ name:document.getElementById('payName').value.trim(), value:parseFloat(document.getElementById('payValue').value)||0, recurrence:rec, active:true, tipoValor:document.querySelector('input[name="payTipoValor"]:checked')?.value||'fixo' };
     if(!obj.name) return;
     if(rec==='unico'){
       obj.dueDate=document.getElementById('payDueDate').value;
@@ -4693,6 +4703,39 @@ function togglePayablePaid(payableId,mk,currentStatus){
     // mês atual: listener já atualiza automaticamente
   }).catch(err=>alert('Erro: '+err.message));
 }
+function editPayableMonthValue(payableId,mk){
+  const cell=document.getElementById('payval-'+payableId);
+  if(!cell) return;
+  const p=state.payables.find(x=>x.id===payableId);
+  if(!p) return;
+  const occMap=mk===currentMonthKey()?state.payableOccCurrent:state.payableOccSelected;
+  const occ=occMap[payableId]||{};
+  const current=(occ.valorMes!=null)?occ.valorMes:(p.value||0);
+  cell.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+    <span style="color:var(--text2);font-weight:600;">R$</span>
+    <input type="number" id="payValInput-${payableId}" value="${current}" step="0.01" min="0" style="width:110px;padding:4px 8px;border:1px solid var(--accent);border-radius:4px;font-size:14px;">
+    <button class="icon-btn" onclick="savePayableMonthValue('${payableId}','${mk}')">✔ Salvar</button>
+    <button class="icon-btn" onclick="renderPayablesMonthList()">✕</button>
+  </div>`;
+  const inp=document.getElementById('payValInput-'+payableId);
+  if(inp){ inp.focus(); inp.select();
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') savePayableMonthValue(payableId,mk); if(e.key==='Escape') renderPayablesMonthList(); });
+  }
+}
+function savePayableMonthValue(payableId,mk){
+  const inp=document.getElementById('payValInput-'+payableId);
+  if(!inp) return;
+  const val=parseFloat(inp.value);
+  if(isNaN(val)||val<0){ alert('Valor inválido.'); return; }
+  setPayableOccurrence(payableId,mk,{valorMes:val}).then(()=>{
+    if(mk!==currentMonthKey()){
+      if(!state.payableOccSelected[payableId]) state.payableOccSelected[payableId]={payableId,month:mk};
+      state.payableOccSelected[payableId].valorMes=val;
+      renderPayablesMonthList();
+    }
+    // mês atual: listener onSnapshot já atualiza automaticamente
+  }).catch(err=>alert('Erro: '+err.message));
+}
 function renderPayablesMonthList(){
   const el=document.getElementById('payablesMonthList');
   if(!el) return;
@@ -4716,9 +4759,10 @@ function renderPayablesMonthList(){
   // Calcular totais sobre todos os itens (antes do filtro de ocultar)
   let totalMes=0, totalPago=0;
   allItems.forEach(p=>{
-    totalMes+=(p.value||0);
     const occ=occMap[p.id]||{status:'pendente'};
-    if(occ.status==='pago') totalPago+=(p.value||0);
+    const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
+    totalMes+=effVal;
+    if(occ.status==='pago') totalPago+=effVal;
   });
 
   // Aplicar filtro de ocultar pagas
@@ -4753,11 +4797,13 @@ function renderPayablesMonthList(){
       const nomeMes=new Date(due+'T12:00:00').toLocaleDateString('pt-BR',{month:'long'});
       const subtotalPago=grupos[due].reduce((s,p)=>{
         const occ=occMap[p.id]||{status:'pendente'};
-        return s+(occ.status==='pago'?(p.value||0):0);
+        const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
+        return s+(occ.status==='pago'?effVal:0);
       },0);
       const subtotalPendente=grupos[due].reduce((s,p)=>{
         const occ=occMap[p.id]||{status:'pendente'};
-        return s+(occ.status!=='pago'?(p.value||0):0);
+        const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
+        return s+(occ.status!=='pago'?effVal:0);
       },0);
       html+=`<div style="margin-bottom:18px;">
         <div style="margin-bottom:6px;padding:6px 0;border-bottom:2px solid var(--gold);">
@@ -4773,9 +4819,11 @@ function renderPayablesMonthList(){
       grupos[due].forEach(p=>{
         const occ=occMap[p.id]||{status:'pendente'};
         const paid=occ.status==='pago';
-        html+=`<tr>
+        const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
+        const editValBtn=p.tipoValor==='variavel'?`<button class="icon-btn" style="margin-left:6px;" onclick="editPayableMonthValue('${p.id}','${mk}')" title="Alterar valor deste mês">✏️ Editar valor</button>`:'';
+        html+=`<tr id="payrow-${p.id}">
           <td>${esc(p.name)}</td>
-          <td>💰 ${fmtBRL(p.value||0)}</td>
+          <td id="payval-${p.id}" style="white-space:nowrap;">💰 ${fmtBRL(effVal)}${p.tipoValor==='variavel'?'<span class="muted" style="font-size:10px;margin-left:4px;">(variável)</span>':''}${editValBtn}</td>
           <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
           <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
           <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'↩ Desfazer':'✔ Marcar pago'}</button></td>
@@ -4843,7 +4891,7 @@ function renderPayablesList(){
     }
     html+=`<tr>
       <td>${esc(p.name)}</td>
-      <td>💰 ${fmtBRL(p.value||0)}</td>
+      <td>💰 ${fmtBRL(p.value||0)}${p.tipoValor==='variavel'?'<br><span class="muted" style="font-size:10px;">Variável por mês</span>':''}</td>
       <td>${RECUR_TEXT[p.recurrence]||p.recurrence||'—'}</td>
       <td>${pagamento}</td>
       <td>${prazo}</td>
