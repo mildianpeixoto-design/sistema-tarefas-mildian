@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-05';
+  var BUILD='20260722-06';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3701,6 +3701,14 @@ function showLeadForm(lead,containerId){
       const obsInicial=document.getElementById('leadObsInicial').value.trim();
       if(obsInicial) obj.historico=[{texto:obsInicial,at:ts(),uid:currentUser.uid,name:currentUser.name}];
     }
+    if(isInline){
+      const histInput=document.getElementById(`leadHistInput-${lead.id}`);
+      const newAnnotation=histInput?histInput.value.trim():'';
+      if(newAnnotation){
+        const newEntry={texto:newAnnotation,at:ts(),uid:currentUser.uid,name:currentUser.name,_id:Date.now().toString(36)+Math.random().toString(36).slice(2,6)};
+        obj.historico=[...(lead.historico||[]),newEntry];
+      }
+    }
     const p = isEdit
       ? db.collection('leads').doc(lead.id).set(obj,{merge:true})
       : db.collection('leads').add({...obj, createdBy:currentUser.uid, createdByName:currentUser.name, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
@@ -3807,7 +3815,6 @@ function renderFunil(){
           })():''}
           <div id="leadEditWrap-${l.id}" style="margin-top:8px;"></div>
           <div class="row" style="margin-top:8px;">
-            <button class="icon-btn" onclick="editLead('${l.id}')">✏️ Editar</button>
             ${isOwner?`<button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>`:''}
             ${isOwner&&stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
           </div>
@@ -3815,9 +3822,8 @@ function renderFunil(){
           ${expandedLeadHist.has(l.id)?`
             <div class="hist-list" style="margin-top:6px;">
               ${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}
-              <div class="row" style="margin-top:6px;">
-                <input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação..." style="flex:1;" onkeydown="if(event.key==='Enter'){addLeadHistorico('${l.id}')}">
-                <button class="btn" onclick="addLeadHistorico('${l.id}')">Salvar</button>
+              <div style="margin-top:6px;">
+                <input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação... (será salva junto com o formulário acima)" style="width:100%;">
               </div>
             </div>
           `:''}
