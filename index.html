@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-10';
+  var BUILD='20260722-11';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3050,7 +3050,7 @@ function renderClients(){
   const allActive=state.clients.filter(c=>c.status!=='cancelado');
   const activeClients=clientesTipoFiltro ? allActive.filter(c=>{
     const docLen=(c.cpf||'').replace(/\D/g,'').length;
-    const tipoReal=docLen>11?'PJ':'PF';
+    const tipoReal=(c.tipo==='PJ'||docLen>11)?'PJ':'PF';
     return tipoReal===clientesTipoFiltro;
   }) : allActive;
   const total=activeClients.length;
