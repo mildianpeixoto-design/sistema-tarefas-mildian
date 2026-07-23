@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-13';
+  var BUILD='20260723-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1364,6 +1364,18 @@ function toggleTimer(actId){
     setOccurrence(ds,actId,patch);
   }
 }
+function toggleOverdueTimer(actId,date){
+  const key=`${date}_${actId}`;
+  const occ=state.occRange[key]||{};
+  if(occ.timerStart){
+    const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
+    setOccurrence(date,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()});
+  }else{
+    const patch={timerStart:ts(), status:occ.status||'pendente'};
+    if(!occ.startedAt) patch.startedAt=ts();
+    setOccurrence(date,actId,patch);
+  }
+}
 function setStatus(actId,status){
   const ds=todayStr();
   const occ=state.occToday[actId]||{};
@@ -1813,6 +1825,10 @@ function renderHoje(){
         ${act.description?`<div class="activity-desc">${esc(act.description)}</div>`:''}
         ${act.cliente?`<div class="cliente-tag">Cliente/Apólice: ${esc(act.cliente)}</div>`:''}
         <div class="activity-controls">
+          <span class="timer" id="overtimer-${date}_${act.id}">${fmtHMS(occElapsed(occ))}</span>
+          ${occ.timerStart
+            ?`<button class="btn" onclick="toggleOverdueTimer('${act.id}','${date}')">⏸ Pausar</button>`
+            :`<button class="btn" onclick="toggleOverdueTimer('${act.id}','${date}')">▶ Iniciar</button>`}
           <button class="btn" onclick="markOverdueDone('${act.id}','${date}')">✓ Finalizar</button>
           <button class="btn" onclick="toggleRescheduleForm('${date}_${act.id}')">Reagendar</button>
           ${(isOwner||act.assignedTo===currentUser.uid)?`<button class="btn" onclick="showActivityForm(state.activities.find(a=>a.id==='${act.id}'))">✏️ Editar</button>`:''}
@@ -1856,6 +1872,11 @@ setInterval(()=>{
   document.querySelectorAll('[id^="timer-"]').forEach(el=>{
     const actId=el.id.replace('timer-','');
     const occ=state.occToday[actId];
+    if(occ&&occ.timerStart) el.textContent=fmtHMS(occElapsed(occ));
+  });
+  document.querySelectorAll('[id^="overtimer-"]').forEach(el=>{
+    const key=el.id.replace('overtimer-','');
+    const occ=state.occRange[key];
     if(occ&&occ.timerStart) el.textContent=fmtHMS(occElapsed(occ));
   });
   document.querySelectorAll('[id^="ponto-"]').forEach(el=>{
