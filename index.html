@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-11';
+  var BUILD='20260722-12';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3049,9 +3049,10 @@ function renderClients(){
   const isOwner=currentUser.role==='owner';
   const allActive=state.clients.filter(c=>c.status!=='cancelado');
   const activeClients=clientesTipoFiltro ? allActive.filter(c=>{
-    const docLen=(c.cpf||'').replace(/\D/g,'').length;
-    const tipoReal=(c.tipo==='PJ'||docLen>11)?'PJ':'PF';
-    return tipoReal===clientesTipoFiltro;
+    const cpfLen=(c.cpf||'').replace(/\D/g,'').length;
+    const cnpjLen=(c.cnpj||'').replace(/\D/g,'').length;
+    const isPJ=c.tipo==='PJ'||cpfLen>11||cnpjLen>0;
+    return (isPJ?'PJ':'PF')===clientesTipoFiltro;
   }) : allActive;
   const total=activeClients.length;
   const somaValor=activeClients.reduce((s,c)=>s+(c.valorPagamento||0),0);
@@ -4151,7 +4152,8 @@ async function corrigirTiposClientes(){
     snap.forEach(doc=>{
       const d=doc.data();
       const cpfLimpo=(d.cpf||'').replace(/\D/g,'');
-      const tipoCorreto=cpfLimpo.length>11?'PJ':'PF';
+      const cnpjLimpo=(d.cnpj||'').replace(/\D/g,'');
+      const tipoCorreto=(cpfLimpo.length>11||cnpjLimpo.length>0)?'PJ':'PF';
       if((d.tipo||'PF')!==tipoCorreto){
         promises.push(db.collection('clients').doc(doc.id).update({tipo:tipoCorreto}).then(()=>atualizados++).catch(()=>erros++));
       } else {
