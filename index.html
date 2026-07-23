@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260722-12';
+  var BUILD='20260722-13';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -482,6 +482,10 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       <div class="tipo-selector-card import-card owner-only" id="btnCorrigirTipos" onclick="corrigirTiposClientes()" style="display:none;">
         <div class="tipo-selector-icon">🔄</div>
         <div class="tipo-selector-label">Corrigir<br>PF / PJ</div>
+      </div>
+      <div class="tipo-selector-card import-card owner-only" id="btnLimparDuplicatas" onclick="limparDuplicatasImport()" style="display:none;">
+        <div class="tipo-selector-icon">🧹</div>
+        <div class="tipo-selector-label">Limpar<br>Duplicatas</div>
       </div>
     </div>
     <input type="file" id="importarPdfInput" accept="application/pdf" style="display:none" onchange="processarPropostaPdf(this.files[0])">
@@ -4138,6 +4142,53 @@ async function processarPropostaPdf(file){
     showToast('❌ Erro ao ler o PDF: '+(err.message||err),'error');
   }
   document.getElementById('importarPdfInput').value='';
+}
+async function limparDuplicatasImport(){
+  if(!currentUser||currentUser.role!=='owner'){alert('Apenas o responsável pode fazer isso.');return;}
+  const card=document.getElementById('btnLimparDuplicatas');
+  const lbl=card?card.querySelector('.tipo-selector-label'):null;
+  if(card)card.style.pointerEvents='none';
+  if(lbl)lbl.textContent='⏳ Analisando...';
+  try{
+    const snap=await db.collection('clients').get();
+    const todos=[];
+    snap.forEach(d=>todos.push({id:d.id,...d.data()}));
+    function getCnpj(c){
+      const fromCpf=(c.cpf||'').replace(/\D/g,'');
+      const fromCnpj=(c.cnpj||'').replace(/\D/g,'');
+      if(fromCpf.length>11)return fromCpf;
+      if(fromCnpj.length>0)return fromCnpj;
+      return null;
+    }
+    const grupos={};
+    todos.forEach(c=>{const cnpj=getCnpj(c);if(!cnpj)return;if(!grupos[cnpj])grupos[cnpj]=[];grupos[cnpj].push(c);});
+    const duplicatas=Object.values(grupos).filter(g=>g.length>1);
+    if(duplicatas.length===0){alert('✅ Nenhuma duplicata encontrada!');if(card){card.style.pointerEvents='';if(lbl)lbl.innerHTML='Limpar<br>Duplicatas';}return;}
+    if(!confirm(`Encontrei ${duplicatas.length} empresa(s) com cadastro duplicado.\nSerá mantido o registro mais completo e removidas as cópias extras.\n\nConfirmar?`)){if(card){card.style.pointerEvents='';if(lbl)lbl.innerHTML='Limpar<br>Duplicatas';}return;}
+    let deletados=0,erros=0;
+    const promessas=[];
+    for(const grupo of duplicatas){
+      // Manter o que tem campo cnpj preenchido (registro original); senão, manter o primeiro
+      const manter=grupo.find(c=>(c.cnpj||'').replace(/\D/g,'').length>0)||grupo[0];
+      const deletar=grupo.filter(c=>c.id!==manter.id);
+      for(const c of deletar){
+        promessas.push(
+          db.collection('clients').doc(c.id).delete()
+            .then(async()=>{
+              const bSnap=await db.collection('boletosClientes').where('clienteId','==',c.id).get();
+              const bDels=[];
+              bSnap.forEach(b=>bDels.push(db.collection('boletosClientes').doc(b.id).delete()));
+              await Promise.all(bDels);
+              deletados++;
+            })
+            .catch(()=>erros++)
+        );
+      }
+    }
+    await Promise.all(promessas);
+    alert(`✅ Limpeza concluída!\n${deletados} duplicata(s) removida(s).${erros?'\n⚠️ '+erros+' com erro':''}`);
+    if(card){card.style.pointerEvents='';if(lbl)lbl.innerHTML='Limpar<br>Duplicatas';}
+  }catch(e){alert('Erro: '+e.message);if(card){card.style.pointerEvents='';if(lbl)lbl.innerHTML='Limpar<br>Duplicatas';}}
 }
 async function corrigirTiposClientes(){
   if(!currentUser||currentUser.role!=='owner'){alert('Apenas o responsável pode corrigir.');return;}
