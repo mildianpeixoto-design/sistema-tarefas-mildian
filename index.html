@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260723-01';
+  var BUILD='20260724-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -337,14 +337,14 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .tipo-toggle button.active{background:var(--navy,#1a2a4a);color:var(--gold);font-weight:700;}
 .tipo-toggle button:not(.active):hover{background:var(--gold-bg);}
 /* Seletor de tipo na aba Clientes */
-.tipo-selector-wrap{display:flex;gap:24px;justify-content:center;padding:52px 20px 36px;}
-.tipo-selector-card{background:var(--card);border:2px solid var(--border);border-radius:16px;padding:36px 48px;cursor:pointer;text-align:center;transition:border-color .18s,box-shadow .18s,transform .12s;flex:1;max-width:220px;}
+.tipo-selector-wrap{display:grid;grid-template-columns:repeat(3,minmax(130px,220px));gap:24px;justify-content:center;padding:52px 20px 36px;}
+.tipo-selector-card{background:var(--card);border:2px solid var(--border);border-radius:16px;padding:36px 48px;cursor:pointer;text-align:center;transition:border-color .18s,box-shadow .18s,transform .12s;}
 .tipo-selector-card:hover{border-color:var(--gold);box-shadow:0 6px 20px rgba(0,0,0,0.1);transform:translateY(-3px);}
 .tipo-selector-icon{font-size:52px;margin-bottom:14px;}
 .tipo-selector-label{font-size:15px;font-weight:600;color:var(--accent);}
 .tipo-selector-card.import-card{border-color:var(--border);background:repeating-linear-gradient(135deg,var(--card) 0,var(--card) 10px,var(--bg2) 10px,var(--bg2) 20px);}
 .tipo-selector-card.import-card:hover{border-color:var(--gold);}
-@media(max-width:480px){.tipo-selector-wrap{gap:14px;padding:32px 12px 20px;}.tipo-selector-card{padding:24px 16px;}.tipo-selector-icon{font-size:38px;}}
+@media(max-width:600px){.tipo-selector-wrap{grid-template-columns:repeat(2,minmax(100px,160px));gap:14px;padding:32px 12px 20px;}.tipo-selector-card{padding:24px 16px;}.tipo-selector-icon{font-size:38px;}}
 .pdf-loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;}
 .pdf-loading-card{background:var(--card);border-radius:16px;padding:40px 56px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.25);}
 .pdf-loading-spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 18px;}
