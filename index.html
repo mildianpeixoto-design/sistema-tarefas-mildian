@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260724-01';
+  var BUILD='20260724-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2157,16 +2157,16 @@ function renderQuickBar(){
 function getMetaEntries(mk){
   const entries=[];
   state.clients.filter(c=>c.status!=='cancelado').forEach(c=>{
-    // Clientes novos criados neste mês
-    if(c.createdAt){
+    // Clientes novos criados neste mês (exceto os excluídos manualmente da meta)
+    if(c.createdAt && !c.excluidaDeMeta){
       const d=c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000);
       if(monthKeyOf(d.toISOString().slice(0,10))===mk){
         entries.push({nome:c.nome,id:c.id,valorPagamento:c.valorPagamento||0,valorAngariacao:c.valorAngariacao||c.comissaoValor||0,numeroProposta:c.numeroProposta||'',banco:c.banco||'',data:d,tipo:'novo',angariacacaoPaga:!!c.angariacacaoPaga});
       }
     }
-    // Vendas adicionais em clientes existentes
+    // Vendas adicionais em clientes existentes (exceto as canceladas)
     (c.vendasAdicionais||[]).forEach((v,idx)=>{
-      if(!v.data) return;
+      if(!v.data || v.cancelada) return;
       const vd=v.data.toDate?v.data.toDate():new Date((v.data.seconds||0)*1000);
       if(monthKeyOf(vd.toISOString().slice(0,10))===mk){
         entries.push({nome:c.nome,id:c.id,vendaIdx:idx,valorPagamento:v.valorPlano||0,valorAngariacao:v.valorAngariacao||0,numeroProposta:v.numeroProposta||'',banco:c.banco||'',data:vd,tipo:'adicional',planoLabel:v.plano||'Cobertura adicional',angariacacaoPaga:!!v.angariacacaoPaga});
@@ -2194,6 +2194,7 @@ function showMetaModal(){
     const isAdicional=e.tipo==='adicional';
     const nomeLabel=isAdicional?`${esc(e.nome)} <span style="font-size:.75rem;background:var(--accent,#2563eb);color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px;">+ ${esc(e.planoLabel||'venda adicional')}</span>`:esc(e.nome);
     const toggleFn=isAdicional?`toggleAngariacaoAdicional('${e.id}',${e.vendaIdx},${paga})`:`toggleAngariacao('${e.id}',${paga})`;
+    const remFn=isAdicional?`removerDaMeta('${e.id}',${e.vendaIdx},'adicional')`:`removerDaMeta('${e.id}',null,'novo')`;
     rows+=`<tr>
       <td>${nomeLabel}</td>
       <td>${fmtBRL(e.valorPagamento||0)}</td>
@@ -2202,6 +2203,7 @@ function showMetaModal(){
       <td>${esc(e.banco||'-')}</td>
       <td>${fmtBRL(e.valorAngariacao||0)}</td>
       <td><button class="btn" style="font-size:.78rem;padding:3px 9px;background:${paga?'#16a34a':'#dc2626'};color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="${toggleFn}">${paga?'✅ Paga':'⏳ Pendente'}</button></td>
+      <td><button class="btn" title="Remover da meta" style="font-size:.78rem;padding:3px 8px;background:#6b7280;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="${remFn}">🗑️</button></td>
     </tr>`;
   });
   const overlay=document.createElement('div');
@@ -2226,8 +2228,8 @@ function showMetaModal(){
       </div>
       ${metaValor?`<div class="meta-progress-bar"><div class="meta-progress-fill" style="width:${Math.round(pct*100)}%;background:${cor};"></div></div>`:''}
       <table class="meta-table">
-        <thead><tr><th>Cliente / Produto</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th><th>Angariação</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="7" class="empty" style="padding:12px;">Nenhum cliente cadastrado neste mês ainda.</td></tr>'}</tbody>
+        <thead><tr><th>Cliente / Produto</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th><th>Angariação</th><th></th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="8" class="empty" style="padding:12px;">Nenhum cliente cadastrado neste mês ainda.</td></tr>'}</tbody>
       </table>
     </div>`;
   document.body.appendChild(overlay);
@@ -2257,6 +2259,23 @@ function toggleAngariacaoAdicional(clientId, vendaIdx, currentPaga){
   db.collection('clients').doc(clientId).update({vendasAdicionais:vendas})
     .then(()=>{ showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success'); closeMetaModal(); showMetaModal(); })
     .catch(err=>alert('Erro: '+err.message));
+}
+function removerDaMeta(clientId, vendaIdx, tipo){
+  if(!confirm('Remover esta proposta da meta do mês? O cliente não será excluído.')) return;
+  if(tipo==='adicional'){
+    const client=state.clients.find(c=>c.id===clientId);
+    if(!client) return;
+    const vendas=[...(client.vendasAdicionais||[])];
+    if(!vendas[vendaIdx]) return;
+    vendas[vendaIdx]={...vendas[vendaIdx], cancelada:true};
+    db.collection('clients').doc(clientId).update({vendasAdicionais:vendas})
+      .then(()=>{ showToast('🗑️ Venda removida da meta','success'); closeMetaModal(); showMetaModal(); })
+      .catch(err=>alert('Erro: '+err.message));
+  } else {
+    db.collection('clients').doc(clientId).set({excluidaDeMeta:true},{merge:true})
+      .then(()=>{ showToast('🗑️ Proposta removida da meta','success'); closeMetaModal(); showMetaModal(); })
+      .catch(err=>alert('Erro: '+err.message));
+  }
 }
 function registrarNovaVenda(clientId){
   const client=state.clients.find(c=>c.id===clientId);
