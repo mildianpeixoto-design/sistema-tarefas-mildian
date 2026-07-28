@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260724-02';
+  var BUILD='20260728-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -384,6 +384,18 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .cdp-label{color:var(--text-muted,var(--text2));min-width:110px;flex-shrink:0;}
 .cdp-value{color:var(--text1);flex:1;}
 .cdp-actions{gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;margin-top:4px;}
+/* ---- Formulários e Documentos ---- */
+.form-catpills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.form-catpill{border:1px solid var(--border);background:#fff;border-radius:20px;padding:4px 14px;font-size:12px;cursor:pointer;color:var(--text2);transition:all .15s;font-weight:500;}
+.form-catpill:hover{border-color:var(--gold);color:var(--gold);}
+.form-catpill.active{background:var(--gradient);color:#fff;border-color:transparent;}
+.form-file-list{display:flex;flex-direction:column;gap:8px;}
+.form-file-item{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 1px 3px rgba(28,38,56,0.04);}
+.form-file-icon{font-size:1.8rem;flex-shrink:0;line-height:1;}
+.form-file-info{flex:1;min-width:0;}
+.form-file-name{font-size:.92rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.form-file-meta{font-size:.76rem;color:var(--text2);margin-top:3px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;}
+.form-cat-tag{background:var(--gold-bg);color:var(--gold);border-radius:20px;padding:1px 9px;font-size:.73rem;font-weight:600;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -649,6 +661,43 @@ textarea{width:100%;min-height:60px;resize:vertical;}
     <div class="row">
       <input type="text" id="videoShareLink" readonly style="flex:1;">
       <button class="btn" id="copyVideoLinkBtn">Copiar link</button>
+    </div>
+  </div>
+</section>
+
+<section id="tab-formularios" class="section">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:1.1rem;color:var(--accent);">📁 Formulários e Documentos</h2>
+    <button class="btn primary" onclick="abrirUploadFormulario()">＋ Enviar Documento</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+    <input type="text" id="formBuscaInput" placeholder="🔍 Buscar por nome ou descrição..." style="flex:1;min-width:180px;max-width:360px;" oninput="_formBusca=this.value.toLowerCase();renderFormularios()">
+  </div>
+  <div id="formCategoriaPills" class="form-catpills"></div>
+  <div id="formulariosList" class="form-file-list"></div>
+  <!-- Modal upload -->
+  <div id="uploadFormModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;">
+    <div style="background:var(--card);border-radius:12px;padding:24px;width:min(420px,95vw);box-shadow:0 8px 32px rgba(0,0,0,.3);">
+      <h3 style="margin:0 0 16px;font-size:1rem;">📁 Enviar Documentos</h3>
+      <label style="font-size:.83rem;color:var(--text2);display:block;margin-bottom:4px;">Categoria</label>
+      <select id="uploadFormCategoria" style="width:100%;margin-bottom:12px;">
+        <option value="">Sem categoria</option>
+        <option value="Propostas">Propostas</option>
+        <option value="Contratos">Contratos</option>
+        <option value="Sinistros">Sinistros</option>
+        <option value="Relatórios">Relatórios</option>
+        <option value="Outros">Outros</option>
+      </select>
+      <label style="font-size:.83rem;color:var(--text2);display:block;margin-bottom:4px;">Descrição (opcional)</label>
+      <input type="text" id="uploadFormDesc" placeholder="Ex: Proposta anual — João Silva" style="width:100%;margin-bottom:16px;">
+      <div id="uploadFormProgress" style="margin-bottom:12px;font-size:.85rem;color:var(--gold);display:none;min-height:20px;"></div>
+      <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+        <label class="btn primary" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+          📎 Escolher Arquivo(s)
+          <input type="file" multiple style="display:none;" onchange="confirmarUploadFormularios(this)">
+        </label>
+        <button class="btn" onclick="fecharUploadFormulario()">Fechar</button>
+      </div>
     </div>
   </div>
 </section>
@@ -966,7 +1015,8 @@ let state={
   boletosClientes:[],
   metas:{},
   metaAtual:null,
-  clientDocs:[]
+  clientDocs:[],
+  formularios:[]
 };
 let boletosViewMes=new Date().toISOString().slice(0,7);
 let selectedBoletoId=null;
@@ -1182,6 +1232,11 @@ function initApp(){
     archiveMissingMetaReports();
   }
 
+  listeners.push(db.collection('formularios').orderBy('uploadedAt','desc').onSnapshot(snap=>{
+    state.formularios=[]; snap.forEach(d=>state.formularios.push({id:d.id,...d.data()}));
+    renderFormularios();
+  },err=>console.error(err)));
+
   switchTab('hoje');
 }
 
@@ -1208,6 +1263,7 @@ function setupNav(){
       <button data-tab="colaboradores"><span class="nav-icon">👤</span>Colaboradores</button>
       <button data-tab="relatorios"><span class="nav-icon">📈</span>Relatórios</button>
       <button data-tab="links"><span class="nav-icon">🔗</span>Links</button>
+      <button data-tab="formularios"><span class="nav-icon">📁</span>Formulários</button>
     `;
   }else{
     nav.innerHTML=`
@@ -1224,6 +1280,7 @@ function setupNav(){
       <button data-tab="pendencias"><span class="nav-icon">⚠️</span>Dados Incompletos</button>
       <div class="nav-group-label">Outros</div>
       <button data-tab="links"><span class="nav-icon">🔗</span>Links</button>
+      <button data-tab="formularios"><span class="nav-icon">📁</span>Formulários</button>
     `;
   }
   nav.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab,b)));
@@ -5513,6 +5570,126 @@ document.getElementById('copyVideoLinkBtn').addEventListener('click',()=>{
     setTimeout(()=>btn.textContent=orig,1500);
   }).catch(()=>{});
 });
+
+/* ====================== Formulários e Documentos ====================== */
+let _formBusca='';
+let _formCategoria='todos';
+const FORM_CATS=['todos','Propostas','Contratos','Sinistros','Relatórios','Outros'];
+
+function renderFormularios(){
+  // Pills de categoria
+  const pillsEl=document.getElementById('formCategoriaPills');
+  if(pillsEl){
+    pillsEl.innerHTML=FORM_CATS.map(c=>`<button class="form-catpill${_formCategoria===c?' active':''}" onclick="_formCategoria='${c}';renderFormularios()">${c==='todos'?'Todas':c}</button>`).join('');
+  }
+  const listEl=document.getElementById('formulariosList');
+  if(!listEl) return;
+  let docs=[...(state.formularios||[])];
+  if(_formCategoria!=='todos') docs=docs.filter(d=>d.categoria===_formCategoria);
+  if(_formBusca) docs=docs.filter(d=>(d.nome||'').toLowerCase().includes(_formBusca)||(d.descricao||'').toLowerCase().includes(_formBusca));
+  if(!docs.length){
+    listEl.innerHTML=`<div class="empty" style="padding:28px;">📁 Nenhum documento encontrado.<br>Use "+ Enviar Documento" para adicionar arquivos.</div>`;
+    return;
+  }
+  listEl.innerHTML=docs.map(doc=>{
+    const icon=docTypeIcon(doc.tipo);
+    const size=fmtBytes(doc.tamanho);
+    const date=doc.uploadedAt?new Date(doc.uploadedAt).toLocaleDateString('pt-BR'):'';
+    const who=doc.uploadedByName||'';
+    const catTag=doc.categoria?`<span class="form-cat-tag">${esc(doc.categoria)}</span>`:'';
+    const desc=doc.descricao?`<span style="color:var(--text2);font-size:.76rem;">· ${esc(doc.descricao)}</span>`:'';
+    const meta=[size,date,who].filter(Boolean).join(' · ');
+    const canDel=currentUser?.role==='owner'||doc.uploadedBy===currentUser?.uid;
+    return `<div class="form-file-item">
+      <span class="form-file-icon">${icon}</span>
+      <div class="form-file-info">
+        <div class="form-file-name" title="${esc(doc.nome)}">${esc(doc.nome)}</div>
+        <div class="form-file-meta">${meta} ${catTag} ${desc}</div>
+      </div>
+      <a href="${doc.url}" target="_blank" rel="noopener" class="btn" style="font-size:.78rem;padding:5px 10px;text-decoration:none;white-space:nowrap;flex-shrink:0;" title="Abrir / Baixar">⬇ Abrir</a>
+      ${canDel?`<button class="icon-btn" style="color:var(--red,#c0392b);flex-shrink:0;" onclick="excluirFormulario('${doc.id}')" title="Excluir">🗑️</button>`:''}
+    </div>`;
+  }).join('');
+}
+
+function abrirUploadFormulario(){
+  const m=document.getElementById('uploadFormModal');
+  if(!m) return;
+  document.getElementById('uploadFormDesc').value='';
+  document.getElementById('uploadFormCategoria').value='';
+  const p=document.getElementById('uploadFormProgress');
+  if(p){p.style.display='none';p.textContent='';}
+  m.style.display='flex';
+}
+function fecharUploadFormulario(){
+  const m=document.getElementById('uploadFormModal');
+  if(m) m.style.display='none';
+}
+function confirmarUploadFormularios(input){
+  const files=[...input.files];
+  if(!files.length) return;
+  const categoria=document.getElementById('uploadFormCategoria')?.value||'';
+  const descricao=(document.getElementById('uploadFormDesc')?.value||'').trim();
+  const prog=document.getElementById('uploadFormProgress');
+  const setP=(msg,err)=>{
+    if(!prog) return;
+    prog.style.display='';
+    prog.style.color=err?'var(--red)':'var(--gold)';
+    prog.textContent=msg;
+  };
+  setP(`Enviando ${files.length} arquivo(s)...`);
+  let done=0, errs=0;
+  const onDone=(err)=>{
+    done++;
+    if(err){
+      errs++;
+      console.error('[uploadFormularios]',err);
+      setP('❌ Erro: '+(err.message||err),true);
+    } else if(done===files.length){
+      if(errs===0){
+        setP(`✅ ${files.length} arquivo(s) enviado(s) com sucesso!`);
+        setTimeout(fecharUploadFormulario,1600);
+      } else {
+        setP(`⚠️ ${done-errs}/${files.length} arquivo(s) enviados. Verifique os erros.`,true);
+      }
+    } else {
+      setP(`Enviando... (${done}/${files.length})`);
+    }
+  };
+  files.forEach(file=>{
+    const fd=new FormData();
+    fd.append('file',file);
+    fd.append('upload_preset','sistema_mildian');
+    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/auto/upload',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.error) throw new Error('Cloudinary: '+data.error.message);
+        if(!data.secure_url) throw new Error('URL não retornada pelo servidor');
+        return db.collection('formularios').add({
+          nome:file.name,
+          descricao,
+          categoria,
+          tipo:file.type||'',
+          tamanho:file.size,
+          url:data.secure_url,
+          publicId:data.public_id||'',
+          uploadedAt:Date.now(),
+          uploadedBy:currentUser.uid,
+          uploadedByName:currentUser.name||''
+        });
+      })
+      .then(()=>onDone(null))
+      .catch(err=>onDone(err));
+  });
+  input.value='';
+}
+function excluirFormulario(id){
+  if(!confirm('Excluir este documento permanentemente?')) return;
+  db.collection('formularios').doc(id).delete()
+    .then(()=>showToast('🗑️ Documento excluído','success'))
+    .catch(err=>alert('Erro ao excluir: '+err.message));
+}
+/* ===== Fim Formulários ===== */
 
 /* PWA: registra o service worker para permitir instalação no celular
    (ícone na tela inicial, abre em tela cheia). Os dados continuam
