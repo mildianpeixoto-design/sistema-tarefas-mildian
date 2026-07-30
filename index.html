@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260730-01';
+  var BUILD='20260730-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3088,20 +3088,14 @@ function uploadClientDocs(clientId, input){
     }
   };
   files.forEach(file=>{
-    const fd=new FormData();
-    fd.append('file', file);
-    fd.append('upload_preset', 'sistema_mildian');
-    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
-      .then(r=>r.json())
-      .then(data=>{
-        if(data.error) throw new Error('Cloudinary: '+data.error.message);
-        if(!data.secure_url) throw new Error('Cloudinary: URL não retornada');
-        return db.collection('clientDocuments').add({
-          clientId, nome:file.name, tipo:file.type||'', url:data.secure_url,
-          publicId:data.public_id||'', resourceType:'raw', tamanho:file.size, uploadedAt:Date.now(),
-          uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
-        });
-      })
+    const path='clientDocuments/'+clientId+'/'+Date.now()+'_'+file.name;
+    storage.ref(path).put(file)
+      .then(snap=>snap.ref.getDownloadURL())
+      .then(url=>db.collection('clientDocuments').add({
+        clientId, nome:file.name, tipo:file.type||'', url,
+        storagePath:path, tamanho:file.size, uploadedAt:Date.now(),
+        uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
+      }))
       .then(()=>handleDone(null))
       .catch(err=>handleDone(err));
   });
@@ -3109,7 +3103,9 @@ function uploadClientDocs(clientId, input){
 }
 function deleteClientDoc(docId, storePath){
   if(!confirm('Excluir este documento permanentemente?')) return;
-  db.collection('clientDocuments').doc(docId).delete().catch(err=>alert('Erro: '+err.message));
+  db.collection('clientDocuments').doc(docId).delete()
+    .then(()=>{ if(storePath) return storage.ref(storePath).delete().catch(()=>{}); })
+    .catch(err=>alert('Erro: '+err.message));
 }
 /* ===== Fim Documentos ===== */
 function editClient(id){
@@ -5657,28 +5653,14 @@ function confirmarUploadFormularios(input){
     }
   };
   files.forEach(file=>{
-    const fd=new FormData();
-    fd.append('file',file);
-    fd.append('upload_preset','sistema_mildian');
-    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
-      .then(r=>r.json())
-      .then(data=>{
-        if(data.error) throw new Error('Cloudinary: '+data.error.message);
-        if(!data.secure_url) throw new Error('URL não retornada pelo servidor');
-        return db.collection('formularios').add({
-          nome:file.name,
-          descricao,
-          categoria,
-          tipo:file.type||'',
-          tamanho:file.size,
-          url:data.secure_url,
-          publicId:data.public_id||'',
-          resourceType:'raw',
-          uploadedAt:Date.now(),
-          uploadedBy:currentUser.uid,
-          uploadedByName:currentUser.name||''
-        });
-      })
+    const path='formularios/'+currentUser.uid+'/'+Date.now()+'_'+file.name;
+    storage.ref(path).put(file)
+      .then(snap=>snap.ref.getDownloadURL())
+      .then(url=>db.collection('formularios').add({
+        nome:file.name, descricao, categoria, tipo:file.type||'',
+        tamanho:file.size, url, storagePath:path,
+        uploadedAt:Date.now(), uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
+      }))
       .then(()=>onDone(null))
       .catch(err=>onDone(err));
   });
@@ -5686,9 +5668,13 @@ function confirmarUploadFormularios(input){
 }
 function excluirFormulario(id){
   if(!confirm('Excluir este documento permanentemente?')) return;
-  db.collection('formularios').doc(id).delete()
-    .then(()=>showToast('🗑️ Documento excluído','success'))
-    .catch(err=>alert('Erro ao excluir: '+err.message));
+  db.collection('formularios').doc(id).get().then(snap=>{
+    const path=snap.exists&&snap.data().storagePath;
+    return db.collection('formularios').doc(id).delete()
+      .then(()=>{ if(path) return storage.ref(path).delete().catch(()=>{}); });
+  })
+  .then(()=>showToast('🗑️ Documento excluído','success'))
+  .catch(err=>alert('Erro ao excluir: '+err.message));
 }
 /* ===== Fim Formulários ===== */
 
