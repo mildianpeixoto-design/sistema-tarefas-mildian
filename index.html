@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260730-04';
+  var BUILD='20260730-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -247,7 +247,10 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .pendencia-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
 .pendencia-badge{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;}
 /* Funil de vendas - kanban */
-.kanban{display:grid;grid-template-columns:repeat(7,minmax(170px,1fr));gap:10px;overflow-x:auto;}
+.kanban{display:grid;grid-template-columns:repeat(7,minmax(170px,1fr));gap:10px;overflow-x:auto;scrollbar-width:none;}
+.kanban::-webkit-scrollbar{display:none;}
+#kanbanStickyBar{position:sticky;bottom:0;overflow-x:auto;overflow-y:hidden;height:14px;z-index:15;background:var(--bg);border-top:1px solid var(--border);}
+#kanbanStickyBar>div{height:1px;}
 @media (max-width:1100px){.kanban{grid-template-columns:repeat(7,210px);}}
 .kanban-col.espera h4{color:var(--amber)!important;border-bottom-color:var(--amber)!important;}
 .kanban-col.espera{background:rgba(214,158,46,0.05)!important;}
@@ -3958,7 +3961,22 @@ function renderFunil(){
     const wrap=document.getElementById('leadEditWrap-'+id);
     if(l&&wrap) showLeadForm(l,'leadEditWrap-'+id);
   });
+  initKanbanStickyBar();
 }
+function initKanbanStickyBar(){
+  const board=document.getElementById('funilBoard');
+  if(!board) return;
+  document.getElementById('kanbanStickyBar')?.remove();
+  const bar=document.createElement('div');
+  bar.id='kanbanStickyBar';
+  const phantom=document.createElement('div');
+  phantom.style.width=board.scrollWidth+'px';
+  bar.appendChild(phantom);
+  board.insertAdjacentElement('afterend',bar);
+  let lock=false;
+  bar.addEventListener('scroll',()=>{ if(!lock){lock=true;board.scrollLeft=bar.scrollLeft;lock=false;} });
+  board.addEventListener('scroll',()=>{ if(!lock){lock=true;bar.scrollLeft=board.scrollLeft;lock=false;} });
+
 document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
 
 function renderLeadsFinalizados(){
