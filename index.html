@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260730-02';
+  var BUILD='20260730-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3088,14 +3088,20 @@ function uploadClientDocs(clientId, input){
     }
   };
   files.forEach(file=>{
-    const path='clientDocuments/'+clientId+'/'+Date.now()+'_'+file.name;
-    storage.ref(path).put(file)
-      .then(snap=>snap.ref.getDownloadURL())
-      .then(url=>db.collection('clientDocuments').add({
-        clientId, nome:file.name, tipo:file.type||'', url,
-        storagePath:path, tamanho:file.size, uploadedAt:Date.now(),
-        uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
-      }))
+    const fd=new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', 'mildian_docs');
+    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.error) throw new Error('Cloudinary: '+data.error.message);
+        if(!data.secure_url) throw new Error('Cloudinary: URL não retornada');
+        return db.collection('clientDocuments').add({
+          clientId, nome:file.name, tipo:file.type||'', url:data.secure_url,
+          publicId:data.public_id||'', tamanho:file.size, uploadedAt:Date.now(),
+          uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
+        });
+      })
       .then(()=>handleDone(null))
       .catch(err=>handleDone(err));
   });
@@ -5653,14 +5659,20 @@ function confirmarUploadFormularios(input){
     }
   };
   files.forEach(file=>{
-    const path='formularios/'+currentUser.uid+'/'+Date.now()+'_'+file.name;
-    storage.ref(path).put(file)
-      .then(snap=>snap.ref.getDownloadURL())
-      .then(url=>db.collection('formularios').add({
-        nome:file.name, descricao, categoria, tipo:file.type||'',
-        tamanho:file.size, url, storagePath:path,
-        uploadedAt:Date.now(), uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
-      }))
+    const fd=new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', 'mildian_docs');
+    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.error) throw new Error('Cloudinary: '+data.error.message);
+        if(!data.secure_url) throw new Error('URL não retornada pelo servidor');
+        return db.collection('formularios').add({
+          nome:file.name, descricao, categoria, tipo:file.type||'',
+          tamanho:file.size, url:data.secure_url, publicId:data.public_id||'',
+          uploadedAt:Date.now(), uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
+        });
+      })
       .then(()=>onDone(null))
       .catch(err=>onDone(err));
   });
