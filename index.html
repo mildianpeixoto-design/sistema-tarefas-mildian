@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260729-01';
+  var BUILD='20260730-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3091,7 +3091,6 @@ function uploadClientDocs(clientId, input){
     const fd=new FormData();
     fd.append('file', file);
     fd.append('upload_preset', 'sistema_mildian');
-    fd.append('access_mode', 'public');
     fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
       .then(r=>r.json())
       .then(data=>{
@@ -5661,7 +5660,6 @@ function confirmarUploadFormularios(input){
     const fd=new FormData();
     fd.append('file',file);
     fd.append('upload_preset','sistema_mildian');
-    fd.append('access_mode','public');
     fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
       .then(r=>r.json())
       .then(data=>{
