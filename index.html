@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260728-01';
+  var BUILD='20260729-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3091,14 +3091,15 @@ function uploadClientDocs(clientId, input){
     const fd=new FormData();
     fd.append('file', file);
     fd.append('upload_preset', 'sistema_mildian');
-    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/auto/upload',{method:'POST',body:fd})
+    fd.append('access_mode', 'public');
+    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
       .then(r=>r.json())
       .then(data=>{
         if(data.error) throw new Error('Cloudinary: '+data.error.message);
         if(!data.secure_url) throw new Error('Cloudinary: URL não retornada');
         return db.collection('clientDocuments').add({
           clientId, nome:file.name, tipo:file.type||'', url:data.secure_url,
-          publicId:data.public_id||'', tamanho:file.size, uploadedAt:Date.now(),
+          publicId:data.public_id||'', resourceType:'raw', tamanho:file.size, uploadedAt:Date.now(),
           uploadedBy:currentUser.uid, uploadedByName:currentUser.name||''
         });
       })
@@ -5660,7 +5661,8 @@ function confirmarUploadFormularios(input){
     const fd=new FormData();
     fd.append('file',file);
     fd.append('upload_preset','sistema_mildian');
-    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/auto/upload',{method:'POST',body:fd})
+    fd.append('access_mode','public');
+    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
       .then(r=>r.json())
       .then(data=>{
         if(data.error) throw new Error('Cloudinary: '+data.error.message);
@@ -5673,6 +5675,7 @@ function confirmarUploadFormularios(input){
           tamanho:file.size,
           url:data.secure_url,
           publicId:data.public_id||'',
+          resourceType:'raw',
           uploadedAt:Date.now(),
           uploadedBy:currentUser.uid,
           uploadedByName:currentUser.name||''
