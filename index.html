@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260730-05';
+  var BUILD='20260730-06';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3976,6 +3976,7 @@ function initKanbanStickyBar(){
   let lock=false;
   bar.addEventListener('scroll',()=>{ if(!lock){lock=true;board.scrollLeft=bar.scrollLeft;lock=false;} });
   board.addEventListener('scroll',()=>{ if(!lock){lock=true;bar.scrollLeft=board.scrollLeft;lock=false;} });
+}
 
 document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
 
