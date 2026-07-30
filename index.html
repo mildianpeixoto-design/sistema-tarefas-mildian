@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260730-06';
+  var BUILD='20260730-07';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -249,7 +249,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 /* Funil de vendas - kanban */
 .kanban{display:grid;grid-template-columns:repeat(7,minmax(170px,1fr));gap:10px;overflow-x:auto;scrollbar-width:none;}
 .kanban::-webkit-scrollbar{display:none;}
-#kanbanStickyBar{position:sticky;bottom:0;overflow-x:auto;overflow-y:hidden;height:14px;z-index:15;background:var(--bg);border-top:1px solid var(--border);}
+#kanbanStickyBar{position:fixed;bottom:0;overflow-x:auto;overflow-y:hidden;height:14px;z-index:200;background:var(--bg);border-top:2px solid var(--border);display:none;}
 #kanbanStickyBar>div{height:1px;}
 @media (max-width:1100px){.kanban{grid-template-columns:repeat(7,210px);}}
 .kanban-col.espera h4{color:var(--amber)!important;border-bottom-color:var(--amber)!important;}
@@ -3967,15 +3967,30 @@ function initKanbanStickyBar(){
   const board=document.getElementById('funilBoard');
   if(!board) return;
   document.getElementById('kanbanStickyBar')?.remove();
+  window._kanbanStickyCleanup?.();
   const bar=document.createElement('div');
   bar.id='kanbanStickyBar';
   const phantom=document.createElement('div');
-  phantom.style.width=board.scrollWidth+'px';
   bar.appendChild(phantom);
-  board.insertAdjacentElement('afterend',bar);
+  document.body.appendChild(bar);
+  function update(){
+    const r=board.getBoundingClientRect();
+    bar.style.left=r.left+'px';
+    bar.style.width=r.width+'px';
+    phantom.style.width=board.scrollWidth+'px';
+    bar.style.display=(r.top<window.innerHeight&&r.bottom>window.innerHeight)?'block':'none';
+  }
+  update();
+  window.addEventListener('scroll',update,{passive:true});
+  window.addEventListener('resize',update,{passive:true});
   let lock=false;
   bar.addEventListener('scroll',()=>{ if(!lock){lock=true;board.scrollLeft=bar.scrollLeft;lock=false;} });
   board.addEventListener('scroll',()=>{ if(!lock){lock=true;bar.scrollLeft=board.scrollLeft;lock=false;} });
+  window._kanbanStickyCleanup=()=>{
+    window.removeEventListener('scroll',update);
+    window.removeEventListener('resize',update);
+    bar.remove();
+  };
 }
 
 document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
