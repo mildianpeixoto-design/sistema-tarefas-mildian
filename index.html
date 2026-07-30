@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260730-03';
+  var BUILD='20260730-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2218,7 +2218,10 @@ function getMetaEntries(mk){
     if(c.createdAt && !c.excluidaDeMeta){
       const d=c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000);
       if(monthKeyOf(d.toISOString().slice(0,10))===mk){
-        entries.push({nome:c.nome,id:c.id,valorPagamento:c.valorPagamento||0,valorAngariacao:c.valorAngariacao||c.comissaoValor||0,numeroProposta:c.numeroProposta||'',banco:c.banco||'',data:d,tipo:'novo',angariacacaoPaga:!!c.angariacacaoPaga});
+        // Subtrair vendas adicionais do valorPagamento para não contar duas vezes
+        const adicionaisTotal=(c.vendasAdicionais||[]).filter(v=>!v.cancelada).reduce((s,v)=>s+(v.valorPlano||0),0);
+        const valorOriginal=Math.max(0,(c.valorPagamento||0)-adicionaisTotal);
+        entries.push({nome:c.nome,id:c.id,valorPagamento:valorOriginal,valorAngariacao:c.valorAngariacao||c.comissaoValor||0,numeroProposta:c.numeroProposta||'',banco:c.banco||'',data:d,tipo:'novo',angariacacaoPaga:!!c.angariacacaoPaga});
       }
     }
     // Vendas adicionais em clientes existentes (exceto as canceladas)
