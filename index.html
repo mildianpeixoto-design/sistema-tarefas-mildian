@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260803-02';
+  var BUILD='20260803-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3001,7 +3001,7 @@ function showClientForm(client, containerId){
   document.getElementById('cancelarClienteBtn')?.addEventListener('click',()=>{
     if(!confirm(`Marcar "${client.nome}" como cliente cancelado? Ele sai da lista de clientes ativos e passa a aparecer na aba Cancelados (pode ser reativado depois).`)) return;
     db.collection('clients').doc(client.id).update({status:'cancelado', canceladoEm: ts()})
-      .then(()=>closeThisForm())
+      .then(()=>{ syncBoletosStatus(client.id,false); closeThisForm(); })
       .catch(err=>alert('Erro: '+err.message));
   });
   document.getElementById('clientForm').addEventListener('submit',e=>{
@@ -3281,12 +3281,18 @@ function renderClients(){
   const pfList = sorted.filter(c=>(c.tipo||'PF')==='PF');
   const pjList = sorted.filter(c=>c.tipo==='PJ');
 
+  // Detectar duplicados: clientes com mesmo nome normalizado entre todos os ativos
+  const _nameToIds={};
+  allActive.forEach(c=>{ const k=(c.nome||'').toLowerCase().trim(); if(!_nameToIds[k]) _nameToIds[k]=[]; _nameToIds[k].push(c.id); });
+  const dupIds=new Set(Object.values(_nameToIds).filter(ids=>ids.length>1).flat());
+
   function buildClientBlock(list, sectionLabel, icon){
     if(!list.length) return '';
     let h=`<div class="cli-section-header">${icon} ${sectionLabel} <span class="cli-section-count">${list.length}</span></div>`;
     h+='<div class="client-name-list">';
     list.forEach(c=>{
       const isOpen=selectedClientId===c.id;
+      const isDup=dupIds.has(c.id);
       const isPFc=(c.tipo||'PF')==='PF';
       const initials=(c.nome||'?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('');
       const sub=isPFc ? [c.cpf,c.telefone].filter(Boolean).join(' · ')
@@ -3294,7 +3300,7 @@ function renderClients(){
       h+=`<div class="client-list-item${isOpen?' open':''}" onclick="selectClient('${c.id}')">
         <div class="cli-avatar">${initials}</div>
         <div class="cli-name-block">
-          <div class="cli-name">${esc(c.nome)}</div>
+          <div class="cli-name">${esc(c.nome)}${isDup?` <span style="font-size:.7rem;background:#f59e0b;color:#000;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle;font-weight:700;">⚠️ Duplicado</span>`:''}</div>
           ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
         </div>
         <div class="cli-chevron">${isOpen?'▲':'▼'}</div>
@@ -3564,12 +3570,19 @@ function renderCancelados(){
 function cancelarClienteDireto(id, nome){
   if(!confirm(`Marcar "${nome}" como cliente cancelado?\n\nEle sai da lista de clientes ativos e passa para a aba Cancelados.\nPode ser reativado a qualquer momento.`)) return;
   db.collection('clients').doc(id).update({status:'cancelado', canceladoEm: ts()})
-    .then(()=>{ selectedClientId=null; switchTab('cancelados'); })
+    .then(()=>{ syncBoletosStatus(id,false); selectedClientId=null; switchTab('cancelados'); })
     .catch(err=>alert('Erro: '+err.message));
+}
+function syncBoletosStatus(clientId, ativa){
+  // Sincroniza o campo "ativa" no boletosClientes correspondente ao cliente
+  const boleto=state.boletosClientes.find(b=>b.clienteId===clientId);
+  if(boleto) db.collection('boletosClientes').doc(boleto.id).update({ativa}).catch(()=>{});
 }
 function reativarCliente(id){
   if(!confirm('Reativar este cliente? Ele volta a aparecer na lista de clientes ativos.')) return;
-  db.collection('clients').doc(id).update({status:'ativo'}).catch(err=>alert('Erro: '+err.message));
+  db.collection('clients').doc(id).update({status:'ativo'})
+    .then(()=>syncBoletosStatus(id,true))
+    .catch(err=>alert('Erro: '+err.message));
 }
 
 function row(label,val){
