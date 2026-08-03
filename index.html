@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260803-01';
+  var BUILD='20260803-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1033,6 +1033,7 @@ let expandedReschedule=new Set();
 let expandedNotes=new Set();
 let reportsArchived=false;
 let chartHoras=null, chartStatus=null;
+let _metaViewMk=null; // mês sendo visualizado no modal de meta
 let state={
   users:[],
   activities:[],
@@ -2276,9 +2277,11 @@ function getMetaEntries(mk){
 }
 // Compat: ainda exposto para qualquer uso legado
 function getMetaClients(mk){ return getMetaEntries(mk).filter(e=>e.tipo==='novo').map(e=>({...e,valorPagamento:e.valorPagamento})); }
-function showMetaModal(){
-  const mk=currentMonthKey();
-  const metaValor=state.metaAtual?.valor||0;
+function showMetaModal(viewMk){
+  const curMk=currentMonthKey();
+  const mk=viewMk||_metaViewMk||curMk;
+  _metaViewMk=mk; // lembra o mês atual para reabrir no mesmo mês
+  const metaValor=(state.metas&&state.metas[mk])?state.metas[mk].valor||0:(mk===curMk?state.metaAtual?.valor||0:0);
   const entries=getMetaEntries(mk);
   const acumulado=entries.reduce((s,e)=>s+(e.valorPagamento||0),0);
   const pct=metaValor>0?Math.min(acumulado/metaValor,1):0;
@@ -2286,6 +2289,11 @@ function showMetaModal(){
   const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const [ano,mes]=mk.split('-');
   const nomeMes=MESES[parseInt(mes,10)-1]+' '+ano;
+  // Calcular mês anterior e próximo
+  const yNum=parseInt(ano,10), mNum=parseInt(mes,10);
+  const prevMk=mNum===1?`${yNum-1}-12`:`${yNum}-${String(mNum-1).padStart(2,'0')}`;
+  const nextMk=mNum===12?`${yNum+1}-01`:`${yNum}-${String(mNum+1).padStart(2,'0')}`;
+  const canGoNext=nextMk<=curMk;
   let rows='';
   entries.slice().sort((a,b)=>(b.valorPagamento||0)-(a.valorPagamento||0)).forEach(e=>{
     const dt=e.data instanceof Date?e.data:null;
@@ -2308,12 +2316,14 @@ function showMetaModal(){
   const overlay=document.createElement('div');
   overlay.className='meta-modal-overlay';
   overlay.id='metaModalOverlay';
-  overlay.addEventListener('click',e=>{ if(e.target===overlay) closeMetaModal(); });
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) closeMetaModal(true); });
   overlay.innerHTML=`
     <div class="meta-modal">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <h2>🎯 Meta de Vendas — ${nomeMes}</h2>
-        <button class="icon-btn" onclick="closeMetaModal()">✕</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <button class="icon-btn" title="Mês anterior" onclick="closeMetaModal();showMetaModal('${prevMk}')" style="font-size:1.1rem;">◀</button>
+        <h2 style="margin:0;flex:1;text-align:center;font-size:1.1rem;">🎯 Meta de Vendas — ${nomeMes}</h2>
+        ${canGoNext?`<button class="icon-btn" title="Próximo mês" onclick="closeMetaModal();showMetaModal('${nextMk}')" style="font-size:1.1rem;">▶</button>`:`<div style="width:32px;"></div>`}
+        <button class="icon-btn" onclick="closeMetaModal(true)">✕</button>
       </div>
       <div class="meta-set-row">
         <label>Meta do mês (R$):</label>
@@ -2333,15 +2343,16 @@ function showMetaModal(){
     </div>`;
   document.body.appendChild(overlay);
 }
-function closeMetaModal(){
+function closeMetaModal(reset){
   const el=document.getElementById('metaModalOverlay');
   if(el) el.remove();
+  if(reset) _metaViewMk=null; // só reseta quando usuário fecha explicitamente
 }
 function saveMeta(){
   const val=parseFloat(document.getElementById('metaValorInput')?.value)||0;
-  const mk=currentMonthKey();
+  const mk=_metaViewMk||currentMonthKey();
   db.collection('metas').doc(mk).set({valor:val,mes:mk,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
-    .then(()=>{ closeMetaModal(); showToast('✅ Meta salva!','success'); })
+    .then(()=>{ closeMetaModal(); showMetaModal(mk); showToast('✅ Meta salva!','success'); })
     .catch(err=>alert('Erro: '+err.message));
 }
 function toggleAngariacao(id, currentPaga){
