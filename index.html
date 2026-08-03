@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260803-03';
+  var BUILD='20260803-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3931,8 +3931,11 @@ function convertClientToLead(id){
     etapa:'lead',
     proximoContato:null,
     indicadoPor:'',
-    historico:[{texto:`Convertido do cadastro de cliente ativo.`,at:ts(),uid:currentUser.uid,name:currentUser.name}],
-    criadoEm:ts()
+    historico:[{texto:`Convertido do cadastro de cliente ativo por ${currentUser.name}.`,at:ts(),uid:currentUser.uid,name:currentUser.name}],
+    criadoEm:ts(),
+    createdBy:currentUser.uid,
+    createdByName:currentUser.name,
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
   };
   db.collection('leads').add(lead).then(()=>{
     switchTab('funil');
