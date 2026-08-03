@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260803-04';
+  var BUILD='20260803-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3678,9 +3678,15 @@ function renderBoletos(){
 
   // (empty check handled at bottom together with inativas section)
 
+  // Detectar duplicados em cobranças (mesmo nome normalizado)
+  const _bNomeToIds={};
+  activeClientes.forEach(c=>{ const k=(c.nome||'').toLowerCase().trim(); if(!_bNomeToIds[k]) _bNomeToIds[k]=[]; _bNomeToIds[k].push(c.id); });
+  const bDupIds=new Set(Object.values(_bNomeToIds).filter(ids=>ids.length>1).flat());
+
   const rows=list.map(c=>{
     const recebido=!!(c.boletosStatus&&c.boletosStatus[boletosViewMes]);
     const isOpen=selectedBoletoId===c.id;
+    const isDupB=bDupIds.has(c.id);
     const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
     const sub=[c.contato?`Contato: ${c.contato}`:''].filter(Boolean).join(' · ');
 
@@ -3707,7 +3713,7 @@ function renderBoletos(){
       <div class="client-list-item${isOpen?' open':''}" onclick="selectBoleto('${c.id}')">
         <div class="cli-avatar" style="background:${recebido?'var(--green)':'var(--navy,#1a2a4a)'};">${initials}</div>
         <div class="cli-name-block" style="flex:1;min-width:0;">
-          <div class="cli-name">${esc(c.nome||'—')}</div>
+          <div class="cli-name">${esc(c.nome||'—')}${isDupB?` <span style="font-size:.7rem;background:#f59e0b;color:#000;border-radius:4px;padding:1px 5px;margin-left:4px;font-weight:700;">⚠️ Duplicado</span>`:''}</div>
           ${sub?`<div class="cli-sub">${esc(sub)}</div>`:''}
         </div>
         <label style="display:flex;align-items:center;gap:5px;flex-shrink:0;cursor:default;" onclick="event.stopPropagation()">
