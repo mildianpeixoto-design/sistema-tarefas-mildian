@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260730-07';
+  var BUILD='20260803-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -800,12 +800,48 @@ function activityAppliesOn(act,ds){
   if(ds<act.startDate) return false;
   const date=new Date(ds+'T00:00:00');
   const start=new Date(act.startDate+'T00:00:00');
+  const dow=date.getDay(); // 0=Dom, 6=Sáb
   switch(act.recurrence){
     case 'nenhuma': return ds===act.startDate;
-    case 'diaria': return true;
-    case 'semanal': return date.getDay()===start.getDay();
-    case 'quinzenal': return Math.round((date-start)/86400000)%14===0;
-    case 'mensal': return date.getDate()===start.getDate();
+    case 'diaria': return dow!==0 && dow!==6; // não aparece sáb/dom
+    case 'semanal':{
+      const sdow=start.getDay();
+      if(sdow===6){ // Sáb → Segunda (+2)
+        const eff=new Date(start); eff.setDate(start.getDate()+2);
+        if(date<eff) return false;
+        return Math.round((date-eff)/86400000)%7===0;
+      }
+      if(sdow===0){ // Dom → Segunda (+1)
+        const eff=new Date(start); eff.setDate(start.getDate()+1);
+        if(date<eff) return false;
+        return Math.round((date-eff)/86400000)%7===0;
+      }
+      return dow===sdow;
+    }
+    case 'quinzenal':{
+      const sdow=start.getDay();
+      if(sdow===6){
+        const eff=new Date(start); eff.setDate(start.getDate()+2);
+        if(date<eff) return false;
+        return Math.round((date-eff)/86400000)%14===0;
+      }
+      if(sdow===0){
+        const eff=new Date(start); eff.setDate(start.getDate()+1);
+        if(date<eff) return false;
+        return Math.round((date-eff)/86400000)%14===0;
+      }
+      return Math.round((date-start)/86400000)%14===0;
+    }
+    case 'mensal':{
+      // Dia natural do mês; se cair em sáb/dom → segunda seguinte
+      const natDate=new Date(date.getFullYear(),date.getMonth(),start.getDate());
+      if(natDate.getMonth()!==date.getMonth()) return false; // dia não existe neste mês
+      const natDow=natDate.getDay();
+      let eff=natDate;
+      if(natDow===6){eff=new Date(natDate);eff.setDate(natDate.getDate()+2);}
+      else if(natDow===0){eff=new Date(natDate);eff.setDate(natDate.getDate()+1);}
+      return dstr(eff)===ds;
+    }
     default: return false;
   }
 }
