@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260803-05';
+  var BUILD='20260803-06';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4940,6 +4940,13 @@ function fmtMonthBR(mk){
 }
 function payableAppliesInMonth(p,mk){
   if(p.recurrence==='unico') return !!p.dueDate && monthKeyOf(p.dueDate)===mk;
+  if(p.recurrence==='anual'){
+    if(!p.startDate) return false;
+    const startMk=monthKeyOf(p.startDate);
+    if(mk<startMk) return false;
+    // Aparece somente no mesmo mês do ano (ex: startDate em março → aparece todo mês de março)
+    return mk.slice(5,7)===p.startDate.slice(5,7);
+  }
   const startMonth=monthKeyOf(p.startDate);
   if(mk<startMonth) return false;
   if(p.termType==='parcelas'){
@@ -4985,6 +4992,7 @@ function showPayableForm(p,containerId){
       <div><label>Recorrência</label><select id="payRecurrence">
         <option value="unico" ${p.recurrence==='unico'?'selected':''}>Único</option>
         <option value="mensal" ${p.recurrence==='mensal'?'selected':''}>Mensal</option>
+        <option value="anual" ${p.recurrence==='anual'?'selected':''}>Anual</option>
       </select></div>
       <div id="payDateWrap" class="row" style="display:contents;"></div>
       <div id="payTermWrap" class="row" style="display:contents;"></div>
@@ -4999,6 +5007,9 @@ function showPayableForm(p,containerId){
     const wrap=document.getElementById('payDateWrap');
     if(rec==='unico'){
       wrap.innerHTML=`<div><label>Data de pagamento</label><input type="date" id="payDueDate" value="${p.dueDate||todayStr()}" required></div>`;
+    }else if(rec==='anual'){
+      wrap.innerHTML=`
+        <div><label>Mês e dia de vencimento</label><input type="date" id="payStartDate" value="${p.startDate||todayStr()}" required></div>`;
     }else{
       wrap.innerHTML=`
         <div><label>Dia de vencimento (1-31)</label><input type="number" id="payDueDay" min="1" max="31" value="${p.dueDay||1}" required></div>
@@ -5039,6 +5050,11 @@ function showPayableForm(p,containerId){
       obj.dueDate=document.getElementById('payDueDate').value;
       obj.startDate=obj.dueDate;
       obj.dueDay=null; obj.termType=null; obj.termCount=null;
+    }else if(rec==='anual'){
+      const sd=document.getElementById('payStartDate').value;
+      obj.startDate=sd;
+      obj.dueDay=parseInt((sd||todayStr()).slice(8,10),10)||1;
+      obj.dueDate=null; obj.termType='indefinido'; obj.termCount=null;
     }else{
       obj.dueDay=parseInt(document.getElementById('payDueDay').value,10);
       obj.startDate=document.getElementById('payStartDate').value;
@@ -5218,7 +5234,7 @@ function renderPayablesMonthList(){
         html+=`<tr id="payrow-${p.id}">
           <td>${esc(p.name)}</td>
           <td id="payval-${p.id}" style="white-space:nowrap;">💰 ${fmtBRL(effVal)}${p.tipoValor==='variavel'?'<span class="muted" style="font-size:10px;margin-left:4px;">(variável)</span>':''}${editValBtn}</td>
-          <td>${p.recurrence==='unico'?'Único':'Mensal'}</td>
+          <td>${{unico:'Único',mensal:'Mensal',anual:'Anual'}[p.recurrence]||p.recurrence}</td>
           <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
           <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'↩ Desfazer':'✔ Marcar pago'}</button></td>
         </tr>`;
@@ -5246,7 +5262,7 @@ function renderPayablesList(){
   if(!el) return;
   if(state.payables.length===0){ el.innerHTML='<div class="empty">Nenhuma conta cadastrada ainda.</div>'; return; }
   // Ordem de recorrência: diaria < semanal < quinzenal < mensal < unico
-  const recurOrder={diaria:0,semanal:1,quinzenal:2,mensal:3,unico:4};
+  const recurOrder={diaria:0,semanal:1,quinzenal:2,mensal:3,anual:4,unico:5};
   // Ordem de prazo: unico(0) < parcelas(1) < indefinido(2)
   function prazoPeso(p){ if(p.recurrence==='unico') return 0; if(p.termType==='parcelas') return 1; return 2; }
   // Pagamento: para unico usa dueDate, para recorrente usa dueDay como "000X" para comparar
@@ -5273,7 +5289,7 @@ function renderPayablesList(){
     ${thHtml('prazo','Prazo')}
     <th></th>
   </tr></thead><tbody>`;
-  const RECUR_TEXT={diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal',mensal:'Mensal',unico:'Único'};
+  const RECUR_TEXT={diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal',mensal:'Mensal',anual:'Anual',unico:'Único'};
   sorted.forEach(p=>{
     let pagamento, prazo;
     if(p.recurrence==='unico'){
@@ -5361,7 +5377,7 @@ function payablesArchiveDetailHtml(r){
       <td>${esc(it.name)}</td>
       <td>💰 ${fmtBRL(it.value||0)}</td>
       <td>${fmtDateFull(it.dueDate)}</td>
-      <td>${it.recurrence==='unico'?'Único':'Mensal'}</td>
+      <td>${{unico:'Único',mensal:'Mensal',anual:'Anual'}[it.recurrence]||it.recurrence}</td>
       <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
     </tr>`;
   });
