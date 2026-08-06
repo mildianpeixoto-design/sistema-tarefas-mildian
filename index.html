@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260806-01';
+  var BUILD='20260806-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -717,6 +717,44 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   </div>
 </section>
 
+<section id="tab-docs-mildian" class="section">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:1.1rem;color:var(--accent);">🔒 Documentos Mildian</h2>
+    <button class="btn primary" onclick="abrirUploadDocMildian()">＋ Adicionar Documento</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+    <input type="text" id="docMildianBusca" placeholder="🔍 Buscar por nome ou descrição..." style="flex:1;min-width:180px;max-width:360px;" oninput="_docMildianBusca=this.value.toLowerCase();renderDocsMildian()">
+  </div>
+  <div id="docMildianPills" class="form-catpills"></div>
+  <div id="docMildianList" class="form-file-list"></div>
+  <!-- Modal upload -->
+  <div id="uploadDocMildianModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;">
+    <div style="background:var(--card);border-radius:12px;padding:24px;width:min(420px,95vw);box-shadow:0 8px 32px rgba(0,0,0,.3);">
+      <h3 style="margin:0 0 16px;">📎 Adicionar Documento</h3>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+        <input type="text" id="docMildianDesc" placeholder="Descrição (opcional)" style="width:100%;">
+        <select id="docMildianCategoria" style="width:100%;padding:8px 10px;">
+          <option value="">Categoria...</option>
+          <option>Pessoais</option>
+          <option>Financeiros</option>
+          <option>Contratos</option>
+          <option>Impostos</option>
+          <option>Seguros</option>
+          <option>Outros</option>
+        </select>
+      </div>
+      <div id="uploadDocMildianProgress" style="display:none;margin-bottom:10px;font-size:.85rem;"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <label class="btn primary" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+          📎 Escolher Arquivo(s)
+          <input type="file" multiple style="display:none;" onchange="confirmarUploadDocMildian(this)">
+        </label>
+        <button class="btn" onclick="fecharUploadDocMildian()">Fechar</button>
+      </div>
+    </div>
+  </div>
+</section>
+
 </main>
 </div>
 </div>
@@ -1069,6 +1107,7 @@ let state={
   metaAtual:null,
   clientDocs:[],
   formularios:[],
+  docsMildian:[],
   pendingApprovals:[] // ocorrências aguardando aceite do owner
 };
 let boletosViewMes=new Date().toISOString().slice(0,7);
@@ -1290,6 +1329,14 @@ function initApp(){
     renderFormularios();
   },err=>console.error(err)));
 
+  // Documentos Mildian: apenas owner acessa
+  if(currentUser.role==='owner'){
+    listeners.push(db.collection('documentosMildian').orderBy('uploadedAt','desc').onSnapshot(snap=>{
+      state.docsMildian=[]; snap.forEach(d=>state.docsMildian.push({id:d.id,...d.data()}));
+      renderDocsMildian();
+    },err=>console.error(err)));
+  }
+
   // Listener para atividades aguardando aceite (owner vê a fila; colaborador vê as suas devolvidas)
   listeners.push(db.collection('occurrences').where('status','==','aguardando_aceite').onSnapshot(snap=>{
     if(currentUser.role==='owner'){
@@ -1327,6 +1374,7 @@ function setupNav(){
       <button data-tab="relatorios"><span class="nav-icon">📈</span>Relatórios</button>
       <button data-tab="links"><span class="nav-icon">🔗</span>Links</button>
       <button data-tab="formularios"><span class="nav-icon">📁</span>Formulários</button>
+      <button data-tab="docs-mildian"><span class="nav-icon">🔒</span>Meus Documentos</button>
     `;
   }else{
     nav.innerHTML=`
@@ -1359,6 +1407,8 @@ function switchTab(tab,btn){
   document.getElementById('tab-'+tab).classList.add('active');
   // Leads Finalizados: re-renderiza sempre ao entrar na aba
   if(tab==='leadsfinalizados') renderLeadsFinalizados();
+  // Documentos Mildian: re-renderiza sempre ao entrar na aba
+  if(tab==='docs-mildian') renderDocsMildian();
   // Clique no nav de Clientes: sempre volta ao seletor de tipo
   if(tab==='clientes' && btn){
     clientesTipoFiltro=null;
@@ -5923,6 +5973,101 @@ function excluirFormulario(id){
   .catch(err=>alert('Erro ao excluir: '+err.message));
 }
 /* ===== Fim Formulários ===== */
+
+/* ====================== Documentos Mildian (exclusivo owner) ====================== */
+let _docMildianBusca='';
+let _docMildianCategoria='todos';
+const DOC_MILDIAN_CATS=['todos','Pessoais','Financeiros','Contratos','Impostos','Seguros','Outros'];
+
+function renderDocsMildian(){
+  const pillsEl=document.getElementById('docMildianPills');
+  if(pillsEl){
+    pillsEl.innerHTML=DOC_MILDIAN_CATS.map(c=>`<button class="form-catpill${_docMildianCategoria===c?' active':''}" onclick="_docMildianCategoria='${c}';renderDocsMildian()">${c==='todos'?'Todas':c}</button>`).join('');
+  }
+  const listEl=document.getElementById('docMildianList');
+  if(!listEl) return;
+  let docs=[...(state.docsMildian||[])];
+  if(_docMildianCategoria!=='todos') docs=docs.filter(d=>d.categoria===_docMildianCategoria);
+  if(_docMildianBusca) docs=docs.filter(d=>(d.nome||'').toLowerCase().includes(_docMildianBusca)||(d.descricao||'').toLowerCase().includes(_docMildianBusca));
+  if(!docs.length){
+    listEl.innerHTML=`<div class="empty" style="padding:28px;">🔒 Nenhum documento aqui ainda.<br>Use "+ Adicionar Documento" para começar.</div>`;
+    return;
+  }
+  listEl.innerHTML=docs.map(doc=>{
+    const icon=docTypeIcon(doc.tipo);
+    const size=fmtBytes(doc.tamanho);
+    const date=doc.uploadedAt?new Date(doc.uploadedAt).toLocaleDateString('pt-BR'):'';
+    const catTag=doc.categoria?`<span class="form-cat-tag">${esc(doc.categoria)}</span>`:'';
+    const desc=doc.descricao?`<span style="color:var(--text2);font-size:.76rem;">· ${esc(doc.descricao)}</span>`:'';
+    const meta=[size,date].filter(Boolean).join(' · ');
+    return `<div class="form-file-item">
+      <span class="form-file-icon">${icon}</span>
+      <div class="form-file-info">
+        <div class="form-file-name" title="${esc(doc.nome)}">${esc(doc.nome)}</div>
+        <div class="form-file-meta">${meta} ${catTag} ${desc}</div>
+      </div>
+      <a href="${doc.url}" target="_blank" rel="noopener" class="btn" style="font-size:.78rem;padding:5px 10px;text-decoration:none;white-space:nowrap;flex-shrink:0;" title="Abrir / Baixar">⬇ Abrir</a>
+      <button class="icon-btn" style="color:var(--red,#c0392b);flex-shrink:0;" onclick="excluirDocMildian('${doc.id}')" title="Excluir">🗑️</button>
+    </div>`;
+  }).join('');
+}
+function abrirUploadDocMildian(){
+  const m=document.getElementById('uploadDocMildianModal');
+  if(!m) return;
+  document.getElementById('docMildianDesc').value='';
+  document.getElementById('docMildianCategoria').value='';
+  const p=document.getElementById('uploadDocMildianProgress');
+  if(p){p.style.display='none';p.textContent='';}
+  m.style.display='flex';
+}
+function fecharUploadDocMildian(){
+  const m=document.getElementById('uploadDocMildianModal');
+  if(m) m.style.display='none';
+}
+function confirmarUploadDocMildian(input){
+  const files=[...input.files];
+  if(!files.length) return;
+  const categoria=document.getElementById('docMildianCategoria')?.value||'';
+  const descricao=(document.getElementById('docMildianDesc')?.value||'').trim();
+  const prog=document.getElementById('uploadDocMildianProgress');
+  const setP=(msg,err)=>{ if(!prog) return; prog.style.display=''; prog.style.color=err?'var(--red)':'var(--gold)'; prog.textContent=msg; };
+  setP(`Enviando ${files.length} arquivo(s)...`);
+  let done=0, errs=0;
+  const onDone=(err)=>{
+    done++;
+    if(err){ errs++; setP('❌ Erro: '+(err.message||err),true); }
+    else if(done===files.length){
+      if(errs===0){ setP(`✅ ${files.length} arquivo(s) enviado(s)!`); setTimeout(fecharUploadDocMildian,1600); }
+      else setP(`⚠️ ${done-errs}/${files.length} enviados.`,true);
+    } else { setP(`Enviando... (${done}/${files.length})`); }
+  };
+  files.forEach(file=>{
+    const fd=new FormData();
+    fd.append('file',file);
+    fd.append('upload_preset','mildian_docs');
+    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.error) throw new Error('Cloudinary: '+data.error.message);
+        if(!data.secure_url) throw new Error('URL não retornada');
+        return db.collection('documentosMildian').add({
+          nome:file.name, descricao, categoria, tipo:file.type||'',
+          tamanho:file.size, url:data.secure_url, publicId:data.public_id||'',
+          uploadedAt:Date.now()
+        });
+      })
+      .then(()=>onDone(null))
+      .catch(err=>onDone(err));
+  });
+  input.value='';
+}
+function excluirDocMildian(id){
+  if(!confirm('Excluir este documento permanentemente?')) return;
+  db.collection('documentosMildian').doc(id).delete()
+    .then(()=>showToast('🗑️ Documento excluído','success'))
+    .catch(err=>alert('Erro: '+err.message));
+}
+/* ===== Fim Documentos Mildian ===== */
 
 /* PWA: registra o service worker para permitir instalação no celular
    (ícone na tela inicial, abre em tela cheia). Os dados continuam
