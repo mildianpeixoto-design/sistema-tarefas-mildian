@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260803-06';
+  var BUILD='20260806-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -111,6 +111,18 @@ nav button.active{color:#fff;border-left-color:var(--gold);background:rgba(255,2
 .badge.pendente{background:var(--gray-bg);color:var(--gray);}
 .badge.finalizada{background:var(--green-bg);color:var(--green);}
 .badge.redirecionada{background:var(--blue-bg);color:var(--blue);}
+.badge.aguardando_aceite{background:#fef3c7;color:#92400e;}
+.badge.devolvida{background:#fee2e2;color:#991b1b;}
+.activity.compact.status-aguardando_aceite{border-left:4px solid #f59e0b!important;opacity:0.9;}
+.activity.compact.status-devolvida{border-left:4px solid #dc2626!important;}
+.devolucao-box{background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:.88rem;color:#7f1d1d;}
+.aceite-panel{background:var(--card-bg,#fff);border:2px solid #f59e0b;border-radius:10px;padding:14px;margin-bottom:16px;}
+.aceite-panel-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:700;color:#92400e;font-size:1rem;}
+.aceite-item{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--bg);}
+.aceite-item-title{font-weight:600;margin-bottom:4px;}
+.aceite-item-meta{font-size:.8rem;color:var(--text2);margin-bottom:8px;}
+.aceite-instrs{display:none;margin-top:8px;}
+.aceite-instrs.open{display:block;}
 .badge.reagendada{background:var(--amber-bg);color:var(--amber);}
 .badge.owner{background:var(--gold-bg);color:var(--gold);}
 .badge.collaborator{background:var(--gray-bg);color:var(--gray);}
@@ -761,7 +773,7 @@ const storage = firebase.storage();
 /* ====================== Constantes e helpers ====================== */
 const PRIORITY_LABELS={alta:'Alta',media:'Média',baixa:'Baixa'};
 const RECUR_LABELS={nenhuma:'Não repete',diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal',mensal:'Mensal'};
-const STATUS_LABELS={pendente:'Pendente',finalizada:'Finalizada',redirecionada:'Redirecionada',reagendada:'Reagendada'};
+const STATUS_LABELS={pendente:'Pendente',finalizada:'Finalizada',redirecionada:'Redirecionada',reagendada:'Reagendada',aguardando_aceite:'Aguardando aceite',devolvida:'Devolvida'};
 
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function showToast(msg,type='',dur=2800){
@@ -1056,7 +1068,8 @@ let state={
   metas:{},
   metaAtual:null,
   clientDocs:[],
-  formularios:[]
+  formularios:[],
+  pendingApprovals:[] // ocorrências aguardando aceite do owner
 };
 let boletosViewMes=new Date().toISOString().slice(0,7);
 let selectedBoletoId=null;
@@ -1277,6 +1290,16 @@ function initApp(){
     renderFormularios();
   },err=>console.error(err)));
 
+  // Listener para atividades aguardando aceite (owner vê a fila; colaborador vê as suas devolvidas)
+  listeners.push(db.collection('occurrences').where('status','==','aguardando_aceite').onSnapshot(snap=>{
+    if(currentUser.role==='owner'){
+      state.pendingApprovals=[];
+      snap.forEach(d=>state.pendingApprovals.push({id:d.id,...d.data()}));
+      renderHoje();
+      updateAceiteBadge();
+    }
+  },err=>console.error(err)));
+
   switchTab('hoje');
 }
 
@@ -1478,28 +1501,81 @@ function setStatus(actId,status){
   const occ=state.occToday[actId]||{};
   const patch={status};
   if(status==='finalizada'){
+    // Colaboradores enviam para fila de aceite em vez de finalizar diretamente
+    if(currentUser.role!=='owner'){
+      patch.status='aguardando_aceite';
+      patch.concluidoPor=currentUser.uid;
+      patch.concluidoPorName=currentUser.name;
+    }
     if(occ.timerStart){
       const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
       patch.timeSpent=(occ.timeSpent||0)+elapsed;
       patch.timerStart=del();
     }
-    patch.completedAt=ts(); // registra horário de conclusão
+    patch.completedAt=ts();
+  }
+  if(status==='pendente'){
+    // Reabrir limpa flags de conclusão/devolução
+    patch.concluidoPor=del(); patch.concluidoPorName=del();
+    patch.instrucoesDevolucao=del(); patch.devolvidoPor=del();
   }
   if(status!=='redirecionada') patch.redirectedTo=null;
   setOccurrence(ds,actId,patch)
     .then(()=>{
-      if(status==='finalizada'){
+      if(patch.status==='aguardando_aceite'){
+        showToast('🕐 Atividade enviada para aceite!','success');
+      } else if(status==='finalizada'){
         showToast('✅ Tarefa finalizada!','success');
-        // Atividade única: remove do cadastro após finalizar (ocorrência fica no histórico/relatório)
         const act=state.activities.find(a=>a.id===actId);
         if(act&&act.recurrence==='nenhuma'){
-          // Marca como finalizada — atividade sai da lista principal e vai para "Concluídas" automaticamente
           db.collection('activities').doc(actId).set({finalizada:true},{merge:true}).catch(()=>{});
         }
       }
       else if(status==='pendente') showToast('↺ Tarefa reaberta');
     })
-    .catch(()=>{}); // erro já tratado em setOccurrence
+    .catch(()=>{});
+}
+function aceitarAtividade(occId,activityId,date){
+  const occRef=db.collection('occurrences').doc(occId);
+  occRef.update({status:'finalizada',aceitoPor:currentUser.uid,aceitoPorName:currentUser.name,aceiteEm:ts()})
+    .then(()=>{
+      showToast('✅ Atividade aceita!','success');
+      // Se for atividade única, marcar como finalizada no cadastro
+      const act=state.activities.find(a=>a.id===activityId);
+      if(act&&act.recurrence==='nenhuma'){
+        db.collection('activities').doc(activityId).set({finalizada:true},{merge:true}).catch(()=>{});
+      }
+    })
+    .catch(err=>alert('Erro: '+err.message));
+}
+function toggleDevolucaoForm(occId){
+  const el=document.getElementById('devolucao-form-'+occId);
+  if(el) el.classList.toggle('open');
+}
+function confirmarDevolucao(occId,activityId,date){
+  const txt=(document.getElementById('devolucao-txt-'+occId)?.value||'').trim();
+  if(!txt){ showToast('Escreva as instruções antes de devolver','error'); return; }
+  db.collection('occurrences').doc(occId).update({
+    status:'devolvida',
+    instrucoesDevolucao:txt,
+    devolvidoPor:currentUser.uid,
+    devolvidoPorName:currentUser.name,
+    devolvidoEm:ts()
+  }).then(()=>showToast('↩️ Atividade devolvida com instruções','success'))
+    .catch(err=>alert('Erro: '+err.message));
+}
+function updateAceiteBadge(){
+  const count=(state.pendingApprovals||[]).length;
+  // Atualiza badge em ambas as navbars (mobile e desktop)
+  document.querySelectorAll('[data-tab="hoje"]').forEach(btn=>{
+    let badge=btn.querySelector('.aceite-badge');
+    if(count>0){
+      if(!badge){ badge=document.createElement('span'); badge.className='aceite-badge'; badge.style.cssText='background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:.7rem;font-weight:700;margin-left:4px;'; btn.appendChild(badge); }
+      badge.textContent=count;
+    } else {
+      if(badge) badge.remove();
+    }
+  });
 }
 function setRedirect(actId,collabId){
   setOccurrence(todayStr(),actId,{redirectedTo:collabId});
@@ -1660,7 +1736,7 @@ function deleteActivityAttachment(actId,attId){
   db.collection('activities').doc(actId).update({[`attachments.${attId}`]:del()}).catch(err=>alert('Erro: '+err.message));
 }
 
-const ACT_ICONS={pendente:'⏳',finalizada:'✓',redirecionada:'↪'};
+const ACT_ICONS={pendente:'⏳',finalizada:'✓',redirecionada:'↪',aguardando_aceite:'🕐',devolvida:'↩️'};
 function renderActivityCard(act,occ){
   const redirNote=(occ.status==='redirecionada'&&occ.redirectedTo)?`<span class="muted"> · originalmente de ${esc(userName(act.assignedTo))}</span>`:'';
   const comments=occ.comments||[];
@@ -1672,8 +1748,9 @@ function renderActivityCard(act,occ){
   const attEntries=Object.entries(atts);
   const running=!!occ.timerStart;
   const iconClass=running?'running':occ.status;
-  const icon=running?'▶':ACT_ICONS[occ.status];
-  return `<div class="activity compact${occ.status==='finalizada'?' status-finalizada':''}" data-act="${act.id}">
+  const icon=running?'▶':(ACT_ICONS[occ.status]||'⏳');
+  const extraClass=occ.status==='finalizada'?' status-finalizada':occ.status==='aguardando_aceite'?' status-aguardando_aceite':occ.status==='devolvida'?' status-devolvida':'';
+  return `<div class="activity compact${extraClass}" data-act="${act.id}">
     <div class="act-head" onclick="toggleActDetail('${act.id}')" style="cursor:pointer;">
       <span class="act-icon ${iconClass}">${icon}</span>
       <div style="flex:1;min-width:0;">
@@ -1701,15 +1778,24 @@ function renderActivityCard(act,occ){
         <button class="icon-btn" onclick="deleteActivityAttachment('${act.id}','${attId}')">Remover</button>
       </div>`).join('')}</div>`;
     })()}
+    ${occ.status==='devolvida'&&occ.instrucoesDevolucao?`<div class="devolucao-box">↩️ <strong>Devolvida:</strong> ${esc(occ.instrucoesDevolucao)}</div>`:''}
     <div class="activity-controls">
       <span class="timer" id="timer-${act.id}">${fmtHMS(occElapsed(occ))}</span>
-      ${occ.status!=='finalizada'?`
+      ${occ.status==='aguardando_aceite'?`
+        <span style="font-size:.82rem;color:#92400e;font-style:italic;">🕐 Aguardando aceite da administradora</span>
+        <button class="btn" onclick="setStatus('${act.id}','pendente')">↺ Reabrir</button>
+      `:occ.status==='finalizada'?`
+        <button class="btn" onclick="setStatus('${act.id}','pendente')">↺ Reabrir tarefa</button>
+      `:occ.status==='devolvida'?`
+        ${occ.timerStart
+          ? `<button class="btn" onclick="toggleTimer('${act.id}')">⏸ Pausar</button>`
+          : `<button class="btn" onclick="toggleTimer('${act.id}')">▶ Iniciar</button>`}
+        <button class="btn primary" onclick="setStatus('${act.id}','finalizada')">✓ Finalizar novamente</button>
+      `:`
         ${occ.timerStart
           ? `<button class="btn" onclick="toggleTimer('${act.id}')">⏸ Pausar</button>`
           : `<button class="btn" onclick="toggleTimer('${act.id}')">▶ Iniciar</button>`}
         <button class="btn primary" onclick="setStatus('${act.id}','finalizada')">✓ Finalizar</button>
-      `:`
-        <button class="btn" onclick="setStatus('${act.id}','pendente')">↺ Reabrir tarefa</button>
       `}
     </div>
     ${occ.status!=='finalizada'?`<div class="row" style="margin-top:6px;flex-wrap:wrap;">
@@ -1830,6 +1916,32 @@ function renderHoje(){
   document.getElementById('hojeStats').innerHTML=cardsHtml;
 
   let html='';
+  /* Painel de aceites pendentes (apenas owner) */
+  if(isOwner && state.pendingApprovals.length>0){
+    html+=`<div class="aceite-panel">
+      <div class="aceite-panel-header">🕐 Aguardando aceite <span style="background:#f59e0b;color:#fff;border-radius:12px;padding:1px 8px;font-size:.8rem;margin-left:4px;">${state.pendingApprovals.length}</span></div>`;
+    state.pendingApprovals.forEach(occ=>{
+      const act=state.activities.find(a=>a.id===occ.activityId)||{title:occ.activityId};
+      const dt=occ.completedAt?(occ.completedAt.toDate?occ.completedAt.toDate():new Date((occ.completedAt.seconds||0)*1000)):null;
+      const dtStr=dt?dt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+      html+=`<div class="aceite-item">
+        <div class="aceite-item-title">📋 ${esc(act.title||'Atividade')}</div>
+        <div class="aceite-item-meta">👤 ${esc(occ.concluidoPorName||'Colaborador')}${dtStr?' · '+dtStr:''} · Data: ${esc(occ.date||'')}</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" style="background:#16a34a;border-color:#16a34a;" onclick="aceitarAtividade('${occ.id}','${occ.activityId}','${occ.date||''}')">✅ Aceitar</button>
+          <button class="btn" style="color:#dc2626;border-color:#dc2626;" onclick="toggleDevolucaoForm('${occ.id}')">↩️ Devolver</button>
+        </div>
+        <div class="aceite-instrs" id="devolucao-form-${occ.id}">
+          <textarea id="devolucao-txt-${occ.id}" placeholder="Descreva o que falta ou precisa ser corrigido…" style="width:100%;min-height:70px;border:1px solid #fca5a5;border-radius:6px;padding:8px;margin-top:8px;font-size:.88rem;box-sizing:border-box;"></textarea>
+          <div class="row" style="gap:8px;margin-top:6px;">
+            <button class="btn btn-primary" style="background:#dc2626;border-color:#dc2626;" onclick="confirmarDevolucao('${occ.id}','${occ.activityId}','${occ.date||''}')">Confirmar devolução</button>
+            <button class="btn" onclick="toggleDevolucaoForm('${occ.id}')">Cancelar</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+  }
   /* Alertas: aniversariantes e próximos contatos (apenas administradora) */
   if(isOwner){
     const aniversariantes=getAniversariantesHoje();
