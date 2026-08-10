@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260806-02';
+  var BUILD='20260810-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -116,6 +116,10 @@ nav button.active{color:#fff;border-left-color:var(--gold);background:rgba(255,2
 .activity.compact.status-aguardando_aceite{border-left:4px solid #f59e0b!important;opacity:0.9;}
 .activity.compact.status-devolvida{border-left:4px solid #dc2626!important;}
 .devolucao-box{background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:.88rem;color:#7f1d1d;}
+.conclusao-form{background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;margin-top:8px;}
+.conclusao-form label{font-size:.82rem;font-weight:600;color:#166534;}
+.conclusao-form textarea{width:100%;min-height:70px;border:1px solid #86efac;border-radius:6px;padding:8px;font-size:.88rem;box-sizing:border-box;margin-top:4px;resize:vertical;}
+.descricao-feito-box{background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:.88rem;color:#166534;}
 .aceite-panel{background:var(--card-bg,#fff);border:2px solid #f59e0b;border-radius:10px;padding:14px;margin-bottom:16px;}
 .aceite-panel-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:700;color:#92400e;font-size:1rem;}
 .aceite-item{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--bg);}
@@ -1546,7 +1550,43 @@ function toggleOverdueTimer(actId,date){
     setOccurrence(date,actId,patch);
   }
 }
-function setStatus(actId,status){
+let _conclusaoForm=null;
+function abrirConclusaoForm(actId,date){
+  _conclusaoForm={actId,date};
+  renderHoje();
+}
+function cancelarConclusaoForm(){
+  _conclusaoForm=null;
+  renderHoje();
+}
+function confirmarConclusao(actId,date){
+  const inputId = date===todayStr() ? `conclusao-txt-${actId}` : `conclusao-txt-${actId}-${date}`;
+  const txt=(document.getElementById(inputId)?.value||'').trim();
+  if(!txt){ showToast('📝 Descreva o que foi feito antes de enviar','error'); return; }
+  _conclusaoForm=null;
+  const ds=todayStr();
+  if(date===ds){
+    setStatus(actId,'finalizada',txt);
+  } else {
+    const key=`${date}_${actId}`;
+    const occ=state.occRange[key]||{};
+    if(occ.timerStart){
+      const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
+      occ.timeSpent=(occ.timeSpent||0)+elapsed;
+    }
+    setOccurrence(date,actId,{
+      status:'aguardando_aceite',
+      concluidoPor:currentUser.uid,
+      concluidoPorName:currentUser.name,
+      descricaoFeito:txt,
+      completedAt:ts(),
+      timeSpent:occ.timeSpent||0,
+      timerStart:del()
+    }).then(()=>showToast('🕐 Atividade enviada para aceite!','success')).catch(()=>{});
+  }
+}
+
+function setStatus(actId,status,descricaoFeito){
   const ds=todayStr();
   const occ=state.occToday[actId]||{};
   const patch={status};
@@ -1556,6 +1596,7 @@ function setStatus(actId,status){
       patch.status='aguardando_aceite';
       patch.concluidoPor=currentUser.uid;
       patch.concluidoPorName=currentUser.name;
+      if(descricaoFeito) patch.descricaoFeito=descricaoFeito;
     }
     if(occ.timerStart){
       const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
@@ -1829,6 +1870,8 @@ function renderActivityCard(act,occ){
       </div>`).join('')}</div>`;
     })()}
     ${occ.status==='devolvida'&&occ.instrucoesDevolucao?`<div class="devolucao-box">↩️ <strong>Devolvida:</strong> ${esc(occ.instrucoesDevolucao)}</div>`:''}
+    ${occ.descricaoFeito&&(occ.status==='aguardando_aceite'||occ.status==='finalizada')?`<div class="descricao-feito-box">📝 <strong>O que foi feito:</strong> ${esc(occ.descricaoFeito)}</div>`:''}
+    ${_conclusaoForm&&_conclusaoForm.actId===act.id&&_conclusaoForm.date===todayStr()?`<div class="conclusao-form"><label>📝 O que foi feito? (obrigatório)</label><textarea id="conclusao-txt-${act.id}" placeholder="Descreva o que foi realizado nesta atividade..."></textarea><div class="row" style="gap:8px;margin-top:6px;"><button class="btn primary" onclick="confirmarConclusao('${act.id}','${todayStr()}')">📤 Enviar para aceite</button><button class="btn" onclick="cancelarConclusaoForm()">Cancelar</button></div></div>`:''}
     <div class="activity-controls">
       <span class="timer" id="timer-${act.id}">${fmtHMS(occElapsed(occ))}</span>
       ${occ.status==='aguardando_aceite'?`
@@ -1840,12 +1883,12 @@ function renderActivityCard(act,occ){
         ${occ.timerStart
           ? `<button class="btn" onclick="toggleTimer('${act.id}')">⏸ Pausar</button>`
           : `<button class="btn" onclick="toggleTimer('${act.id}')">▶ Iniciar</button>`}
-        <button class="btn primary" onclick="setStatus('${act.id}','finalizada')">✓ Finalizar novamente</button>
+        ${currentUser.role==='owner'?`<button class="btn primary" onclick="setStatus('${act.id}','finalizada')">✓ Finalizar novamente</button>`:`<button class="btn primary" onclick="abrirConclusaoForm('${act.id}','${todayStr()}')">✓ Finalizar novamente</button>`}
       `:`
         ${occ.timerStart
           ? `<button class="btn" onclick="toggleTimer('${act.id}')">⏸ Pausar</button>`
           : `<button class="btn" onclick="toggleTimer('${act.id}')">▶ Iniciar</button>`}
-        <button class="btn primary" onclick="setStatus('${act.id}','finalizada')">✓ Finalizar</button>
+        ${currentUser.role==='owner'?`<button class="btn primary" onclick="setStatus('${act.id}','finalizada')">✓ Finalizar</button>`:`<button class="btn primary" onclick="abrirConclusaoForm('${act.id}','${todayStr()}')">✓ Finalizar</button>`}
       `}
     </div>
     ${occ.status!=='finalizada'?`<div class="row" style="margin-top:6px;flex-wrap:wrap;">
@@ -1977,6 +2020,7 @@ function renderHoje(){
       html+=`<div class="aceite-item">
         <div class="aceite-item-title">📋 ${esc(act.title||'Atividade')}</div>
         <div class="aceite-item-meta">👤 ${esc(occ.concluidoPorName||'Colaborador')}${dtStr?' · '+dtStr:''} · Data: ${esc(occ.date||'')}</div>
+        ${occ.descricaoFeito?`<div class="descricao-feito-box" style="margin:8px 0;">📝 <strong>O que foi feito:</strong> ${esc(occ.descricaoFeito)}</div>`:`<div style="color:#92400e;font-size:.82rem;margin:6px 0;font-style:italic;">⚠️ Colaborador não informou o que foi feito</div>`}
         <div class="row" style="gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary" style="background:#16a34a;border-color:#16a34a;" onclick="aceitarAtividade('${occ.id}','${occ.activityId}','${occ.date||''}')">✅ Aceitar</button>
           <button class="btn" style="color:#dc2626;border-color:#dc2626;" onclick="toggleDevolucaoForm('${occ.id}')">↩️ Devolver</button>
@@ -2088,10 +2132,11 @@ function renderHoje(){
           ${occ.timerStart
             ?`<button class="btn" onclick="toggleOverdueTimer('${act.id}','${date}')">⏸ Pausar</button>`
             :`<button class="btn" onclick="toggleOverdueTimer('${act.id}','${date}')">▶ Iniciar</button>`}
-          <button class="btn" onclick="markOverdueDone('${act.id}','${date}')">✓ Finalizar</button>
+          ${isOwner?`<button class="btn" onclick="markOverdueDone('${act.id}','${date}')">✓ Finalizar</button>`:`<button class="btn" onclick="abrirConclusaoForm('${act.id}','${date}')">✓ Finalizar</button>`}
           <button class="btn" onclick="toggleRescheduleForm('${date}_${act.id}')">Reagendar</button>
           ${(isOwner||act.assignedTo===currentUser.uid)?`<button class="btn" onclick="showActivityForm(state.activities.find(a=>a.id==='${act.id}'))">✏️ Editar</button>`:''}
         </div>
+        ${_conclusaoForm&&_conclusaoForm.actId===act.id&&_conclusaoForm.date===date?`<div class="conclusao-form"><label>📝 O que foi feito? (obrigatório)</label><textarea id="conclusao-txt-${act.id}-${date}" placeholder="Descreva o que foi realizado nesta atividade..."></textarea><div class="row" style="gap:8px;margin-top:6px;"><button class="btn primary" onclick="confirmarConclusao('${act.id}','${date}')">📤 Enviar para aceite</button><button class="btn" onclick="cancelarConclusaoForm()">Cancelar</button></div></div>`:''}
         ${expandedReschedule.has(`${date}_${act.id}`)?`<div class="row" style="margin-top:6px;">
           <input type="date" id="reschedule-${date}_${act.id}" value="${todayStr()}">
           <button class="btn primary" onclick="confirmReschedule('${act.id}','${date}','${date}_${act.id}')">Confirmar nova data</button>
