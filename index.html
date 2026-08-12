@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260810-01';
+  var BUILD='20260810-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1496,9 +1496,12 @@ function toggleRescheduleForm(key){
 function confirmReschedule(actId,ds,key){
   const input=document.getElementById(`reschedule-${key}`);
   if(!input||!input.value) return;
+  const notaEl=document.getElementById(`notaDia-${key}`);
+  const notaDia=(notaEl?.value||'').trim();
+  if(!notaDia){ showToast('📝 Descreva o que foi feito antes de adiar','error'); return; }
   const newDate=input.value;
   const act=state.activities.find(a=>a.id===actId);
-  setOccurrence(ds,actId,{status:'reagendada',timerStart:del(),rescheduledTo:newDate});
+  setOccurrence(ds,actId,{status:'reagendada',timerStart:del(),rescheduledTo:newDate,notaDia});
   if(act&&act.recurrence==='nenhuma'){
     db.collection('activities').doc(actId).set({startDate:newDate},{merge:true});
   }
@@ -1910,11 +1913,15 @@ function renderActivityCard(act,occ){
       return `<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px;">
         <button class="btn" onclick="toggleRescheduleForm('${_key}')" title="Adiar esta tarefa para outro dia">📅 Adiar tarefa</button>
       </div>
-      ${expandedReschedule.has(_key)?`<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px;align-items:center;">
-        <span class="muted" style="font-size:12px;">Nova data:</span>
-        <input type="date" id="reschedule-${_key}" min="${_tom}" value="${_tom}" style="flex:1;min-width:130px;">
-        <button class="btn primary" onclick="confirmReschedule('${act.id}','${_ds}','${_key}')">Confirmar</button>
-        <button class="btn" onclick="toggleRescheduleForm('${_key}')">Cancelar</button>
+      ${expandedReschedule.has(_key)?`<div class="conclusao-form" style="margin-top:8px;">
+        <label>📝 O que foi feito hoje? (obrigatório)</label>
+        <textarea id="notaDia-${_key}" placeholder="Descreva o que foi realizado antes de adiar..."></textarea>
+        <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+          <span class="muted" style="font-size:12px;">Nova data:</span>
+          <input type="date" id="reschedule-${_key}" min="${_tom}" value="${_tom}" style="flex:1;min-width:130px;">
+          <button class="btn primary" onclick="confirmReschedule('${act.id}','${_ds}','${_key}')">📅 Confirmar</button>
+          <button class="btn" onclick="toggleRescheduleForm('${_key}')">Cancelar</button>
+        </div>
       </div>`:''}`;
     })():''}
     <div class="attachments">
@@ -2137,9 +2144,15 @@ function renderHoje(){
           ${(isOwner||act.assignedTo===currentUser.uid)?`<button class="btn" onclick="showActivityForm(state.activities.find(a=>a.id==='${act.id}'))">✏️ Editar</button>`:''}
         </div>
         ${_conclusaoForm&&_conclusaoForm.actId===act.id&&_conclusaoForm.date===date?`<div class="conclusao-form"><label>📝 O que foi feito? (obrigatório)</label><textarea id="conclusao-txt-${act.id}-${date}" placeholder="Descreva o que foi realizado nesta atividade..."></textarea><div class="row" style="gap:8px;margin-top:6px;"><button class="btn primary" onclick="confirmarConclusao('${act.id}','${date}')">📤 Enviar para aceite</button><button class="btn" onclick="cancelarConclusaoForm()">Cancelar</button></div></div>`:''}
-        ${expandedReschedule.has(`${date}_${act.id}`)?`<div class="row" style="margin-top:6px;">
-          <input type="date" id="reschedule-${date}_${act.id}" value="${todayStr()}">
-          <button class="btn primary" onclick="confirmReschedule('${act.id}','${date}','${date}_${act.id}')">Confirmar nova data</button>
+        ${expandedReschedule.has(`${date}_${act.id}`)?`<div class="conclusao-form" style="margin-top:8px;">
+          <label>📝 O que foi feito nesse dia? (obrigatório)</label>
+          <textarea id="notaDia-${date}_${act.id}" placeholder="Descreva o que foi realizado antes de adiar..."></textarea>
+          <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+            <span class="muted" style="font-size:12px;">Nova data:</span>
+            <input type="date" id="reschedule-${date}_${act.id}" value="${todayStr()}">
+            <button class="btn primary" onclick="confirmReschedule('${act.id}','${date}','${date}_${act.id}')">📅 Confirmar</button>
+            <button class="btn" onclick="toggleRescheduleForm('${date}_${act.id}')">Cancelar</button>
+          </div>
         </div>`:''}
         <div class="row" style="margin-top:6px;flex-wrap:wrap;">
           ${occ.status==='redirecionada'?`
@@ -4904,7 +4917,10 @@ async function buildAndSaveDailyReport(ds){
       title:act.title, cliente:act.cliente||'', responsavel:userName(assignee),
       prioridade:act.priority, status:occ.status, tempo:occ.timeSpent||0,
       startedAt: occ.startedAt ? occ.startedAt.toMillis() : null,
-      completedAt: occ.completedAt ? occ.completedAt.toMillis() : null
+      completedAt: occ.completedAt ? occ.completedAt.toMillis() : null,
+      notaDia: occ.notaDia||'',
+      descricaoFeito: occ.descricaoFeito||'',
+      rescheduledTo: occ.rescheduledTo||''
     });
   });
 
@@ -5058,14 +5074,17 @@ function arquivoDetailHtml(r){
   if(acts.length===0){
     html+='<div class="empty">Nenhuma atividade registrada nesta data.</div>';
   }else{
-    html+='<table><thead><tr><th>Atividade</th><th>Cliente/Apólice</th><th>Responsável</th><th>Prioridade</th><th>Status</th><th>Início</th><th>Conclusão</th><th>Tempo gasto</th></tr></thead><tbody>';
+    html+='<table><thead><tr><th>Atividade</th><th>Cliente/Apólice</th><th>Responsável</th><th>Prioridade</th><th>Status</th><th>Registro do dia</th><th>Início</th><th>Conclusão</th><th>Tempo gasto</th></tr></thead><tbody>';
     acts.forEach(it=>{
+      const registroDia=it.notaDia||it.descricaoFeito||'';
+      const reagendado=it.rescheduledTo?` <span style="font-size:10px;color:#92400e">(reagendado p/ ${it.rescheduledTo})</span>`:'';
       html+=`<tr>
         <td>${esc(it.title)}</td>
         <td>${esc(it.cliente||'')}</td>
         <td>${esc(it.responsavel)}</td>
         <td><span class="badge ${it.prioridade}">${PRIORITY_LABELS[it.prioridade]||it.prioridade}</span></td>
-        <td><span class="badge ${it.status}">${STATUS_LABELS[it.status]||it.status}</span></td>
+        <td><span class="badge ${it.status}">${STATUS_LABELS[it.status]||it.status}</span>${reagendado}</td>
+        <td style="font-size:12px;color:#166534;max-width:200px">${registroDia?esc(registroDia):'<span style="color:#aaa">—</span>'}</td>
         <td>${fmtTimestamp(it.startedAt)}</td>
         <td>${fmtTimestamp(it.completedAt)}</td>
         <td>${fmtHMS(it.tempo||0)}</td>
@@ -5078,9 +5097,9 @@ function arquivoDetailHtml(r){
 function exportArquivoCsv(id){
   const r=state.dailyReports.find(x=>x.id===id);
   if(!r) return;
-  const rows=[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Início','Conclusão','Tempo gasto (hh:mm:ss)']];
+  const rows=[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Registro do dia','Reagendado para','Início','Conclusão','Tempo gasto (hh:mm:ss)']];
   (r.activities||[]).forEach(it=>{
-    rows.push([it.title,it.cliente||'',it.responsavel,PRIORITY_LABELS[it.prioridade]||it.prioridade,STATUS_LABELS[it.status]||it.status,fmtTimestamp(it.startedAt),fmtTimestamp(it.completedAt),fmtHMS(it.tempo||0)]);
+    rows.push([it.title,it.cliente||'',it.responsavel,PRIORITY_LABELS[it.prioridade]||it.prioridade,STATUS_LABELS[it.status]||it.status,it.notaDia||it.descricaoFeito||'',it.rescheduledTo||'',fmtTimestamp(it.startedAt),fmtTimestamp(it.completedAt),fmtHMS(it.tempo||0)]);
   });
   rows.push([]);
   rows.push(['Colaborador','Horas trabalhadas','Entrada','Saída','Ausente']);
