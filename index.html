@@ -7,17 +7,17 @@
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Gestão de Equipe</title>
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#4b4fa8">
-<link rel="icon" href="/icon-192.png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="./ícone-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260812-01';
+  var BUILD='20260812-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -577,7 +577,12 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 </section>
 
 <section id="tab-leadsfinalizados" class="section">
-  <h2 style="margin-top:0;margin-bottom:4px;">🏆 Leads Finalizados</h2>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px;flex-wrap:wrap;">
+    <h2 style="margin:0;">🏆 Leads Finalizados</h2>
+    <select id="leadsFinalizadosFiltro" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);" onchange="renderLeadsFinalizados()">
+      <option value="">Todos os colaboradores</option>
+    </select>
+  </div>
   <p class="muted" style="margin-bottom:16px;">Leads com venda fechada — controle de origem por colaborador.</p>
   <div id="leadsFinalizadosList"></div>
 </section>
@@ -4337,7 +4342,16 @@ function renderLeadsFinalizados(){
   const el=document.getElementById('leadsFinalizadosList');
   if(!el) return;
   const tsOf=l=>(l.createdAt?.toDate?l.createdAt.toDate():new Date(l.createdAt||0));
-  const fechados=(state.leads||[]).filter(l=>l.etapa==='fechado');
+  const allFechados=(state.leads||[]).filter(l=>l.etapa==='fechado');
+  // Popular dropdown de colaboradores
+  const filtroEl=document.getElementById('leadsFinalizadosFiltro');
+  if(filtroEl){
+    const colaboradores=[...new Map(allFechados.map(l=>[l.createdBy||'desconhecido',l.createdByName||userName(l.createdBy)||'Desconhecido'])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+    const currentVal=filtroEl.value;
+    filtroEl.innerHTML=`<option value="">Todos os colaboradores</option>`+colaboradores.map(([uid,name])=>`<option value="${uid}" ${currentVal===uid?'selected':''}>${esc(name)}</option>`).join('');
+  }
+  const filtroUid=filtroEl?filtroEl.value:'';
+  const fechados=filtroUid?allFechados.filter(l=>(l.createdBy||'desconhecido')===filtroUid):allFechados;
   if(fechados.length===0){
     el.innerHTML='<div class="empty">Nenhum lead com venda fechada ainda.</div>';
     return;
