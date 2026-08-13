@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260812-02';
+  var BUILD='20260812-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2065,6 +2065,23 @@ function renderHoje(){
     cardsHtml+=`<div class="card" style="border-left:3px solid var(--blue);"><div class="label">👥 Clientes</div><div class="value">${activeClients.length}</div></div>`;
     cardsHtml+=`<div class="card clickable" style="border-left:3px solid var(--red);" onclick="showCoverageModal('sinistros')"><div class="label">🏥 Sinistros Pagos</div><div class="value" style="font-size:1rem;">${fmtBRL(totalSinistros)}</div></div>`;
     cardsHtml+=`<div class="card clickable" style="border-left:3px solid var(--green);" onclick="showCoverageModal('capital')"><div class="label">🛡️ Capital Segurado</div><div class="value" style="font-size:1rem;">${fmtBRL(totalCapital)}</div></div>`;
+    // Leads ativos no funil
+    const leadsAtivos=(state.leads||[]).filter(l=>!['fechado','perdido','resolvido'].includes(l.etapa)).length;
+    cardsHtml+=`<div class="card clickable" style="border-left:3px solid #3b82f6;" onclick="switchTab('funil')"><div class="label">📊 Leads no Funil</div><div class="value">${leadsAtivos}</div></div>`;
+    // Atividades atrasadas (total geral)
+    const totalAtrasadas=computeOverdue().length;
+    cardsHtml+=`<div class="card" style="border-left:3px solid ${totalAtrasadas>0?'var(--red)':'var(--green)'};"><div class="label">⚠️ Atrasadas</div><div class="value" style="color:${totalAtrasadas>0?'var(--red)':'var(--green)'};">${totalAtrasadas}</div></div>`;
+    // Meta do mês com barra de progresso
+    const _mk=currentMonthKey();
+    const _metaValor=state.metaAtual?.valor||0;
+    const _acumulado=(getMetaEntries(_mk)||[]).reduce((s,c)=>s+(c.valorPagamento||0),0);
+    const _pct=_metaValor>0?Math.min(_acumulado/_metaValor,1):0;
+    const _corMeta=_pct>=1?'#16a34a':_pct>=0.7?'#d97706':'#3b82f6';
+    cardsHtml+=`<div class="card clickable" style="border-left:3px solid ${_corMeta};min-width:190px;" onclick="showMetaModal()">
+      <div class="label">🎯 Meta do mês</div>
+      <div class="value" style="font-size:.9rem;color:${_corMeta};">${fmtBRL(_acumulado)}${_metaValor?` / ${fmtBRL(_metaValor)}`:''}</div>
+      ${_metaValor?`<div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:6px;overflow:hidden;"><div style="background:${_corMeta};height:100%;width:${Math.round(_pct*100)}%;border-radius:4px;"></div></div><div style="font-size:.72rem;color:var(--muted);margin-top:3px;">${Math.round(_pct*100)}% da meta</div>`:'<div style="font-size:.75rem;color:var(--muted);margin-top:4px;">Toque para definir meta</div>'}
+    </div>`;
   }
   renderQuickBar();
   document.getElementById('hojeStats').innerHTML=cardsHtml;
