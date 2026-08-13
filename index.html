@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260810-02';
+  var BUILD='20260812-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -270,6 +270,8 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 @media (max-width:1100px){.kanban{grid-template-columns:repeat(7,210px);}}
 .kanban-col.espera h4{color:var(--amber)!important;border-bottom-color:var(--amber)!important;}
 .kanban-col.espera{background:rgba(214,158,46,0.05)!important;}
+.kanban-col.resolvido h4{color:#0891b2!important;border-bottom-color:#0891b2!important;}
+.kanban-col.resolvido{background:rgba(8,145,178,0.05)!important;}
 .kanban-col{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;min-height:120px;}
 .kanban-col h4{font-size:13px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;color:var(--accent);border-bottom:2px solid var(--gold);padding-bottom:6px;}
 .kanban-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px;}
@@ -759,6 +761,43 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   </div>
 </section>
 
+<section id="tab-simulacoes" class="section">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:1.1rem;color:var(--accent);">📋 Simulações</h2>
+    <button class="btn primary" onclick="abrirUploadSimulacao()">＋ Adicionar Simulação</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+    <input type="text" id="simulacaoBusca" placeholder="🔍 Buscar por nome ou descrição..." style="flex:1;min-width:180px;max-width:360px;" oninput="_simulacaoBusca=this.value.toLowerCase();renderSimulacoes()">
+  </div>
+  <div id="simulacaoPills" class="form-catpills"></div>
+  <div id="simulacaoList" class="form-file-list"></div>
+  <!-- Modal upload -->
+  <div id="uploadSimulacaoModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;">
+    <div style="background:var(--card);border-radius:12px;padding:24px;width:min(420px,95vw);box-shadow:0 8px 32px rgba(0,0,0,.3);">
+      <h3 style="margin:0 0 16px;">📎 Adicionar Simulação</h3>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+        <input type="text" id="simulacaoDesc" placeholder="Descrição / nome do cliente (opcional)" style="width:100%;">
+        <select id="simulacaoCategoria" style="width:100%;padding:8px 10px;">
+          <option value="">Categoria...</option>
+          <option>Vida</option>
+          <option>Saúde</option>
+          <option>Auto</option>
+          <option>Previdência</option>
+          <option>Outros</option>
+        </select>
+      </div>
+      <div id="uploadSimulacaoProgress" style="display:none;margin-bottom:10px;font-size:.85rem;"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <label class="btn primary" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+          📎 Escolher Arquivo(s)
+          <input type="file" multiple style="display:none;" onchange="confirmarUploadSimulacao(this)">
+        </label>
+        <button class="btn" onclick="fecharUploadSimulacao()">Fechar</button>
+      </div>
+    </div>
+  </div>
+</section>
+
 </main>
 </div>
 </div>
@@ -1058,9 +1097,9 @@ const SEGUROS_LIST=[
   'Vida Premiada 2697','Vida Inteira Resgatável 2795','Private - Whole Life 2800','Private - SAF 3073',
   'Private - SAF 3080'
 ];
-const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida'};
-const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido'];
-const STAGE_COLORS={lead:'#3b82f6',contato:'#eab308',proposta:'#ec4899',negociacao:'#f97316',espera:'#6b7280',perdido:'#ef4444',fechado:'#16a34a'};
+const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida',resolvido:'Resolvido s/ venda'};
+const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido','resolvido'];
+const STAGE_COLORS={lead:'#3b82f6',contato:'#eab308',proposta:'#ec4899',negociacao:'#f97316',espera:'#6b7280',perdido:'#ef4444',fechado:'#16a34a',resolvido:'#0891b2'};
 
 /* ====================== Estado global ====================== */
 let currentUser=null; // {uid,name,email,role}
@@ -1341,6 +1380,12 @@ function initApp(){
     },err=>console.error(err)));
   }
 
+  // Simulações: todos os usuários autenticados
+  listeners.push(db.collection('simulacoes').orderBy('uploadedAt','desc').onSnapshot(snap=>{
+    state.simulacoes=[]; snap.forEach(d=>state.simulacoes.push({id:d.id,...d.data()}));
+    renderSimulacoes();
+  },err=>console.error(err)));
+
   // Listener para atividades aguardando aceite (owner vê a fila; colaborador vê as suas devolvidas)
   listeners.push(db.collection('occurrences').where('status','==','aguardando_aceite').onSnapshot(snap=>{
     if(currentUser.role==='owner'){
@@ -1379,6 +1424,7 @@ function setupNav(){
       <button data-tab="links"><span class="nav-icon">🔗</span>Links</button>
       <button data-tab="formularios"><span class="nav-icon">📁</span>Formulários</button>
       <button data-tab="docs-mildian"><span class="nav-icon">🔒</span>Meus Documentos</button>
+      <button data-tab="simulacoes"><span class="nav-icon">📋</span>Simulações</button>
     `;
   }else{
     nav.innerHTML=`
@@ -1396,6 +1442,7 @@ function setupNav(){
       <div class="nav-group-label">Outros</div>
       <button data-tab="links"><span class="nav-icon">🔗</span>Links</button>
       <button data-tab="formularios"><span class="nav-icon">📁</span>Formulários</button>
+      <button data-tab="simulacoes"><span class="nav-icon">📋</span>Simulações</button>
     `;
   }
   nav.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab,b)));
@@ -1413,6 +1460,8 @@ function switchTab(tab,btn){
   if(tab==='leadsfinalizados') renderLeadsFinalizados();
   // Documentos Mildian: re-renderiza sempre ao entrar na aba
   if(tab==='docs-mildian') renderDocsMildian();
+  // Simulações: re-renderiza sempre ao entrar na aba
+  if(tab==='simulacoes') renderSimulacoes();
   // Clique no nav de Clientes: sempre volta ao seletor de tipo
   if(tab==='clientes' && btn){
     clientesTipoFiltro=null;
@@ -4189,8 +4238,8 @@ function renderFunil(){
   STAGE_ORDER.filter(s=>s!=='fechado').forEach(stage=>{
     const items=state.leads.filter(l=>l.etapa===stage);
     const stageColor=STAGE_COLORS[stage]||'#999';
-    html+=`<div class="kanban-col${stage==='espera'?' espera':''}">
-      <h4 style="border-left:4px solid ${stageColor};padding-left:8px;border-radius:0 4px 4px 0;">${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
+    html+=`<div class="kanban-col${stage==='espera'?' espera':stage==='resolvido'?' resolvido':''}">
+      <h4 style="border-left:4px solid ${stageColor};padding-left:8px;border-radius:0 4px 4px 0;">${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':stage==='resolvido'?'✅ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
     items.forEach(l=>{
       const isExpanded=expandedLeadCard.has(l.id);
       const toggleLabel = isExpanded ? 'Fechar ▲' : (isOwner?'Editar ▼':'Ver mais ▼');
@@ -6132,6 +6181,100 @@ function excluirDocMildian(id){
     .catch(err=>alert('Erro: '+err.message));
 }
 /* ===== Fim Documentos Mildian ===== */
+
+/* ===== Simulações ===== */
+let _simulacaoBusca=''; let _simulacaoCategoria='todos';
+const SIMULACAO_CATS=['todos','Vida','Saúde','Auto','Previdência','Outros'];
+function renderSimulacoes(){
+  const pillsEl=document.getElementById('simulacaoPills');
+  if(pillsEl){
+    pillsEl.innerHTML=SIMULACAO_CATS.map(c=>`<button class="form-catpill${_simulacaoCategoria===c?' active':''}" onclick="_simulacaoCategoria='${c}';renderSimulacoes()">${c==='todos'?'Todas':c}</button>`).join('');
+  }
+  const listEl=document.getElementById('simulacaoList');
+  if(!listEl) return;
+  let docs=[...(state.simulacoes||[])];
+  if(_simulacaoCategoria!=='todos') docs=docs.filter(d=>d.categoria===_simulacaoCategoria);
+  if(_simulacaoBusca) docs=docs.filter(d=>(d.nome||'').toLowerCase().includes(_simulacaoBusca)||(d.descricao||'').toLowerCase().includes(_simulacaoBusca));
+  if(!docs.length){
+    listEl.innerHTML=`<div class="empty" style="padding:28px;">📋 Nenhuma simulação aqui ainda.<br>Use "+ Adicionar Simulação" para começar.</div>`;
+    return;
+  }
+  listEl.innerHTML=docs.map(doc=>{
+    const icon=docTypeIcon(doc.tipo);
+    const size=fmtBytes(doc.tamanho);
+    const date=doc.uploadedAt?new Date(doc.uploadedAt).toLocaleDateString('pt-BR'):'';
+    const catTag=doc.categoria?`<span class="form-cat-tag">${esc(doc.categoria)}</span>`:'';
+    const desc=doc.descricao?`<span style="color:var(--text2);font-size:.76rem;">· ${esc(doc.descricao)}</span>`:'';
+    const byTag=doc.uploadedByName?`<span style="color:var(--text2);font-size:.74rem;">👤 ${esc(doc.uploadedByName)}</span>`:'';
+    const meta=[size,date].filter(Boolean).join(' · ');
+    return `<div class="form-file-item">
+      <span class="form-file-icon">${icon}</span>
+      <div class="form-file-info">
+        <div class="form-file-name" title="${esc(doc.nome)}">${esc(doc.nome)}</div>
+        <div class="form-file-meta">${meta} ${catTag} ${desc} ${byTag}</div>
+      </div>
+      <a href="${doc.url}" target="_blank" rel="noopener" class="btn" style="font-size:.78rem;padding:5px 10px;text-decoration:none;white-space:nowrap;flex-shrink:0;" title="Abrir / Baixar">⬇ Abrir</a>
+      <button class="icon-btn" style="color:var(--red,#c0392b);flex-shrink:0;" onclick="excluirSimulacao('${doc.id}')" title="Excluir">🗑️</button>
+    </div>`;
+  }).join('');
+}
+function abrirUploadSimulacao(){
+  const m=document.getElementById('uploadSimulacaoModal');
+  if(!m) return;
+  document.getElementById('simulacaoDesc').value='';
+  document.getElementById('simulacaoCategoria').value='';
+  const p=document.getElementById('uploadSimulacaoProgress');
+  if(p){p.style.display='none';p.textContent='';}
+  m.style.display='flex';
+}
+function fecharUploadSimulacao(){
+  const m=document.getElementById('uploadSimulacaoModal');
+  if(m) m.style.display='none';
+}
+function confirmarUploadSimulacao(input){
+  const files=[...input.files];
+  if(!files.length) return;
+  const categoria=document.getElementById('simulacaoCategoria')?.value||'';
+  const descricao=(document.getElementById('simulacaoDesc')?.value||'').trim();
+  const prog=document.getElementById('uploadSimulacaoProgress');
+  const setP=(msg,err)=>{ if(!prog) return; prog.style.display=''; prog.style.color=err?'var(--red)':'var(--gold)'; prog.textContent=msg; };
+  setP(`Enviando ${files.length} arquivo(s)...`);
+  let done=0, errs=0;
+  const onDone=(err)=>{
+    done++;
+    if(err){ errs++; setP('❌ Erro: '+(err.message||err),true); }
+    else if(done===files.length){
+      if(errs===0){ setP(`✅ ${files.length} arquivo(s) enviado(s)!`); setTimeout(fecharUploadSimulacao,1600); }
+      else setP(`⚠️ ${done-errs}/${files.length} enviados.`,true);
+    } else { setP(`Enviando... (${done}/${files.length})`); }
+  };
+  files.forEach(file=>{
+    const fd=new FormData();
+    fd.append('file',file);
+    fd.append('upload_preset','mildian_docs');
+    fetch('https://api.cloudinary.com/v1_1/f1jndqvo/raw/upload',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.error) throw new Error('Cloudinary: '+data.error.message);
+        if(!data.secure_url) throw new Error('URL não retornada');
+        return db.collection('simulacoes').add({
+          nome:file.name, descricao, categoria, tipo:file.type||'',
+          tamanho:file.size, url:data.secure_url, publicId:data.public_id||'',
+          uploadedAt:Date.now(), uploadedBy:currentUser.uid, uploadedByName:currentUser.name
+        });
+      })
+      .then(()=>onDone(null))
+      .catch(err=>onDone(err));
+  });
+  input.value='';
+}
+function excluirSimulacao(id){
+  if(!confirm('Excluir esta simulação permanentemente?')) return;
+  db.collection('simulacoes').doc(id).delete()
+    .then(()=>showToast('🗑️ Simulação excluída','success'))
+    .catch(err=>alert('Erro: '+err.message));
+}
+/* ===== Fim Simulações ===== */
 
 /* PWA: registra o service worker para permitir instalação no celular
    (ícone na tela inicial, abre em tela cheia). Os dados continuam
