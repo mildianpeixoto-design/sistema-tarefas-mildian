@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260812-03';
+  var BUILD='20260812-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1160,6 +1160,7 @@ let state={
 };
 let boletosViewMes=new Date().toISOString().slice(0,7);
 let selectedBoletoId=null;
+let _boletosSortCol='status'; let _boletosSortAsc=true;
 let payablesSortCol='nome';
 let payablesSortDir=1; // 1=asc, -1=desc
 let editingPayableId=null;
@@ -3946,8 +3947,17 @@ function renderBoletos(){
   list.sort((a,b)=>{
     const ra=!!(a.boletosStatus&&a.boletosStatus[boletosViewMes]);
     const rb=!!(b.boletosStatus&&b.boletosStatus[boletosViewMes]);
-    if(ra!==rb) return ra?1:-1;
-    return (a.nome||'').localeCompare(b.nome||'','pt-BR');
+    let cmp=0;
+    if(_boletosSortCol==='nome'){
+      cmp=(a.nome||'').localeCompare(b.nome||'','pt-BR');
+    } else if(_boletosSortCol==='dia'){
+      cmp=(parseInt(a.diaVencimento)||0)-(parseInt(b.diaVencimento)||0);
+    } else {
+      // status: pendentes primeiro
+      cmp=(ra===rb)?0:(ra?1:-1);
+      if(cmp===0) cmp=(a.nome||'').localeCompare(b.nome||'','pt-BR');
+    }
+    return _boletosSortAsc?cmp:-cmp;
   });
 
   const total=activeClientes.length;
@@ -3973,6 +3983,17 @@ function renderBoletos(){
   const _bNomeToIds={};
   activeClientes.forEach(c=>{ const k=(c.nome||'').toLowerCase().trim(); if(!_bNomeToIds[k]) _bNomeToIds[k]=[]; _bNomeToIds[k].push(c.id); });
   const bDupIds=new Set(Object.values(_bNomeToIds).filter(ids=>ids.length>1).flat());
+
+  const _sortArrow=col=>_boletosSortCol===col?(_boletosSortAsc?' ↑':' ↓'):'';
+  const _thStyle='cursor:pointer;user-select:none;padding:6px 10px;font-size:.75rem;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;';
+  const _thActive='color:var(--accent);';
+  const headerHtml=list.length?`<div style="display:flex;align-items:center;gap:0;border-bottom:2px solid var(--border);margin-bottom:2px;">
+    <div style="width:40px;flex-shrink:0;"></div>
+    <div style="${_thStyle}${_boletosSortCol==='nome'?_thActive:''};flex:1;" onclick="_boletosSortCol==='nome'?_boletosSortAsc=!_boletosSortAsc:(_boletosSortCol='nome',_boletosSortAsc=true);renderBoletos()">Empresa${_sortArrow('nome')}</div>
+    <div style="${_thStyle}${_boletosSortCol==='dia'?_thActive:''};width:90px;text-align:center;" onclick="_boletosSortCol==='dia'?_boletosSortAsc=!_boletosSortAsc:(_boletosSortCol='dia',_boletosSortAsc=true);renderBoletos()">Vencimento${_sortArrow('dia')}</div>
+    <div style="${_thStyle}${_boletosSortCol==='status'?_thActive:''};width:110px;text-align:center;" onclick="_boletosSortCol==='status'?_boletosSortAsc=!_boletosSortAsc:(_boletosSortCol='status',_boletosSortAsc=true);renderBoletos()">Status${_sortArrow('status')}</div>
+    <div style="width:24px;flex-shrink:0;"></div>
+  </div>`:'';
 
   const rows=list.map(c=>{
     const recebido=!!(c.boletosStatus&&c.boletosStatus[boletosViewMes]);
@@ -4054,7 +4075,7 @@ function renderBoletos(){
     const msg=q?`Nenhuma empresa encontrada para "${esc(q)}".`:'Nenhum cliente de cobrança ativo. Clique em "+ Nova cobrança" para adicionar.';
     listEl.innerHTML=`<div class="empty">${msg}</div>${inativasHtml}`;
   } else {
-    listEl.innerHTML=`<div class="client-name-list">${rows}</div>${inativasHtml}`;
+    listEl.innerHTML=`${headerHtml}<div class="client-name-list">${rows}</div>${inativasHtml}`;
   }
 }
 
