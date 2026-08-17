@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260812-04';
+  var BUILD='20260812-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -569,8 +569,12 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 </section>
 
 <section id="tab-funil" class="section">
-  <div class="row" style="margin-bottom:12px;">
+  <div class="row" style="margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <button class="btn primary" id="newLeadBtn">+ Novo lead</button>
+    <div style="position:relative;flex:1;min-width:180px;max-width:340px;">
+      <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;pointer-events:none;">🔍</span>
+      <input type="text" id="funilBusca" placeholder="Buscar lead por nome, telefone ou e-mail..." style="width:100%;padding:7px 10px 7px 30px;box-sizing:border-box;" oninput="_funilBusca=this.value.toLowerCase();renderFunil()">
+    </div>
   </div>
   <div id="leadFormWrap"></div>
   <div class="kanban" id="funilBoard"></div>
@@ -1116,6 +1120,7 @@ let expandedComments=new Set();
 let expandedArquivo=new Set();
 let expandedLeadHist=new Set();
 let expandedLeadCard=new Set();
+let _funilBusca='';
 let expandedClientHist=new Set();
 let clientSearchQuery='';
 let selectedClientId=null;
@@ -4278,8 +4283,17 @@ function addLeadHistorico(id){
 function renderFunil(){
   let html='';
   const isOwner=currentUser.role==='owner';
+  const _funilLeads=_funilBusca
+    ? (state.leads||[]).filter(l=>{
+        const q=_funilBusca;
+        return (l.nome||'').toLowerCase().includes(q)
+          ||(l.telefone||'').toLowerCase().includes(q)
+          ||(l.email||'').toLowerCase().includes(q)
+          ||(l.indicadoPor||'').toLowerCase().includes(q);
+      })
+    : state.leads||[];
   STAGE_ORDER.filter(s=>s!=='fechado').forEach(stage=>{
-    const items=state.leads.filter(l=>l.etapa===stage);
+    const items=_funilLeads.filter(l=>l.etapa===stage);
     const stageColor=STAGE_COLORS[stage]||'#999';
     html+=`<div class="kanban-col${stage==='espera'?' espera':stage==='resolvido'?' resolvido':''}">
       <h4 style="border-left:4px solid ${stageColor};padding-left:8px;border-radius:0 4px 4px 0;">${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':stage==='resolvido'?'✅ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
