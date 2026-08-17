@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260812-05';
+  var BUILD='20260817-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4161,6 +4161,7 @@ function showLeadForm(lead,containerId){
   const isInline = containerId!=='leadFormWrap';
   const isEdit=!!(lead&&lead.id);
   lead=lead||{id:null,nome:'',telefone:'',email:'',valorEstimado:0,etapa:'lead',indicadoPor:'',historico:[]};
+  const lid=lead.id||'new'; // sufixo único por lead — evita IDs duplicados no DOM
   const container=document.getElementById(containerId);
   if(!container) return;
   function closeThisForm(){
@@ -4168,42 +4169,43 @@ function showLeadForm(lead,containerId){
     else{ container.innerHTML=''; }
   }
   container.innerHTML=`
-    <form class="form-grid${isInline?' lead-compact-form':''}" id="leadForm" style="${isInline?'max-width:100%;':''}">
-      <div class="full"><label>Nome / Empresa</label><input type="text" id="leadNome" value="${esc(lead.nome)}" required></div>
-      <div><label>Telefone (com DDD)</label><input type="text" id="leadTelefone" value="${esc(lead.telefone||lead.contato||'')}" placeholder="(00) 00000-0000"></div>
-      <div><label>E-mail</label><input type="email" id="leadEmail" value="${esc(lead.email||'')}"></div>
-      <div><label>Valor estimado (R$)</label><input type="number" id="leadValor" step="0.01" min="0" value="${lead.valorEstimado||0}"></div>
-      <div><label>Etapa</label><select id="leadEtapa">
+    <form class="form-grid${isInline?' lead-compact-form':''}" id="leadForm_${lid}" style="${isInline?'max-width:100%;':''}">
+      <div class="full"><label>Nome / Empresa</label><input type="text" id="leadNome_${lid}" value="${esc(lead.nome)}" required></div>
+      <div><label>Telefone (com DDD)</label><input type="text" id="leadTelefone_${lid}" value="${esc(lead.telefone||lead.contato||'')}" placeholder="(00) 00000-0000"></div>
+      <div><label>E-mail</label><input type="email" id="leadEmail_${lid}" value="${esc(lead.email||'')}"></div>
+      <div><label>Valor estimado (R$)</label><input type="number" id="leadValor_${lid}" step="0.01" min="0" value="${lead.valorEstimado||0}"></div>
+      <div><label>Etapa</label><select id="leadEtapa_${lid}">
         ${STAGE_ORDER.map(s=>`<option value="${s}" ${lead.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
       </select></div>
-      <div><label>Próximo contato</label><input type="date" id="leadProximoContato" value="${esc(lead.proximoContato||'')}"></div>
-      <div class="full"><label>Indicado por</label><input type="text" id="leadIndicadoPor" value="${esc(lead.indicadoPor||'')}" placeholder="Nome de quem indicou (opcional)"></div>
-      ${!isEdit?`<div class="full"><label>Anotação inicial (opcional)</label><textarea id="leadObsInicial" placeholder="Será registrada nas anotações com a data de hoje"></textarea></div>`:''}
+      <div><label>Próximo contato</label><input type="date" id="leadProximoContato_${lid}" value="${esc(lead.proximoContato||'')}"></div>
+      <div class="full"><label>Indicado por</label><input type="text" id="leadIndicadoPor_${lid}" value="${esc(lead.indicadoPor||'')}" placeholder="Nome de quem indicou (opcional)"></div>
+      ${!isEdit?`<div class="full"><label>Anotação inicial (opcional)</label><textarea id="leadObsInicial_${lid}" placeholder="Será registrada nas anotações com a data de hoje"></textarea></div>`:''}
       <div class="full row">
         <button class="btn primary" type="submit">${isEdit?'Salvar':'Adicionar lead'}</button>
-        <button class="btn" type="button" id="cancelLeadBtn">Cancelar</button>
+        <button class="btn" type="button" id="cancelLeadBtn_${lid}">Cancelar</button>
       </div>
     </form>
   `;
-  document.getElementById('cancelLeadBtn').addEventListener('click',closeThisForm);
-  document.getElementById('leadForm').addEventListener('submit',e=>{
+  // Usar container.querySelector para escopar ao formulário correto (evita pegar o de outro lead aberto)
+  container.querySelector(`#cancelLeadBtn_${lid}`).addEventListener('click',closeThisForm);
+  container.querySelector(`#leadForm_${lid}`).addEventListener('submit',e=>{
     e.preventDefault();
     const submitBtn=e.target.querySelector('button[type="submit"]');
     if(submitBtn.disabled) return; // evita duplicidade por duplo clique/Enter
     submitBtn.disabled=true;
     const obj={
-      nome: document.getElementById('leadNome').value.trim(),
-      telefone: document.getElementById('leadTelefone').value.trim(),
-      email: document.getElementById('leadEmail').value.trim(),
-      valorEstimado: parseFloat(document.getElementById('leadValor').value)||0,
-      etapa: document.getElementById('leadEtapa').value,
-      proximoContato: document.getElementById('leadProximoContato').value||null,
-      indicadoPor: document.getElementById('leadIndicadoPor').value.trim()||'',
+      nome: container.querySelector(`#leadNome_${lid}`).value.trim(),
+      telefone: container.querySelector(`#leadTelefone_${lid}`).value.trim(),
+      email: container.querySelector(`#leadEmail_${lid}`).value.trim(),
+      valorEstimado: parseFloat(container.querySelector(`#leadValor_${lid}`).value)||0,
+      etapa: container.querySelector(`#leadEtapa_${lid}`).value,
+      proximoContato: container.querySelector(`#leadProximoContato_${lid}`).value||null,
+      indicadoPor: container.querySelector(`#leadIndicadoPor_${lid}`).value.trim()||'',
       historico: lead.historico||[]
     };
     if(!obj.nome){ submitBtn.disabled=false; return; }
     if(!isEdit){
-      const obsInicial=document.getElementById('leadObsInicial').value.trim();
+      const obsInicial=container.querySelector(`#leadObsInicial_${lid}`).value.trim();
       if(obsInicial) obj.historico=[{texto:obsInicial,at:ts(),uid:currentUser.uid,name:currentUser.name}];
     }
     if(isInline){
