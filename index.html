@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260817-01';
+  var BUILD='20260817-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -480,6 +480,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div class="home-layout">
     <div class="home-main">
       <div class="cards" id="hojeStats"></div>
+      <div id="funilChartWrap" style="display:none;margin:8px 0 4px;padding:12px 14px;background:var(--card);border-radius:10px;border:1px solid var(--border);"></div>
       <div id="hojeGroups"></div>
     </div>
   </div>
@@ -528,6 +529,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
     <div class="row" style="margin-bottom:12px;gap:10px;flex-wrap:wrap;">
       <button class="btn" onclick="voltarSeletorCliente()" style="flex-shrink:0;">← Voltar</button>
       <button class="btn primary" id="newClientBtn">+ Novo cliente</button>
+      <button class="btn owner-only" onclick="exportarClientesCSV()" title="Exportar clientes para Excel/CSV">⬇ Exportar</button>
       <div style="position:relative;flex:1;min-width:220px;max-width:420px;">
         <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none;">🔍</span>
         <input type="text" id="clientSearch" placeholder="Buscar por nome, CPF/CNPJ ou telefone..." style="width:100%;padding:8px 12px 8px 32px;box-sizing:border-box;" oninput="filterClients(this.value)">
@@ -564,6 +566,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
       <option value="recebidos">Recebidos</option>
     </select>
     <button class="btn btn-primary owner-only" id="novaBoletoBtn">+ Nova cobrança</button>
+    <button class="btn owner-only" onclick="exportarCobrancasCSV()" title="Exportar cobranças para Excel/CSV">⬇ Exportar</button>
   </div>
   <div id="boletosList"></div>
 </section>
@@ -571,6 +574,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 <section id="tab-funil" class="section">
   <div class="row" style="margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <button class="btn primary" id="newLeadBtn">+ Novo lead</button>
+    <button class="btn owner-only" onclick="exportarLeadsCSV()" title="Exportar leads para Excel/CSV">⬇ Exportar</button>
     <div style="position:relative;flex:1;min-width:180px;max-width:340px;">
       <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;pointer-events:none;">🔍</span>
       <input type="text" id="funilBusca" placeholder="Buscar lead por nome, telefone ou e-mail..." style="width:100%;padding:7px 10px 7px 30px;box-sizing:border-box;" oninput="_funilBusca=this.value.toLowerCase();renderFunil()">
@@ -1109,6 +1113,18 @@ const SEGUROS_LIST=[
 const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida',resolvido:'Resolvido s/ venda'};
 const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido','resolvido'];
 const STAGE_COLORS={lead:'#3b82f6',contato:'#eab308',proposta:'#ec4899',negociacao:'#f97316',espera:'#6b7280',perdido:'#ef4444',fechado:'#16a34a',resolvido:'#0891b2'};
+const LEAD_TEMPLATES=[
+  {label:'Primeiro contato',texto:'Olá [nome]! Tudo bem? Gostaríamos de apresentar nossas soluções em seguros. Teria alguns minutinhos para conversar?'},
+  {label:'Proposta enviada',texto:'Olá [nome]! Passando para verificar se recebeu nossa proposta e se ficou alguma dúvida. Estou à disposição! 😊'},
+  {label:'Retorno agendado',texto:'Olá [nome]! Combinamos de conversar hoje. Pode falar agora?'},
+  {label:'Proposta não respondida',texto:'Olá [nome]! Ficou alguma dúvida sobre nossa proposta? Podemos ajustar para melhor atender sua necessidade. 😊'},
+];
+const CLIENT_TEMPLATES=[
+  {label:'Renovação de apólice',texto:'Olá [nome]! Passando para lembrar que sua apólice vence em breve. Posso apresentar as opções de renovação? 😊'},
+  {label:'Pós-venda',texto:'Olá [nome]! Tudo bem com seu seguro? Qualquer dúvida estou à disposição!'},
+  {label:'Aniversário',texto:'Olá [nome]! Desejamos um feliz aniversário! 🎂 Que seja um ano repleto de saúde e realizações!'},
+  {label:'Sinistro / Acionamento',texto:'Olá [nome]! Vi que você precisou acionar seu seguro. Estou aqui para ajudar no que precisar. Pode contar comigo!'},
+];
 
 /* ====================== Estado global ====================== */
 let currentUser=null; // {uid,name,email,role}
@@ -2253,6 +2269,7 @@ function renderHoje(){
   });
 
   document.getElementById('hojeGroups').innerHTML=html;
+  if(currentUser&&currentUser.role==='owner') renderFunilChart();
 }
 function toggleHojeGroup(key){
   if(expandedHojeGroups.has(key)) expandedHojeGroups.delete(key);
@@ -3674,8 +3691,27 @@ function renderClients(){
           </div>
         </div>
         ${clientDocsHtml(c.id)}
+        ${(()=>{
+          // Histórico de atividades vinculadas a este cliente
+          const _cliActs=(state.activities||[]).filter(a=>(a.cliente||'').toLowerCase().trim()===(c.nome||'').toLowerCase().trim());
+          if(!_cliActs.length) return '';
+          let ah=`<div class="cdp-section cdp-full"><div class="cdp-title">🗓️ Atividades vinculadas (${_cliActs.length})</div>`;
+          _cliActs.forEach(a=>{
+            const todayOcc=state.occToday[a.id];
+            const stBg=todayOcc&&todayOcc.status==='finalizada'?'#dcfce7':todayOcc&&todayOcc.status==='pendente'?'#fef9c3':'#f3f4f6';
+            const stColor=todayOcc&&todayOcc.status==='finalizada'?'#166534':todayOcc&&todayOcc.status==='pendente'?'#854d0e':'#6b7280';
+            const badge=todayOcc?`<span style="font-size:.7rem;background:${stBg};color:${stColor};border-radius:4px;padding:1px 6px;margin-left:6px;">${todayOcc.status}</span>`:'';
+            ah+=`<div class="cdp-row" style="flex-direction:column;align-items:flex-start;gap:2px;padding:6px 0;border-bottom:1px solid var(--border);">
+              <div style="font-weight:600;font-size:.88rem;">${esc(a.title)}${badge}</div>
+              <div style="font-size:.78rem;color:var(--text2);">👤 ${esc(userName(a.assignedTo)||'—')} · ⚡ ${esc(a.priority||'normal')} · ${esc(a.type||'pontual')}</div>
+            </div>`;
+          });
+          ah+='</div>';
+          return ah;
+        })()}
         </div>
         <div class="cdp-actions row">
+          ${(c.telefone||c.email)?`<span onclick="event.stopPropagation()">${msgDropdownHtml('cli',c.id,c.nome)}</span>`:''}
           <button class="btn primary" onclick="editClient('${c.id}');event.stopPropagation()">✏️ Editar</button>
           <button class="btn" style="color:#16a34a;border-color:#16a34a;" onclick="registrarNovaVenda('${c.id}');event.stopPropagation()">💰 Nova venda</button>
           <button class="btn" onclick="toggleClientActivityForm('${c.id}');event.stopPropagation()">🗓️ Nova atividade</button>
@@ -4155,6 +4191,127 @@ document.getElementById('boletosMesProximo').addEventListener('click',()=>{
   renderBoletos();
 });
 
+/* ====================== Exportar CSV ====================== */
+function exportarCSV(headers,rows,filename){
+  const BOM='﻿';
+  const content=BOM+[headers.join(';'),...rows.map(r=>r.map(v=>`"${String(v===null||v===undefined?'':v).replace(/"/g,'""')}"`).join(';'))].join('\n');
+  const blob=new Blob([content],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+function exportarLeadsCSV(){
+  if(!state.leads||!state.leads.length){alert('Nenhum lead para exportar.');return;}
+  const h=['Nome','Telefone','E-mail','Etapa','Valor Estimado (R$)','Próximo Contato','Indicado por','Criado por','Data de criação'];
+  const rows=(state.leads||[]).map(l=>{
+    const dt=l.createdAt?(l.createdAt.toDate?l.createdAt.toDate():new Date((l.createdAt.seconds||0)*1000)):null;
+    return [l.nome||'',l.telefone||'',l.email||'',STAGE_LABELS[l.etapa]||l.etapa||'',l.valorEstimado||0,l.proximoContato||'',l.indicadoPor||'',l.createdByName||userName(l.createdBy)||'',dt?dt.toLocaleDateString('pt-BR'):''];
+  });
+  exportarCSV(h,rows,'leads_'+todayStr()+'.csv');
+  _showToast('✓ Leads exportados!');
+}
+function exportarClientesCSV(){
+  const ativos=(state.clients||[]).filter(c=>c.status!=='cancelado');
+  if(!ativos.length){alert('Nenhum cliente para exportar.');return;}
+  const h=['Nome','Tipo','CPF/CNPJ','Telefone','E-mail','Plano','Valor Pgto (R$)','Banco','Dia Vencimento','Endereço'];
+  const rows=ativos.map(c=>[
+    c.nome||'',c.tipo||'PF',c.cpf||c.cnpj||'',c.telefone||'',c.email||'',
+    (Array.isArray(c.coberturas)&&c.coberturas.length?c.coberturas.map(x=>x.plano||'').filter(Boolean).join(', '):c.plano||''),
+    c.valorPagamento||0,c.banco||'',c.diaVencimento||'',c.endereco||''
+  ]);
+  exportarCSV(h,rows,'clientes_'+todayStr()+'.csv');
+  _showToast('✓ Clientes exportados!');
+}
+function exportarCobrancasCSV(){
+  const ativos=(state.boletosClientes||[]).filter(c=>c.ativa!==false);
+  if(!ativos.length){alert('Nenhuma cobrança para exportar.');return;}
+  const mesKey=boletosViewYear+'-'+String(boletosViewMonth+1).padStart(2,'0');
+  const h=['Empresa','Contato','Telefone','E-mail','Dia Vencimento','Status '+mesKey];
+  const rows=ativos.map(c=>[c.nome||'',c.contato||'',c.telefone||'',c.email||'',c.diaVencimento||'',(c.boletosStatus&&c.boletosStatus[mesKey])?'Recebido':'Pendente']);
+  exportarCSV(h,rows,'cobrancas_'+mesKey+'.csv');
+  _showToast('✓ Cobranças exportadas!');
+}
+
+/* ====================== Templates de mensagem rápida ====================== */
+let _toastTmr=null;
+function _showToast(msg){
+  let t=document.getElementById('_appToast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='_appToast';
+    t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a1035;color:#fff;padding:10px 22px;border-radius:10px;font-size:.92rem;z-index:99999;transition:opacity .3s;pointer-events:none;';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(_toastTmr);
+  _toastTmr=setTimeout(()=>{ t.style.opacity='0'; },2500);
+}
+function toggleMsgDropdown(id){
+  // Fecha todos os outros e abre/fecha o clicado
+  document.querySelectorAll('[id^="msgDrop_"]').forEach(d=>{
+    if(d.id!=='msgDrop_'+id) d.style.display='none';
+  });
+  const el=document.getElementById('msgDrop_'+id);
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
+}
+function copiarMensagemIdx(type,idx,nome){
+  const t=(type==='lead'?LEAD_TEMPLATES:CLIENT_TEMPLATES)[idx];
+  if(!t) return;
+  const texto=t.texto.replace('[nome]',nome);
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(texto).then(()=>_showToast('✓ Mensagem copiada!')).catch(()=>_copiarFallback(texto));
+  } else { _copiarFallback(texto); }
+  // Fecha dropdown
+  document.querySelectorAll('[id^="msgDrop_"]').forEach(d=>d.style.display='none');
+}
+function _copiarFallback(texto){
+  const ta=document.createElement('textarea');
+  ta.value=texto; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+  _showToast('✓ Mensagem copiada!');
+}
+function msgDropdownHtml(type,uid,nome){
+  const templates=type==='lead'?LEAD_TEMPLATES:CLIENT_TEMPLATES;
+  const safeNome=nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  let h=`<div style="margin:6px 0;position:relative;">
+    <button class="icon-btn" onclick="toggleMsgDropdown('${uid}')">💬 Mensagem rápida</button>
+    <div id="msgDrop_${uid}" style="display:none;position:absolute;left:0;top:28px;z-index:100;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;min-width:240px;box-shadow:0 4px 16px rgba(0,0,0,.12);">
+      <div style="font-size:.78rem;color:var(--text2);font-weight:600;margin-bottom:6px;">Copiar modelo:</div>`;
+  templates.forEach((tmpl,i)=>{
+    h+=`<button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:4px;font-size:.81rem;padding:5px 10px;" onclick="copiarMensagemIdx('${type}',${i},'${safeNome}')">📋 ${esc(tmpl.label)}</button>`;
+  });
+  h+='</div></div>';
+  return h;
+}
+
+/* ====================== Gráfico do funil ====================== */
+let _funilChartInst=null;
+function renderFunilChart(){
+  const wrap=document.getElementById('funilChartWrap');
+  if(!wrap) return;
+  const leads=state.leads||[];
+  if(!leads.length){ wrap.style.display='none'; return; }
+  wrap.style.display='block';
+  wrap.innerHTML=`<div style="font-size:.85rem;font-weight:600;color:var(--text2);margin-bottom:4px;">📊 Leads por etapa</div><div style="max-width:600px;"><canvas id="funilChart"></canvas></div>`;
+  const ctx=document.getElementById('funilChart').getContext('2d');
+  if(_funilChartInst){ _funilChartInst.destroy(); _funilChartInst=null; }
+  const stages=STAGE_ORDER.filter(s=>s!=='fechado');
+  const counts=stages.map(s=>leads.filter(l=>l.etapa===s).length);
+  const colors=stages.map(s=>STAGE_COLORS[s]||'#999');
+  _funilChartInst=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:stages.map(s=>STAGE_LABELS[s]),
+      datasets:[{data:counts,backgroundColor:colors.map(c=>c+'55'),borderColor:colors,borderWidth:2,borderRadius:5}]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw} lead${c.raw!==1?'s':''}`}}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:11}}},x:{ticks:{font:{size:11}}}},
+    }
+  });
+}
+
 /* ====================== Funil de Vendas ====================== */
 function showLeadForm(lead,containerId){
   containerId=containerId||'leadFormWrap';
@@ -4332,6 +4489,7 @@ function renderFunil(){
             const lbl=l.proximoContato<ds?'Contato atrasado':(l.proximoContato===ds?'Contato hoje':'Próximo contato');
             return `<div class="kc-next ${cls}">📅 ${lbl}: ${fmtDateBR(l.proximoContato)}</div>`;
           })():''}
+          ${(l.telefone||l.email)?msgDropdownHtml('lead',l.id,l.nome):''}
           <div id="leadEditWrap-${l.id}" style="margin-top:8px;"></div>
           <div class="row" style="margin-top:8px;">
             ${isOwner?`<button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>`:''}
