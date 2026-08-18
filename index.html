@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260817-02';
+  var BUILD='20260817-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -611,20 +611,6 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div id="pontoList"></div>
 </section>
 
-<section id="tab-relatorios" class="section owner-only">
-  <div class="row" style="margin-bottom:16px;">
-    <label class="muted">Data:</label>
-    <input type="date" id="reportDate">
-    <button class="btn" id="copyReportBtn">Copiar resumo</button>
-    <button class="btn" id="exportCsvBtn">Exportar CSV</button>
-    <button class="btn" id="exportPdfBtn">Exportar PDF</button>
-  </div>
-  <div class="charts-grid">
-    <div class="card chart-card"><canvas id="chartHoras"></canvas></div>
-    <div class="card chart-card"><canvas id="chartStatus"></canvas></div>
-  </div>
-  <div id="reportContent"></div>
-</section>
 
 <section id="tab-arquivo" class="section owner-only">
   <p class="muted">Relatórios diários arquivados automaticamente (gerados ao acessar o sistema, cobrindo dias anteriores que ainda não tinham sido arquivados).</p>
@@ -1152,6 +1138,7 @@ let expandedReschedule=new Set();
 let expandedNotes=new Set();
 let reportsArchived=false;
 let chartHoras=null, chartStatus=null;
+const _arquivoCharts=new Map(); // instâncias Chart.js por relatório arquivado
 let _metaViewMk=null; // mês sendo visualizado no modal de meta
 let state={
   users:[],
@@ -1357,8 +1344,6 @@ function initApp(){
   },err=>console.error(err)));
 
   if(currentUser.role==='owner'){
-    document.getElementById('reportDate').value=todayStr();
-    subscribeReport(todayStr());
 
     listeners.push(db.collection('dailyReports').onSnapshot(snap=>{
       state.dailyReports=[]; snap.forEach(d=>state.dailyReports.push({id:d.id,...d.data()}));
@@ -1447,7 +1432,6 @@ function setupNav(){
       <button data-tab="contas"><span class="nav-icon">💰</span>Contas a Pagar</button>
       <div class="nav-group-label">Equipe</div>
       <button data-tab="colaboradores"><span class="nav-icon">👤</span>Colaboradores</button>
-      <button data-tab="relatorios"><span class="nav-icon">📈</span>Relatórios</button>
       <button data-tab="links"><span class="nav-icon">🔗</span>Links</button>
       <button data-tab="formularios"><span class="nav-icon">📁</span>Formulários</button>
       <button data-tab="docs-mildian"><span class="nav-icon">🔒</span>Meus Documentos</button>
@@ -1593,7 +1577,6 @@ function renderAll(){
     renderCollaborators();
   }
   renderPonto();
-  if(currentUser.role==='owner') renderReport();
 }
 
 /* ====================== Hoje / Minhas tarefas ====================== */
@@ -2962,9 +2945,9 @@ function renderPonto(){
   document.getElementById('pontoList').innerHTML=html;
 }
 
-/* ====================== Relatórios (administradora) ====================== */
+/* ====================== Relatórios (administradora) — removido, funcionalidade integrada ao Arquivo ====================== */
 const reportDateInput=document.getElementById('reportDate');
-reportDateInput.addEventListener('change',()=>subscribeReport(reportDateInput.value||todayStr()));
+if(reportDateInput) reportDateInput.addEventListener('change',()=>subscribeReport(reportDateInput.value||todayStr()));
 
 function subscribeReport(ds){
   reportUnsubs.forEach(u=>u()); reportUnsubs=[];
@@ -3037,114 +3020,7 @@ function renderReportCharts(items){
     options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Status das atividades'}}}
   });
 }
-document.getElementById('copyReportBtn').addEventListener('click',()=>{
-  const ds=reportDateInput.value||todayStr();
-  let text=`Relatório do dia ${new Date(ds+'T00:00:00').toLocaleDateString('pt-BR')}\n\n`;
-  state.users.forEach(u=>{
-    text+=`${u.name}: ${fmtHours(logTotalSeconds(state.logsReport[u.id]))} trabalhadas\n`;
-  });
-  text+='\nAtividades:\n';
-  let any=false;
-  state.activities.forEach(act=>{
-    if(!activityAppliesOn(act,ds)) return;
-    any=true;
-    const occ=state.occReport[act.id]||{status:'pendente',timeSpent:0};
-    text+=`- [${STATUS_LABELS[occ.status]}] ${act.title} (${userName(act.assignedTo)}, ${fmtHMS(occ.timeSpent||0)})\n`;
-  });
-  if(!any) text+='(nenhuma)\n';
-  navigator.clipboard.writeText(text).then(()=>{
-    const btn=document.getElementById('copyReportBtn');
-    const old=btn.textContent;
-    btn.textContent='Copiado!';
-    setTimeout(()=>btn.textContent=old,1500);
-  });
-});
-document.getElementById('exportCsvBtn').addEventListener('click',()=>{
-  const ds=reportDateInput.value||todayStr();
-  const rows=[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Tempo gasto (hh:mm:ss)']];
-  state.activities.forEach(act=>{
-    if(!activityAppliesOn(act,ds)) return;
-    const occ=state.occReport[act.id]||{status:'pendente',timeSpent:0,redirectedTo:null};
-    const assignee=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
-    rows.push([act.title,act.cliente||'',userName(assignee),PRIORITY_LABELS[act.priority],STATUS_LABELS[occ.status],fmtHMS(occ.timeSpent||0)]);
-  });
-  rows.push([]);
-  rows.push(['Colaborador','Horas trabalhadas']);
-  state.users.forEach(u=>{
-    rows.push([u.name,fmtHours(logTotalSeconds(state.logsReport[u.id]))]);
-  });
-  const csvEscape=v=>{
-    const s=String(v==null?'':v);
-    return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
-  };
-  const csv=rows.map(r=>r.map(csvEscape).join(';')).join('\r\n');
-  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=`relatorio_${ds}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-});
-document.getElementById('exportPdfBtn').addEventListener('click',()=>{
-  const ds=reportDateInput.value||todayStr();
-  const dateLabel=new Date(ds+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
-  const { jsPDF } = window.jspdf;
-  const doc=new jsPDF();
-  const pageWidth=doc.internal.pageSize.getWidth();
-  let y=15;
-
-  doc.setFontSize(16);
-  doc.text('Relatório do dia '+dateLabel,14,y);
-  y+=8;
-
-  // Tabela de horas por colaborador
-  const horasRows=state.users.map(u=>[u.name, fmtHours(logTotalSeconds(state.logsReport[u.id]))]);
-  doc.autoTable({
-    startY:y,
-    head:[['Colaborador','Horas trabalhadas']],
-    body: horasRows.length?horasRows:[['(nenhum colaborador)','']],
-    theme:'grid', styles:{fontSize:9}, headStyles:{fillColor:[60,52,137]}
-  });
-  y=doc.lastAutoTable.finalY+8;
-
-  // Gráficos
-  try{
-    const chartHorasEl=document.getElementById('chartHoras');
-    const chartStatusEl=document.getElementById('chartStatus');
-    if(chartHorasEl && chartStatusEl){
-      const imgW=(pageWidth-14*2-8)/2;
-      const imgH=imgW*0.7;
-      if(y+imgH>280){ doc.addPage(); y=15; }
-      doc.addImage(chartHorasEl.toDataURL('image/png',1.0),'PNG',14,y,imgW,imgH);
-      doc.addImage(chartStatusEl.toDataURL('image/png',1.0),'PNG',14+imgW+8,y,imgW,imgH);
-      y+=imgH+10;
-    }
-  }catch(e){ console.error('Erro ao incluir gráficos no PDF:',e); }
-
-  // Tabela de atividades
-  const items=[];
-  state.activities.forEach(act=>{
-    if(!activityAppliesOn(act,ds)) return;
-    const occ=state.occReport[act.id]||{status:'pendente',timeSpent:0,redirectedTo:null};
-    const assignee=(occ.status==='redirecionada'&&occ.redirectedTo)?occ.redirectedTo:act.assignedTo;
-    items.push([act.title,act.cliente||'',userName(assignee),PRIORITY_LABELS[act.priority],STATUS_LABELS[occ.status],fmtHMS(occ.timeSpent||0)]);
-  });
-  if(y>270){ doc.addPage(); y=15; }
-  doc.setFontSize(12);
-  doc.text('Atividades',14,y);
-  y+=4;
-  doc.autoTable({
-    startY:y,
-    head:[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Tempo gasto']],
-    body: items.length?items:[['(nenhuma atividade nesta data)','','','','','']],
-    theme:'grid', styles:{fontSize:8}, headStyles:{fillColor:[60,52,137]}
-  });
-
-  doc.save(`relatorio_${ds}.pdf`);
-});
+// Aba Relatórios removida — funcionalidade integrada ao Arquivo
 
 /* ====================== Clientes ====================== */
 function selecionarTipoCliente(tipo){
@@ -5318,6 +5194,37 @@ function toggleArquivoDetail(id){
   else expandedArquivo.add(id);
   renderArquivo();
 }
+function renderArquivoCharts(){
+  expandedArquivo.forEach(id=>{
+    const r=state.dailyReports.find(x=>x.id===id);
+    if(!r) return;
+    // Gráfico de horas
+    const horasEl=document.getElementById('archHoras_'+id);
+    if(horasEl){
+      if(_arquivoCharts.get('h_'+id)) _arquivoCharts.get('h_'+id).destroy();
+      const usersAtivos=(r.users||[]).filter(u=>!u.ausente);
+      const ch=new Chart(horasEl,{
+        type:'bar',
+        data:{labels:usersAtivos.map(u=>u.name),datasets:[{label:'Horas',data:usersAtivos.map(u=>+(u.horas||0).toFixed(2)),backgroundColor:'#4f7cff88',borderColor:'#4f7cff',borderWidth:1.5,borderRadius:4}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Horas trabalhadas'},legend:{display:false}},scales:{y:{beginAtZero:true}}}
+      });
+      _arquivoCharts.set('h_'+id,ch);
+    }
+    // Gráfico de status
+    const statusEl=document.getElementById('archStatus_'+id);
+    if(statusEl){
+      if(_arquivoCharts.get('s_'+id)) _arquivoCharts.get('s_'+id).destroy();
+      const counts={finalizada:0,pendente:0,redirecionada:0};
+      (r.activities||[]).forEach(it=>{ counts[it.status]=(counts[it.status]||0)+1; });
+      const cs=new Chart(statusEl,{
+        type:'doughnut',
+        data:{labels:[STATUS_LABELS.finalizada,STATUS_LABELS.pendente,STATUS_LABELS.redirecionada],datasets:[{data:[counts.finalizada,counts.pendente,counts.redirecionada],backgroundColor:['#2ecc71','#f5a623','#9b59b6']}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Status das atividades'}}}
+      });
+      _arquivoCharts.set('s_'+id,cs);
+    }
+  });
+}
 function fmtTimestamp(ms){
   if(!ms) return '—';
   return new Date(ms).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -5337,6 +5244,11 @@ function arquivoDetailHtml(r){
     </div>`;
   });
   html+='</div>';
+  // Gráficos (renderizados após inserção no DOM via renderArquivoCharts)
+  html+=`<div class="charts-grid" style="margin:14px 0 10px;">
+    <div class="card chart-card"><canvas id="archHoras_${r.id}"></canvas></div>
+    <div class="card chart-card"><canvas id="archStatus_${r.id}"></canvas></div>
+  </div>`;
   // Alerta de ausências
   const ausentes=r.ausentes||[];
   if(ausentes.length){
@@ -5423,6 +5335,7 @@ function renderArquivo(){
   });
   html+='</tbody></table>';
   listEl.innerHTML=html;
+  renderArquivoCharts();
 }
 
 /* ====================== Contas a Pagar ====================== */
