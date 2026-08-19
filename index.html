@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260817-03';
+  var BUILD='20260819-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1156,6 +1156,7 @@ let state={
   payables:[],
   payableOccCurrent:{},
   payableOccSelected:{},
+  payableOccPast:{},
   payableSelectedMonth:'',
   payablesArchive:[],
   boletosClientes:[],
@@ -1361,6 +1362,7 @@ function initApp(){
       if(state.payableSelectedMonth===currentMonthKey()) state.payableOccSelected=state.payableOccCurrent;
       renderPayablesMonthList();
     },err=>console.error(err)));
+    loadPayableOccPast();
 
     listeners.push(db.collection('payablesArchive').onSnapshot(snap=>{
       state.payablesArchive=[]; snap.forEach(d=>state.payablesArchive.push({id:d.id,...d.data()}));
@@ -5522,6 +5524,10 @@ function togglePayablePaid(payableId,mk,currentStatus){
     if(mk!==currentMonthKey()){
       if(!state.payableOccSelected[payableId]) state.payableOccSelected[payableId]={payableId,month:mk};
       state.payableOccSelected[payableId].status=newStatus;
+      // Sincroniza payableOccPast para que a seção "Em Atraso" reflita a mudança
+      if(!state.payableOccPast[mk]) state.payableOccPast[mk]={};
+      if(!state.payableOccPast[mk][payableId]) state.payableOccPast[mk][payableId]={payableId,month:mk};
+      state.payableOccPast[mk][payableId].status=newStatus;
       renderPayablesMonthList();
     }
     // mês atual: listener já atualiza automaticamente
@@ -5560,6 +5566,59 @@ function savePayableMonthValue(payableId,mk){
     // mês atual: listener onSnapshot já atualiza automaticamente
   }).catch(err=>alert('Erro: '+err.message));
 }
+async function loadPayableOccPast(){
+  const cmk=currentMonthKey();
+  const [cy,cm]=cmk.split('-').map(Number);
+  const mks=[];
+  for(let i=1;i<=12;i++){
+    const d=new Date(cy,cm-1-i,1);
+    mks.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  state.payableOccPast={};
+  // Firestore 'in' suporta até 10 valores por consulta
+  const chunks=[];
+  for(let i=0;i<mks.length;i+=10) chunks.push(mks.slice(i,i+10));
+  for(const chunk of chunks){
+    const snap=await db.collection('payableOccurrences').where('month','in',chunk).get();
+    snap.forEach(d=>{
+      const data=d.data();
+      if(!state.payableOccPast[data.month]) state.payableOccPast[data.month]={};
+      state.payableOccPast[data.month][data.payableId]=data;
+    });
+  }
+  // Re-renderiza para mostrar/atualizar seção de atraso
+  if(state.payableSelectedMonth===currentMonthKey()) renderPayablesMonthList();
+}
+function computeOverdueBills(){
+  const cmk=currentMonthKey();
+  const [cy,cm]=cmk.split('-').map(Number);
+  const result=[];
+  for(let i=1;i<=12;i++){
+    const d=new Date(cy,cm-1-i,1);
+    const mk=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const occForMonth=state.payableOccPast[mk]||{};
+    state.payables.filter(p=>p.active!==false&&payableAppliesInMonth(p,mk)).forEach(p=>{
+      const occ=occForMonth[p.id]||{status:'pendente'};
+      if(occ.status!=='pago') result.push({payable:p,mk,occ});
+    });
+  }
+  return result;
+}
+function markOverduePaid(payableId,prevMk){
+  const patch={status:'pago',paidAt:ts()};
+  setPayableOccurrence(payableId,prevMk,patch).then(()=>{
+    if(!state.payableOccPast[prevMk]) state.payableOccPast[prevMk]={};
+    if(!state.payableOccPast[prevMk][payableId]) state.payableOccPast[prevMk][payableId]={payableId,month:prevMk};
+    state.payableOccPast[prevMk][payableId].status='pago';
+    // Sincroniza também o payableOccSelected caso o usuário esteja naquele mês
+    if(state.payableSelectedMonth===prevMk){
+      if(!state.payableOccSelected[payableId]) state.payableOccSelected[payableId]={payableId,month:prevMk};
+      state.payableOccSelected[payableId].status='pago';
+    }
+    renderPayablesMonthList();
+    _showToast('✓ Conta marcada como paga!');
+  }).catch(err=>alert('Erro: '+err.message));
+}
 function renderPayablesMonthList(){
   const el=document.getElementById('payablesMonthList');
   if(!el) return;
@@ -5592,7 +5651,30 @@ function renderPayablesMonthList(){
   // Aplicar filtro de ocultar pagas
   const items=hidePaid ? allItems.filter(p=>(occMap[p.id]||{status:'pendente'}).status!=='pago') : allItems;
 
-  if(allItems.length===0){ el.innerHTML=`<div class="empty">Nenhuma conta a pagar em ${fmtMonthBR(mk)}.</div>`; return; }
+  if(allItems.length===0){
+    // Mesmo sem contas no mês, pode haver atraso de meses anteriores
+    let emptyHtml='';
+    if(mk===currentMonthKey()){
+      const overdue=computeOverdueBills();
+      if(overdue.length>0){
+        emptyHtml=`<div style="margin-bottom:20px;padding:14px 16px;background:var(--danger-bg,#fff5f5);border:2px solid #e53e3e;border-radius:10px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <span style="font-size:1.1rem;">⚠️</span>
+            <span style="font-weight:700;color:#e53e3e;font-size:.95rem;text-transform:uppercase;letter-spacing:.04em;">Contas em Atraso</span>
+            <span style="display:inline-block;background:#e53e3e;color:#fff;border-radius:999px;padding:1px 9px;font-size:.8rem;font-weight:700;">${overdue.length}</span>
+          </div>
+          <table><thead><tr><th>Conta</th><th>Valor</th><th>Mês referência</th><th></th></tr></thead><tbody>
+          ${overdue.map(({payable:p,mk:prevMk,occ})=>{
+            const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
+            const nomeMes=fmtMonthBR(prevMk).replace(/^\w/,c=>c.toUpperCase());
+            return `<tr><td>${esc(p.name)}</td><td>💰 ${fmtBRL(effVal)}</td><td style="color:#e53e3e;font-weight:600;">${nomeMes}</td><td><button class="icon-btn" onclick="markOverduePaid('${p.id}','${prevMk}')">✔ Marcar pago</button></td></tr>`;
+          }).join('')}
+          </tbody></table></div>`;
+      }
+    }
+    el.innerHTML=emptyHtml+`<div class="empty">Nenhuma conta a pagar em ${fmtMonthBR(mk)}.</div>`;
+    return;
+  }
 
   items.sort((a,b)=>{
     const paidA=(occMap[a.id]||{}).status==='pago'?1:0;
@@ -5611,6 +5693,33 @@ function renderPayablesMonthList(){
     if(!grupos[due]) grupos[due]=[];
     grupos[due].push(p);
   });
+
+  // ── Seção de contas em atraso (apenas no mês atual) ───────────────────────
+  let overdueHtml='';
+  if(mk===currentMonthKey()){
+    const overdue=computeOverdueBills();
+    if(overdue.length>0){
+      overdueHtml=`<div style="margin-bottom:20px;padding:14px 16px;background:var(--danger-bg,#fff5f5);border:2px solid #e53e3e;border-radius:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <span style="font-size:1.1rem;">⚠️</span>
+          <span style="font-weight:700;color:#e53e3e;font-size:.95rem;text-transform:uppercase;letter-spacing:.04em;">Contas em Atraso</span>
+          <span style="display:inline-block;background:#e53e3e;color:#fff;border-radius:999px;padding:1px 9px;font-size:.8rem;font-weight:700;">${overdue.length}</span>
+          <span style="color:#e53e3e;font-size:.82rem;margin-left:4px;">— pendentes de meses anteriores</span>
+        </div>
+        <table><thead><tr><th>Conta</th><th>Valor</th><th>Mês referência</th><th></th></tr></thead><tbody>`;
+      overdue.forEach(({payable:p,mk:prevMk,occ})=>{
+        const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
+        const nomeMes=fmtMonthBR(prevMk).replace(/^\w/,c=>c.toUpperCase());
+        overdueHtml+=`<tr>
+          <td>${esc(p.name)}</td>
+          <td style="white-space:nowrap;">💰 ${fmtBRL(effVal)}</td>
+          <td style="white-space:nowrap;color:#e53e3e;font-weight:600;">${nomeMes}</td>
+          <td><button class="icon-btn" onclick="markOverduePaid('${p.id}','${prevMk}')">✔ Marcar pago</button></td>
+        </tr>`;
+      });
+      overdueHtml+=`</tbody></table></div>`;
+    }
+  }
 
   let html='';
   if(items.length===0){
@@ -5664,7 +5773,7 @@ function renderPayablesMonthList(){
       <span style="color:var(--text2);font-size:.95rem;">📋 Total geral: <strong>${fmtBRL(totalMes)}</strong></span>
     </div>
   </div>`;
-  el.innerHTML=html;
+  el.innerHTML=overdueHtml+html;
 }
 function sortPayablesList(col){
   if(payablesSortCol===col){ payablesSortDir*=-1; }
