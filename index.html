@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260819-01';
+  var BUILD='20260819-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1133,6 +1133,7 @@ let coberturaFiltroMode='tem'; // 'tem' ou 'naoTem'
 let creatingActivityForClientId=null;
 let expandedActDetail=new Set();
 let expandedHojeGroups=new Set();
+let expandedLeadAlerts=new Set();
 let hojeStatusFilter=null; // null=todos, ou 'pendente'|'finalizada'|'redirecionada'
 let expandedReschedule=new Set();
 let expandedNotes=new Set();
@@ -2132,8 +2133,52 @@ function renderHoje(){
       });
       contatos.forEach(l=>{
         const overdueC=l.proximoContato<todayStr();
-        html+=`<div class="alert-card contact"><h4>📞 ${overdueC?'Contato atrasado':'Contato hoje'}</h4>${esc(l.nome||l.name||'')} <span class="muted">· ${fmtDateBR(l.proximoContato)}</span>
-          <div><button class="icon-btn" onclick="markContatoFeito('${l.id}')">✓ Contato feito</button></div>
+        const isExpanded=expandedLeadAlerts.has(l.id);
+        // Últimas anotações do histórico (até 3)
+        const hist=(l.historico||[]).slice().sort((a,b)=>{
+          const ta=a.at?(a.at.seconds||a.at/1000||0):0;
+          const tb=b.at?(b.at.seconds||b.at/1000||0):0;
+          return tb-ta;
+        }).slice(0,3);
+        html+=`<div class="alert-card contact" style="cursor:default;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="toggleLeadAlert('${l.id}')">
+            <div>
+              <h4 style="margin:0 0 2px;">📞 ${overdueC?'<span style="color:#dc2626;">Contato atrasado</span>':'Contato hoje'}</h4>
+              <span style="font-weight:600;">${esc(l.nome||l.name||'')}</span>
+              <span class="muted" style="font-size:.82rem;"> · ${fmtDateBR(l.proximoContato)}</span>
+            </div>
+            <span class="icon-btn" style="font-size:1rem;">${isExpanded?'▲':'▼'}</span>
+          </div>
+          ${isExpanded?`
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+              <span class="badge ${l.etapa||'lead'}" style="font-size:.8rem;">${STAGE_LABELS[l.etapa]||l.etapa||'Lead'}</span>
+              ${l.indicadoPor?`<span class="muted" style="font-size:.8rem;">🤝 ${esc(l.indicadoPor)}</span>`:''}
+              ${l.valorEstimado?`<span class="muted" style="font-size:.8rem;">💰 ${fmtBRL(l.valorEstimado)}</span>`:''}
+            </div>
+            ${l.telefone?`<div style="margin-bottom:4px;display:flex;align-items:center;gap:8px;">
+              📞 <span>${esc(l.telefone)}</span>
+              <a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:.8rem;font-weight:600;text-decoration:none;">WhatsApp ↗</a>
+            </div>`:''}
+            ${l.email?`<div style="margin-bottom:4px;">✉ <a href="mailto:${esc(l.email)}" style="color:var(--gold);text-decoration:none;font-size:.88rem;">${esc(l.email)}</a></div>`:''}
+            ${hist.length?`<div style="margin:8px 0 4px;font-size:.8rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.03em;">📋 Últimas anotações</div>
+            <div style="font-size:.83rem;">
+              ${hist.map(h=>{
+                const dt=h.at?(h.at.toDate?h.at.toDate():new Date((h.at.seconds||0)*1000)):null;
+                const dtStr=dt?dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'';
+                return `<div style="padding:4px 0;border-bottom:1px solid var(--border);"><span class="muted">${dtStr} · ${esc(h.name||'')}</span><div>${esc(h.texto||h.text||'')}</div></div>`;
+              }).join('')}
+            </div>`:'<div class="muted" style="font-size:.83rem;margin:6px 0;">Sem anotações ainda.</div>'}
+            <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+              <button class="btn btn-primary" onclick="markContatoFeito('${l.id}')">✔ Contato feito</button>
+              <span class="muted" style="font-size:.8rem;">Agendar próximo:</span>
+              <input type="date" id="proximoContatoRapido_${l.id}" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:.85rem;" value="">
+              <button class="btn" onclick="agendarProximoContatoRapido('${l.id}')">✓ Salvar</button>
+            </div>
+            <div style="margin-top:6px;">
+              <button class="icon-btn" onclick="switchTab('funil')">Ver no funil ↗</button>
+            </div>
+          </div>`:''}
         </div>`;
       });
       html+='</div>';
@@ -2260,6 +2305,18 @@ function toggleHojeGroup(key){
   if(expandedHojeGroups.has(key)) expandedHojeGroups.delete(key);
   else expandedHojeGroups.add(key);
   renderHoje();
+}
+function toggleLeadAlert(id){
+  if(expandedLeadAlerts.has(id)) expandedLeadAlerts.delete(id);
+  else expandedLeadAlerts.add(id);
+  renderHoje();
+}
+function agendarProximoContatoRapido(id){
+  const inp=document.getElementById('proximoContatoRapido_'+id);
+  if(!inp||!inp.value){ _showToast('Selecione uma data.'); return; }
+  db.collection('leads').doc(id).update({proximoContato:inp.value})
+    .then(()=>{ _showToast('✓ Próximo contato agendado!'); expandedLeadAlerts.delete(id); })
+    .catch(err=>alert('Erro: '+err.message));
 }
 
 /* timers ao vivo */
