@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260819-02';
+  var BUILD='20260819-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1647,7 +1647,14 @@ function confirmarConclusao(actId,date){
       completedAt:ts(),
       timeSpent:occ.timeSpent||0,
       timerStart:del()
-    }).then(()=>showToast('🕐 Atividade enviada para aceite!','success')).catch(()=>{});
+    }).then(()=>{
+      showToast('🕐 Atividade enviada para aceite!','success');
+      // Atividade única: marca como finalizada imediatamente para sumir da lista
+      const act=state.activities.find(a=>a.id===actId);
+      if(act&&act.recurrence==='nenhuma'){
+        db.collection('activities').doc(actId).set({finalizada:true},{merge:true}).catch(()=>{});
+      }
+    }).catch(()=>{});
   }
 }
 
@@ -2458,10 +2465,11 @@ function activitiesTableHtml(items, showReopen=false){
   return html;
 }
 function isActividadeExecutada(actId){
-  // Verifica se existe alguma ocorrência 'finalizada' para esta atividade (fallback: últimos 7 dias)
+  // Verifica se existe ocorrência 'finalizada' ou 'aguardando_aceite' (única já enviada)
   const occToday=state.occToday||{};
-  if(occToday[actId]&&occToday[actId].status==='finalizada') return true;
-  return Object.values(state.occRange||{}).some(occ=>occ.activityId===actId&&occ.status==='finalizada');
+  const s=occToday[actId]?.status;
+  if(s==='finalizada'||s==='aguardando_aceite') return true;
+  return Object.values(state.occRange||{}).some(occ=>occ.activityId===actId&&(occ.status==='finalizada'||occ.status==='aguardando_aceite'));
 }
 function renderActivitiesList(){
   // Separar: pendentes (visíveis) e concluídas (não recorrentes com finalizada=true)
