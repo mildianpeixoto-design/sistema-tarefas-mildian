@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260819-03';
+  var BUILD='20260821-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4493,6 +4493,12 @@ function initKanbanStickyBar(){
 
 document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
 
+function toggleComissaoPaga(leadId, atualPaga){
+  const nova=!atualPaga;
+  db.collection('leads').doc(leadId).update({comissaoPaga: nova})
+    .then(()=>_showToast(nova?'✅ Comissão marcada como paga!':'↩ Comissão marcada como pendente'))
+    .catch(err=>alert('Erro: '+err.message));
+}
 function renderLeadsFinalizados(){
   const el=document.getElementById('leadsFinalizadosList');
   if(!el) return;
@@ -4527,13 +4533,27 @@ function renderLeadsFinalizados(){
   const grupos=Object.values(byCreator).sort((a,b)=>a.name.localeCompare(b.name));
   let html='';
   // Cards de resumo
+  const totalPendentes=fechados.filter(l=>!l.comissaoPaga).length;
   html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">`;
+  if(totalPendentes>0){
+    html+=`<div class="card" style="min-width:180px;border-left:4px solid #dc2626;">
+      <div class="label">⏳ Comissões pendentes</div>
+      <div class="value" style="font-size:18px;color:#dc2626;">${totalPendentes}</div>
+    </div>`;
+  } else {
+    html+=`<div class="card" style="min-width:180px;border-left:4px solid #16a34a;">
+      <div class="label">✅ Comissões</div>
+      <div class="value" style="font-size:18px;color:#16a34a;">Todas pagas</div>
+    </div>`;
+  }
   grupos.forEach(g=>{
     const total=g.leads.reduce((s,l)=>s+(l.valorEstimado||0),0);
+    const pendG=g.leads.filter(l=>!l.comissaoPaga).length;
     html+=`<div class="card" style="min-width:180px;">
       <div class="label">👤 ${esc(g.name)}</div>
       <div class="value" style="font-size:18px;">${g.leads.length} lead${g.leads.length>1?'s':''}</div>
       ${total?`<div class="muted" style="font-size:12px;">${fmtBRL(total)} estimado</div>`:''}
+      ${pendG>0?`<div style="font-size:11px;color:#dc2626;margin-top:2px;">⏳ ${pendG} comissão(ões) pendente(s)</div>`:`<div style="font-size:11px;color:#16a34a;margin-top:2px;">✅ Comissões em dia</div>`}
     </div>`;
   });
   html+=`</div>`;
@@ -4544,15 +4564,21 @@ function renderLeadsFinalizados(){
       <table>
         <thead><tr>
           <th>Lead</th><th>Valor estimado</th><th>Data</th>
-          ${currentUser.role==='owner'?'<th></th>':''}
+          <th style="text-align:center;">Comissão</th>
         </tr></thead><tbody>`;
     g.leads.forEach(l=>{
       const dataStr=l.createdAt?fmtDateTime(l.createdAt):'—';
+      const paga=!!l.comissaoPaga;
       html+=`<tr>
         <td><strong>${esc(l.nome)}</strong>${l.telefone?`<div class="muted" style="font-size:11px;">${esc(l.telefone)}</div>`:''}</td>
         <td>${l.valorEstimado?fmtBRL(l.valorEstimado):'—'}</td>
         <td class="muted" style="font-size:12px;">${dataStr}</td>
-        ${currentUser.role==='owner'?`<td><button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button></td>`:''}
+        <td style="text-align:center;">
+          ${currentUser.role==='owner'
+            ? `<button class="icon-btn" style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:${paga?'#dcfce7':'#fee2e2'};color:${paga?'#16a34a':'#dc2626'};border:1px solid ${paga?'#86efac':'#fca5a5'};" onclick="toggleComissaoPaga('${l.id}',${paga})">${paga?'✅ Paga':'⏳ Pendente'}</button>`
+            : `<span style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:${paga?'#dcfce7':'#fee2e2'};color:${paga?'#16a34a':'#dc2626'};">${paga?'✅ Paga':'⏳ Pendente'}</span>`
+          }
+        </td>
       </tr>`;
     });
     html+=`</tbody></table></div>`;
