@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260821-01';
+  var BUILD='20260821-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4238,7 +4238,7 @@ function renderFunilChart(){
   wrap.innerHTML=`<div style="font-size:.85rem;font-weight:600;color:var(--text2);margin-bottom:4px;">📊 Leads por etapa</div><div style="max-width:600px;"><canvas id="funilChart"></canvas></div>`;
   const ctx=document.getElementById('funilChart').getContext('2d');
   if(_funilChartInst){ _funilChartInst.destroy(); _funilChartInst=null; }
-  const stages=STAGE_ORDER.filter(s=>s!=='fechado');
+  const stages=STAGE_ORDER; // inclui 'fechado' (Venda fechada) no gráfico
   const counts=stages.map(s=>leads.filter(l=>l.etapa===s).length);
   const colors=stages.map(s=>STAGE_COLORS[s]||'#999');
   _funilChartInst=new Chart(ctx,{
