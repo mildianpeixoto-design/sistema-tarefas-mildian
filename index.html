@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260821-02';
+  var BUILD='20260827-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2659,7 +2659,7 @@ function showMetaModal(viewMk){
   const nextMk=mNum===12?`${yNum+1}-01`:`${yNum}-${String(mNum+1).padStart(2,'0')}`;
   const canGoNext=nextMk<=curMk;
   let rows='';
-  entries.slice().sort((a,b)=>(b.valorPagamento||0)-(a.valorPagamento||0)).forEach(e=>{
+  entries.slice().sort((a,b)=>(b.data||new Date(0))-(a.data||new Date(0))).forEach(e=>{
     const dt=e.data instanceof Date?e.data:null;
     const paga=!!e.angariacacaoPaga;
     const isAdicional=e.tipo==='adicional';
