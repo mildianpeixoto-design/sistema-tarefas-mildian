@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260827-01';
+  var BUILD='20260831-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -971,6 +971,36 @@ function fmtDateFull(ds){
 }
 function fmtBRL(v){
   return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+}
+/* === Formatação de telefone === */
+function fmtTel(v){
+  if(!v) return '';
+  const d=v.replace(/\D/g,'');
+  if(d.length===11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  if(d.length===10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return v;
+}
+function maskTel(el){
+  let d=el.value.replace(/\D/g,'').slice(0,11);
+  if(d.length>10) el.value=`(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  else if(d.length>6) el.value=`(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  else if(d.length>2) el.value=`(${d.slice(0,2)}) ${d.slice(2)}`;
+  else if(d.length>0) el.value=`(${d}`;
+  else el.value='';
+}
+/* === Formatação de moeda nos inputs === */
+function fmtBRLInput(v){
+  if(!v&&v!==0) return '';
+  return Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function maskBRL(el){
+  const d=el.value.replace(/\D/g,'');
+  if(!d){el.value='';return;}
+  el.value=(parseInt(d,10)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function parseBRL(v){
+  if(typeof v==='number') return v;
+  return parseFloat((v||'').replace(/\./g,'').replace(',','.'))||0;
 }
 
 /* ====================== Avatares de colaborador ====================== */
@@ -2164,7 +2194,7 @@ function renderHoje(){
               ${l.valorEstimado?`<span class="muted" style="font-size:.8rem;">💰 ${fmtBRL(l.valorEstimado)}</span>`:''}
             </div>
             ${l.telefone?`<div style="margin-bottom:4px;display:flex;align-items:center;gap:8px;">
-              📞 <span>${esc(l.telefone)}</span>
+              📞 <span>${fmtTel(l.telefone)}</span>
               <a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:.8rem;font-weight:600;text-decoration:none;">WhatsApp ↗</a>
             </div>`:''}
             ${l.email?`<div style="margin-bottom:4px;">✉ <a href="mailto:${esc(l.email)}" style="color:var(--gold);text-decoration:none;font-size:.88rem;">${esc(l.email)}</a></div>`:''}
@@ -2691,7 +2721,7 @@ function showMetaModal(viewMk){
       </div>
       <div class="meta-set-row">
         <label>Meta do mês (R$):</label>
-        <input type="number" id="metaValorInput" value="${metaValor||''}" placeholder="0,00" min="0" step="100">
+        <input type="text" id="metaValorInput" value="${metaValor?fmtBRLInput(metaValor):''}" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)">
         <button class="btn btn-primary" onclick="saveMeta()">Salvar meta</button>
       </div>
       <div style="margin-bottom:6px;font-size:.92rem;">
@@ -2713,7 +2743,7 @@ function closeMetaModal(reset){
   if(reset) _metaViewMk=null; // só reseta quando usuário fecha explicitamente
 }
 function saveMeta(){
-  const val=parseFloat(document.getElementById('metaValorInput')?.value)||0;
+  const val=parseBRL(document.getElementById('metaValorInput')?.value||'');
   const mk=_metaViewMk||currentMonthKey();
   db.collection('metas').doc(mk).set({valor:val,mes:mk,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
     .then(()=>{ closeMetaModal(); showMetaModal(mk); showToast('✅ Meta salva!','success'); })
@@ -2767,7 +2797,7 @@ function registrarNovaVenda(clientId){
       </div>
       <div class="form-grid" style="gap:10px;">
         <div class="full"><label>Plano / Produto</label><input id="nvPlano" type="text" placeholder="Ex: Vida Sênior, Odonto Família…"></div>
-        <div><label>Valor mensal (R$)</label><input id="nvValor" type="number" min="0" step="0.01" placeholder="0,00"></div>
+        <div><label>Valor mensal (R$)</label><input id="nvValor" type="text" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)"></div>
         <div><label>% Angariação</label><input id="nvPct" type="number" min="0" max="100" step="0.01" placeholder="0"></div>
         <div><label>Nº Proposta</label><input id="nvProposta" type="text" placeholder="Número da proposta"></div>
         <div><label>Data</label><input id="nvData" type="date" value="${today}"></div>
@@ -2781,7 +2811,7 @@ function registrarNovaVenda(clientId){
 }
 function saveNovaVenda(clientId){
   const plano=(document.getElementById('nvPlano')?.value||'').trim();
-  const valorPlano=parseFloat(document.getElementById('nvValor')?.value)||0;
+  const valorPlano=parseBRL(document.getElementById('nvValor')?.value||'');
   const percentAngariacao=parseFloat(document.getElementById('nvPct')?.value)||0;
   const valorAngariacao=parseFloat((valorPlano*percentAngariacao/100).toFixed(2));
   const numeroProposta=(document.getElementById('nvProposta')?.value||'').trim();
@@ -2850,7 +2880,7 @@ function syncCapitalSinistros(){
 function recalcCobRow(inp){
   const row=inp.closest('.cob-row');
   if(!row) return;
-  const valor=parseFloat(row.querySelector('.cob-valor')?.value)||0;
+  const valor=parseBRL(row.querySelector('.cob-valor')?.value||'');
   const pct=parseFloat(row.querySelector('.cob-pct')?.value)||0;
   const cartEl=row.querySelector('.cob-cart');
   if(cartEl) cartEl.value=(valor*pct/100).toFixed(2);
@@ -2859,7 +2889,7 @@ function recalcCobRow(inp){
 function recalcAngariacao(){
   let total=0;
   document.querySelectorAll('#cliCoberturasWrap .cob-row').forEach(r=>{
-    total+=parseFloat(r.querySelector('.cob-valor')?.value)||0;
+    total+=parseBRL(r.querySelector('.cob-valor')?.value||'');
   });
   const totEl=document.getElementById('cliValor');
   if(totEl) totEl.value=total.toFixed(2);
@@ -2874,7 +2904,7 @@ function addCoberturaRow(){
   div.className='cob-row';
   div.dataset.cap='0';
   div.dataset.sin='0';
-  div.innerHTML=`<div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="number" class="cob-valor" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="0" readonly style="background:var(--bg2)"></div><div class="cob-f-rm"><button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button></div>`;
+  div.innerHTML=`<div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="text" class="cob-valor" placeholder="0,00" inputmode="numeric" value="" oninput="maskBRL(this);recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="0" readonly style="background:var(--bg2)"></div><div class="cob-f-rm"><button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button></div>`;
   wrap.appendChild(div);
   syncCapitalSinistros();
   div.querySelector('.cob-plano').focus();
@@ -2892,7 +2922,7 @@ function getCoberturas(){
   const sinInputs=[...document.querySelectorAll('#cliSinDynamicWrap .cob-sin-inp')];
   document.querySelectorAll('#cliCoberturasWrap .cob-row').forEach((r,idx)=>{
     const plano=(r.querySelector('.cob-plano')?.value||'').trim();
-    const valorPlano=parseFloat(r.querySelector('.cob-valor')?.value)||0;
+    const valorPlano=parseBRL(r.querySelector('.cob-valor')?.value||'');
     const percentCarteira=parseFloat(r.querySelector('.cob-pct')?.value)||0;
     const valorCarteira=parseFloat(r.querySelector('.cob-cart')?.value)||0;
     const capitalSegurado=parseFloat(capInputs[idx]?.value)||0;
@@ -3164,7 +3194,7 @@ function showClientForm(client, containerId){
 
       <!-- Campos comuns -->
       <div class="full cli-sec-header">📞 Contato & Endereço</div>
-      <div><label>Telefone (com DDD)</label><input type="text" id="cliTelefone" value="${esc(client.telefone||'')}" placeholder="(00) 00000-0000"></div>
+      <div><label>Telefone (com DDD)</label><input type="text" id="cliTelefone" value="${fmtTel(client.telefone||'')}" placeholder="(00) 00000-0000" oninput="maskTel(this)" inputmode="numeric"></div>
       <div><label>E-mail</label><input type="email" id="cliEmail" value="${esc(client.email||'')}"></div>
       <div class="full"><label>Endereço</label><input type="text" id="cliEndereco" value="${esc(client.endereco||'')}"></div>
 
@@ -3173,13 +3203,13 @@ function showClientForm(client, containerId){
       <div id="perfilPFFields" class="${isPF?'contents-wrap':'hidden-group'}">
         <div><label>Ocupação / Profissão</label><input type="text" id="cliOcupacao" value="${esc(client.ocupacao||'')}" placeholder="Ex: Procurador de Justiça"></div>
         <div><label>Empresa / Órgão</label><input type="text" id="cliEmpresa" value="${esc(client.empresa||'')}" placeholder="Ex: Pref. Municipal"></div>
-        <div><label>Renda mensal bruta (R$)</label><input type="number" id="cliRendaMensal" step="0.01" min="0" value="${client.rendaMensal||''}"></div>
+        <div><label>Renda mensal bruta (R$)</label><input type="text" id="cliRendaMensal" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)" value="${client.rendaMensal?fmtBRLInput(client.rendaMensal):''}"></div>
       </div>
 
       <div class="full cli-sec-header">🛡️ Produtos Contratados</div>
       <div><label>Nº da proposta (principal)</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
       <div><label>Data da proposta <span class="muted" style="font-weight:400;">— deixe em branco para usar hoje</span></label><input type="date" id="cliDataProposta" value="${client.createdAt?(client.createdAt.toDate?client.createdAt.toDate():new Date((client.createdAt.seconds||0)*1000)).toISOString().slice(0,10):new Date().toISOString().slice(0,10)}"></div>
-      <div class="full" id="cliCoberturasWrap">${_initCobs.map((cob,idx)=>`<div class="cob-row" data-cap="${cob.capitalSegurado||0}" data-sin="${cob.sinistrosPagos||0}"><div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" value="${esc(cob.plano||'')}" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="number" class="cob-valor" step="0.01" min="0" value="${cob.valorPlano||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="${cob.percentCarteira||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="${(cob.valorCarteira||0).toFixed(2)}" readonly style="background:var(--bg2)"></div><div class="cob-f-rm">${idx>0?'<button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button>':''}</div></div>`).join('')}</div>
+      <div class="full" id="cliCoberturasWrap">${_initCobs.map((cob,idx)=>`<div class="cob-row" data-cap="${cob.capitalSegurado||0}" data-sin="${cob.sinistrosPagos||0}"><div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" value="${esc(cob.plano||'')}" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="text" class="cob-valor" placeholder="0,00" inputmode="numeric" value="${fmtBRLInput(cob.valorPlano)}" oninput="maskBRL(this);recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="${cob.percentCarteira||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="${(cob.valorCarteira||0).toFixed(2)}" readonly style="background:var(--bg2)"></div><div class="cob-f-rm">${idx>0?'<button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button>':''}</div></div>`).join('')}</div>
       <div class="full" style="padding:0 0 4px 0;"><button type="button" class="btn" style="font-size:.83rem;padding:4px 12px;" onclick="addCoberturaRow()">+ Adicionar cobertura</button></div>
       <div class="full cob-summary-row">
         <div class="cob-f-total"><label>Total contribuição (R$)</label><input type="number" id="cliValor" readonly style="background:var(--bg2);" value="${_initTotal.toFixed(2)}"></div>
@@ -3234,7 +3264,7 @@ function showClientForm(client, containerId){
         numFilhos:parseInt(document.getElementById('cliNumFilhos')?.value)||0,
         ocupacao:document.getElementById('cliOcupacao')?.value||'',
         empresa:document.getElementById('cliEmpresa')?.value||'',
-        rendaMensal:parseFloat(document.getElementById('cliRendaMensal')?.value)||0,
+        rendaMensal:parseBRL(document.getElementById('cliRendaMensal')?.value||''),
         endereco:document.getElementById('cliEndereco')?.value||'',
         numeroProposta:document.getElementById('cliNumeroProposta')?.value||'',
         coberturas:getCoberturas(),
@@ -3284,7 +3314,7 @@ function showClientForm(client, containerId){
       numFilhos: isPFsub ? parseInt(document.getElementById('cliNumFilhos').value)||0 : 0,
       ocupacao: isPFsub ? document.getElementById('cliOcupacao').value.trim() : '',
       empresa: isPFsub ? document.getElementById('cliEmpresa').value.trim() : '',
-      rendaMensal: isPFsub ? parseFloat(document.getElementById('cliRendaMensal').value)||0 : 0,
+      rendaMensal: isPFsub ? parseBRL(document.getElementById('cliRendaMensal').value||'') : 0,
       endereco: document.getElementById('cliEndereco').value.trim(),
       numeroProposta: document.getElementById('cliNumeroProposta').value.trim(),
       coberturas: getCoberturas(),
@@ -3310,15 +3340,18 @@ function showClientForm(client, containerId){
     const p = isEdit
       ? db.collection('clients').doc(client.id).set({...obj, createdAt: createdAtValue, updatedAt: _now},{merge:true})
       : db.collection('clients').add({...obj, createdBy:currentUser.uid, createdAt: createdAtValue, updatedAt: _now})
-          .then(docRef=>db.collection('boletosClientes').add({
-            nome: obj.nome,
-            contato: obj.responsavel||'',
-            telefone: obj.telefone||'',
-            email: obj.email||'',
-            diaVencimento: obj.diaVencimento||'',
-            clienteId: docRef.id,
-            ativa: true
-          }));
+          .then(docRef=> obj.tipo==='PJ'
+            ? db.collection('boletosClientes').add({
+                nome: obj.nome,
+                contato: obj.responsavel||'',
+                telefone: obj.telefone||'',
+                email: obj.email||'',
+                diaVencimento: obj.diaVencimento||'',
+                clienteId: docRef.id,
+                ativa: true
+              })
+            : Promise.resolve()
+          );
     p.then(()=>closeThisForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
   });
 }
@@ -3552,8 +3585,8 @@ function renderClients(){
       const isDup=dupIds.has(c.id);
       const isPFc=(c.tipo||'PF')==='PF';
       const initials=(c.nome||'?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('');
-      const sub=isPFc ? [c.cpf,c.telefone].filter(Boolean).join(' · ')
-                      : [c.cnpj,c.telefone].filter(Boolean).join(' · ');
+      const sub=isPFc ? [c.cpf,fmtTel(c.telefone)].filter(Boolean).join(' · ')
+                      : [c.cnpj,fmtTel(c.telefone)].filter(Boolean).join(' · ');
       h+=`<div class="client-list-item${isOpen?' open':''}" onclick="selectClient('${c.id}')">
         <div class="cli-avatar">${initials}</div>
         <div class="cli-name-block">
@@ -3573,7 +3606,7 @@ function renderClients(){
           return '<div class="cdp-row"><div class="cdp-label">'+esc(cob.plano||'Plano')+'</div><div class="cdp-value">'+fmtBRL(cob.valorPlano||0)+'/mês'+cartLabel+'</div></div>';
         }).join('');
         const _angLabel=isOwner&&(c.valorAngariacao||c.comissaoValor)?fmtBRL(c.valorAngariacao||c.comissaoValor||0)+(c.percentAngariacao?' ('+c.percentAngariacao+'%)':''):'';
-        const waTel=c.telefone?`${esc(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;margin-left:4px;">WhatsApp ↗</a>`:'';
+        const waTel=c.telefone?`${fmtTel(c.telefone)} <a href="https://wa.me/55${c.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;margin-left:4px;">WhatsApp ↗</a>`:'';
         const mailLink=c.email?`${esc(c.email)} <a href="mailto:${esc(c.email)}" style="color:var(--gold);text-decoration:none;margin-left:4px;">Enviar ↗</a>`:'';
         h+=`<div class="client-detail-panel"><div class="cdp-grid">`;
         if(isPFc){
@@ -3911,7 +3944,15 @@ function renderBoletos(){
   const q=(document.getElementById('boletosSearch')||{value:''}).value.trim().toLowerCase();
   const filtro=(document.getElementById('boletosFiltro')||{value:'todos'}).value;
 
-  const activeClientes=state.boletosClientes.filter(c=>c.ativa!==false);
+  const activeClientes=state.boletosClientes.filter(c=>{
+    if(c.ativa===false) return false;
+    // Exibir apenas PJ — cruzar com state.clients pelo clienteId
+    if(c.clienteId){
+      const cli=(state.clients||[]).find(x=>x.id===c.clienteId);
+      if(cli&&(cli.tipo||'PF')!=='PJ') return false;
+    }
+    return true;
+  });
 
   let list=activeClientes.filter(c=>{
     if(!q) return true;
@@ -3993,7 +4034,7 @@ function renderBoletos(){
           <div class="cdp-section">
             <div class="cdp-title">Dados</div>
             ${c.contato?`<div class="cdp-row"><span class="cdp-label">Contato</span><span class="cdp-value">${esc(c.contato)}</span></div>`:''}
-            ${c.telefone?`<div class="cdp-row"><span class="cdp-label">Telefone</span><span class="cdp-value">${esc(c.telefone)}</span></div>`:''}
+            ${c.telefone?`<div class="cdp-row"><span class="cdp-label">Telefone</span><span class="cdp-value">${fmtTel(c.telefone)}</span></div>`:''}
             ${c.email?`<div class="cdp-row"><span class="cdp-label">E-mail</span><span class="cdp-value">${esc(c.email)}</span></div>`:''}
             ${c.diaVencimento?`<div class="cdp-row"><span class="cdp-label">Vencimento</span><span class="cdp-value">Dia ${esc(c.diaVencimento)}</span></div>`:''}
           </div>
@@ -4094,7 +4135,7 @@ function showBoletoForm(c){
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
         <div><label class="form-label">Empresa / Nome *</label><input id="bcNome" class="form-control" value="${esc(c.nome||'')}"></div>
         <div><label class="form-label">Nome do contato</label><input id="bcContato" class="form-control" value="${esc(c.contato||'')}"></div>
-        <div><label class="form-label">Telefone</label><input id="bcTelefone" class="form-control" value="${esc(c.telefone||'')}"></div>
+        <div><label class="form-label">Telefone</label><input id="bcTelefone" class="form-control" value="${fmtTel(c.telefone||'')}" oninput="maskTel(this)" inputmode="numeric"></div>
         <div><label class="form-label">E-mail</label><input id="bcEmail" class="form-control" value="${esc(c.email||'')}"></div>
         <div><label class="form-label">Dia de vencimento</label><input id="bcDia" class="form-control" placeholder="Ex: 10" value="${esc(c.diaVencimento||'')}"></div>
       </div>
@@ -4271,9 +4312,9 @@ function showLeadForm(lead,containerId){
   container.innerHTML=`
     <form class="form-grid${isInline?' lead-compact-form':''}" id="leadForm_${lid}" style="${isInline?'max-width:100%;':''}">
       <div class="full"><label>Nome / Empresa</label><input type="text" id="leadNome_${lid}" value="${esc(lead.nome)}" required></div>
-      <div><label>Telefone (com DDD)</label><input type="text" id="leadTelefone_${lid}" value="${esc(lead.telefone||lead.contato||'')}" placeholder="(00) 00000-0000"></div>
+      <div><label>Telefone (com DDD)</label><input type="text" id="leadTelefone_${lid}" value="${fmtTel(lead.telefone||lead.contato||'')}" placeholder="(00) 00000-0000" oninput="maskTel(this)" inputmode="numeric"></div>
       <div><label>E-mail</label><input type="email" id="leadEmail_${lid}" value="${esc(lead.email||'')}"></div>
-      <div><label>Valor estimado (R$)</label><input type="number" id="leadValor_${lid}" step="0.01" min="0" value="${lead.valorEstimado||0}"></div>
+      <div><label>Valor estimado (R$)</label><input type="text" id="leadValor_${lid}" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)" value="${lead.valorEstimado?fmtBRLInput(lead.valorEstimado):''}"></div>
       <div><label>Etapa</label><select id="leadEtapa_${lid}">
         ${STAGE_ORDER.map(s=>`<option value="${s}" ${lead.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
       </select></div>
@@ -4297,7 +4338,7 @@ function showLeadForm(lead,containerId){
       nome: container.querySelector(`#leadNome_${lid}`).value.trim(),
       telefone: container.querySelector(`#leadTelefone_${lid}`).value.trim(),
       email: container.querySelector(`#leadEmail_${lid}`).value.trim(),
-      valorEstimado: parseFloat(container.querySelector(`#leadValor_${lid}`).value)||0,
+      valorEstimado: parseBRL(container.querySelector(`#leadValor_${lid}`).value||''),
       etapa: container.querySelector(`#leadEtapa_${lid}`).value,
       proximoContato: container.querySelector(`#leadProximoContato_${lid}`).value||null,
       indicadoPor: container.querySelector(`#leadIndicadoPor_${lid}`).value.trim()||'',
@@ -4422,7 +4463,7 @@ function renderFunil(){
           ${l.valorEstimado?`<div class="kc-value">${fmtBRL(l.valorEstimado)}</div>`:''}
           ${l.createdBy?`<div class="muted" style="font-size:11px;">👤 Criado por: <strong>${esc(l.createdByName||userName(l.createdBy))}</strong></div>`:''}
           ${l.indicadoPor?`<div class="muted">🤝 Indicado por: ${esc(l.indicadoPor)}</div>`:''}
-          ${l.telefone?`<div class="muted" style="display:flex;align-items:center;gap:6px;">📞 ${esc(l.telefone)} <a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:12px;text-decoration:none;" title="Abrir WhatsApp">WhatsApp ↗</a></div>`:''}
+          ${l.telefone?`<div class="muted" style="display:flex;align-items:center;gap:6px;">📞 ${fmtTel(l.telefone)} <a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" rel="noopener" style="color:#25D366;font-size:12px;text-decoration:none;" title="Abrir WhatsApp">WhatsApp ↗</a></div>`:''}
           ${l.email?`<div class="muted" style="display:flex;align-items:center;gap:6px;">✉ ${esc(l.email)} <a href="mailto:${esc(l.email)}" style="font-size:12px;color:var(--gold);text-decoration:none;" title="Enviar e-mail">E-mail ↗</a></div>`:''}
           ${(!l.telefone&&!l.email&&l.contato)?`<div class="muted">${esc(l.contato)}</div>`:''}
           ${(!l.historico&&l.observacoes)?`<div class="muted">${esc(l.observacoes)}</div>`:''}
@@ -4570,7 +4611,7 @@ function renderLeadsFinalizados(){
       const dataStr=l.createdAt?fmtDateTime(l.createdAt):'—';
       const paga=!!l.comissaoPaga;
       html+=`<tr>
-        <td><strong>${esc(l.nome)}</strong>${l.telefone?`<div class="muted" style="font-size:11px;">${esc(l.telefone)}</div>`:''}</td>
+        <td><strong>${esc(l.nome)}</strong>${l.telefone?`<div class="muted" style="font-size:11px;">${fmtTel(l.telefone)}</div>`:''}</td>
         <td>${l.valorEstimado?fmtBRL(l.valorEstimado):'—'}</td>
         <td class="muted" style="font-size:12px;">${dataStr}</td>
         <td style="text-align:center;">
@@ -5484,7 +5525,7 @@ function showPayableForm(p,containerId){
     <form class="form-grid" id="payableForm">
       <div class="full"><label>Nome da conta</label><input type="text" id="payName" value="${esc(p.name)}" required></div>
       <div><label>Valor da conta</label>
-        <div class="input-icon-wrap"><span class="input-icon">R$</span><input type="number" id="payValue" step="0.01" min="0" value="${p.value||0}"></div>
+        <div class="input-icon-wrap"><span class="input-icon">R$</span><input type="text" id="payValue" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)" value="${p.value?fmtBRLInput(p.value):''}"></div>
       </div>
       <div class="full"><label>Tipo de valor</label>
         <div style="display:flex;gap:18px;align-items:center;padding-top:4px;flex-wrap:wrap;">
@@ -5551,7 +5592,7 @@ function showPayableForm(p,containerId){
   document.getElementById('payableForm').addEventListener('submit',e=>{
     e.preventDefault();
     const rec=document.getElementById('payRecurrence').value;
-    const obj={ name:document.getElementById('payName').value.trim(), value:parseFloat(document.getElementById('payValue').value)||0, recurrence:rec, active:true, tipoValor:document.querySelector('input[name="payTipoValor"]:checked')?.value||'fixo' };
+    const obj={ name:document.getElementById('payName').value.trim(), value:parseBRL(document.getElementById('payValue').value||''), recurrence:rec, active:true, tipoValor:document.querySelector('input[name="payTipoValor"]:checked')?.value||'fixo' };
     if(!obj.name) return;
     if(rec==='unico'){
       obj.dueDate=document.getElementById('payDueDate').value;
@@ -5634,7 +5675,7 @@ function editPayableMonthValue(payableId,mk){
   const current=(occ.valorMes!=null)?occ.valorMes:(p.value||0);
   cell.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
     <span style="color:var(--text2);font-weight:600;">R$</span>
-    <input type="number" id="payValInput-${payableId}" value="${current}" step="0.01" min="0" style="width:110px;padding:4px 8px;border:1px solid var(--accent);border-radius:4px;font-size:14px;">
+    <input type="text" id="payValInput-${payableId}" value="${current?fmtBRLInput(current):''}" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)" style="width:110px;padding:4px 8px;border:1px solid var(--accent);border-radius:4px;font-size:14px;">
     <button class="icon-btn" onclick="savePayableMonthValue('${payableId}','${mk}')">✔ Salvar</button>
     <button class="icon-btn" onclick="renderPayablesMonthList()">✕</button>
   </div>`;
@@ -5646,7 +5687,7 @@ function editPayableMonthValue(payableId,mk){
 function savePayableMonthValue(payableId,mk){
   const inp=document.getElementById('payValInput-'+payableId);
   if(!inp) return;
-  const val=parseFloat(inp.value);
+  const val=parseBRL(inp.value||'');
   if(isNaN(val)||val<0){ alert('Valor inválido.'); return; }
   setPayableOccurrence(payableId,mk,{valorMes:val}).then(()=>{
     if(mk!==currentMonthKey()){
