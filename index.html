@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260831-01';
+  var BUILD='20260831-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4534,6 +4534,13 @@ function initKanbanStickyBar(){
 
 document.getElementById('newLeadBtn').addEventListener('click',()=>showLeadForm());
 
+function toggleVendaCancelada(leadId, atualCancelada){
+  const nova=!atualCancelada;
+  if(nova&&!confirm('Marcar esta venda como cancelada? A comissão deixará de ser contabilizada para este lead.')) return;
+  db.collection('leads').doc(leadId).update({comissaoNaoDevida: nova})
+    .then(()=>_showToast(nova?'❌ Venda marcada como cancelada':'↩ Venda reativada'))
+    .catch(err=>alert('Erro: '+err.message));
+}
 function toggleComissaoPaga(leadId, atualPaga){
   const nova=!atualPaga;
   db.collection('leads').doc(leadId).update({comissaoPaga: nova})
@@ -4574,7 +4581,7 @@ function renderLeadsFinalizados(){
   const grupos=Object.values(byCreator).sort((a,b)=>a.name.localeCompare(b.name));
   let html='';
   // Cards de resumo
-  const totalPendentes=fechados.filter(l=>!l.comissaoPaga).length;
+  const totalPendentes=fechados.filter(l=>!l.comissaoPaga&&!l.comissaoNaoDevida).length;
   html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">`;
   if(totalPendentes>0){
     html+=`<div class="card" style="min-width:180px;border-left:4px solid #dc2626;">
@@ -4589,7 +4596,7 @@ function renderLeadsFinalizados(){
   }
   grupos.forEach(g=>{
     const total=g.leads.reduce((s,l)=>s+(l.valorEstimado||0),0);
-    const pendG=g.leads.filter(l=>!l.comissaoPaga).length;
+    const pendG=g.leads.filter(l=>!l.comissaoPaga&&!l.comissaoNaoDevida).length;
     html+=`<div class="card" style="min-width:180px;">
       <div class="label">👤 ${esc(g.name)}</div>
       <div class="value" style="font-size:18px;">${g.leads.length} lead${g.leads.length>1?'s':''}</div>
@@ -4610,16 +4617,25 @@ function renderLeadsFinalizados(){
     g.leads.forEach(l=>{
       const dataStr=l.createdAt?fmtDateTime(l.createdAt):'—';
       const paga=!!l.comissaoPaga;
+      const cancelada=!!l.comissaoNaoDevida;
+      let comissaoCell='';
+      if(cancelada){
+        comissaoCell=currentUser.role==='owner'
+          ? `<span style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;cursor:pointer;" onclick="toggleVendaCancelada('${l.id}',true)" title="Clique para reativar">❌ Cancelada</span>`
+          : `<span style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#6b7280;">❌ Cancelada</span>`;
+      } else {
+        comissaoCell=currentUser.role==='owner'
+          ? `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+               <button class="icon-btn" style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:${paga?'#dcfce7':'#fee2e2'};color:${paga?'#16a34a':'#dc2626'};border:1px solid ${paga?'#86efac':'#fca5a5'};" onclick="toggleComissaoPaga('${l.id}',${paga})">${paga?'✅ Paga':'⏳ Pendente'}</button>
+               <button class="icon-btn" style="font-size:.7rem;padding:2px 8px;border-radius:20px;background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;" onclick="toggleVendaCancelada('${l.id}',false)">❌ Cancelar venda</button>
+             </div>`
+          : `<span style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:${paga?'#dcfce7':'#fee2e2'};color:${paga?'#16a34a':'#dc2626'};">${paga?'✅ Paga':'⏳ Pendente'}</span>`;
+      }
       html+=`<tr>
         <td><strong>${esc(l.nome)}</strong>${l.telefone?`<div class="muted" style="font-size:11px;">${fmtTel(l.telefone)}</div>`:''}</td>
         <td>${l.valorEstimado?fmtBRL(l.valorEstimado):'—'}</td>
         <td class="muted" style="font-size:12px;">${dataStr}</td>
-        <td style="text-align:center;">
-          ${currentUser.role==='owner'
-            ? `<button class="icon-btn" style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:${paga?'#dcfce7':'#fee2e2'};color:${paga?'#16a34a':'#dc2626'};border:1px solid ${paga?'#86efac':'#fca5a5'};" onclick="toggleComissaoPaga('${l.id}',${paga})">${paga?'✅ Paga':'⏳ Pendente'}</button>`
-            : `<span style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:${paga?'#dcfce7':'#fee2e2'};color:${paga?'#16a34a':'#dc2626'};">${paga?'✅ Paga':'⏳ Pendente'}</span>`
-          }
-        </td>
+        <td style="text-align:center;">${comissaoCell}</td>
       </tr>`;
     });
     html+=`</tbody></table></div>`;
