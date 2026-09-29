@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260929-04';
+  var BUILD='20260929-05';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2938,7 +2938,11 @@ function saveMeta(){
 }
 function toggleAngariacao(id, currentPaga){
   db.collection('clients').doc(id).update({angariacacaoPaga: !currentPaga})
-    .then(()=>{ showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success'); closeMetaModal(); showMetaModal(); })
+    .then(()=>{
+      showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success');
+      if(!currentPaga) _criarIncentivoPagavel(id, null);
+      closeMetaModal(); showMetaModal();
+    })
     .catch(err=>alert('Erro: '+err.message));
 }
 function toggleAngariacaoAdicional(clientId, vendaIdx, currentPaga){
@@ -2948,8 +2952,36 @@ function toggleAngariacaoAdicional(clientId, vendaIdx, currentPaga){
   if(!vendas[vendaIdx]) return;
   vendas[vendaIdx]={...vendas[vendaIdx], angariacacaoPaga:!currentPaga};
   db.collection('clients').doc(clientId).update({vendasAdicionais:vendas})
-    .then(()=>{ showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success'); closeMetaModal(); showMetaModal(); })
+    .then(()=>{
+      showToast((!currentPaga?'✅ Angariação marcada como paga':'↺ Angariação marcada como pendente'),'success');
+      if(!currentPaga) _criarIncentivoPagavel(clientId, vendaIdx);
+      closeMetaModal(); showMetaModal();
+    })
     .catch(err=>alert('Erro: '+err.message));
+}
+function _criarIncentivoPagavel(clientId, vendaIdx){
+  const origemKey=vendaIdx!==null?`${clientId}_v${vendaIdx}`:clientId;
+  if(state.payables.some(p=>p.origemIncentivo===origemKey)){
+    showToast('ℹ️ Incentivo desta angariação já está em Contas a Pagar','info'); return;
+  }
+  const client=state.clients.find(c=>c.id===clientId);
+  if(!client) return;
+  const cobs=vendaIdx!==null?((client.vendasAdicionais||[])[vendaIdx]?.coberturas||[]):(client.coberturas||[]);
+  const vendaNova=cobs.filter(c=>!['PGBL','VGBL'].includes((c.plano||'').trim().toUpperCase())).reduce((s,c)=>s+(c.valorPlano||0),0);
+  const incentivo=Math.round(vendaNova*0.10*100)/100;
+  if(incentivo<=0) return;
+  const nm=new Date(); nm.setMonth(nm.getMonth()+1); nm.setDate(1);
+  const dueDate=nm.toISOString().slice(0,10);
+  const nomeLbl=vendaIdx!==null?`Incentivo Lara — ${client.nome} (venda adicional)`:`Incentivo Lara — ${client.nome}`;
+  db.collection('payables').add({
+    name:nomeLbl, value:incentivo, recurrence:'unico',
+    dueDate, startDate:dueDate, dueDay:null, termType:null, termCount:null, customIntervalDays:null,
+    active:true, tipoValor:'fixo', origemIncentivo:origemKey,
+    createdBy:currentUser.uid, createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  }).then(()=>{
+    const mesAno=`${String(nm.getMonth()+1).padStart(2,'0')}/${nm.getFullYear()}`;
+    showToast(`💰 Incentivo ${fmtBRL(incentivo)} lançado em Contas a Pagar — vence 01/${mesAno}`,'success');
+  }).catch(err=>console.error('Erro ao criar incentivo:',err));
 }
 function removerDaMeta(clientId, vendaIdx, tipo){
   if(!confirm('Remover esta proposta da meta do mês? O cliente não será excluído.')) return;
