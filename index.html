@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260929-03';
+  var BUILD='20260929-04';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2138,12 +2138,12 @@ function renderHoje(){
     const _mk=currentMonthKey();
     const _metaValor=state.metaAtual?.valor||0;
     const _acumulado=(getMetaEntries(_mk)||[]).reduce((s,c)=>s+(c.valorPagamento||0),0);
-    const _pct=_metaValor>0?Math.min(_acumulado/_metaValor,1):0;
+    const _pct=_metaValor>0?_acumulado/_metaValor:0;
     const _corMeta=_pct>=1?'#16a34a':_pct>=0.7?'#d97706':'#3b82f6';
-    cardsHtml+=`<div class="card clickable" style="border-left:3px solid ${_corMeta};min-width:190px;" onclick="showMetaModal()">
+    cardsHtml+=`<div class="card clickable" style="border-left:3px solid ${_pct>1?'#f59e0b':_corMeta};min-width:190px;" onclick="showMetaModal()">
       <div class="label">🎯 Meta do mês</div>
-      <div class="value" style="font-size:.9rem;color:${_corMeta};">${fmtBRL(_acumulado)}${_metaValor?` / ${fmtBRL(_metaValor)}`:''}</div>
-      ${_metaValor?`<div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:6px;overflow:hidden;"><div style="background:linear-gradient(to right,#dc2626,#f97316,#f59e0b,#84cc16,#16a34a);background-size:${Math.round(100/Math.max(Math.min(_pct,1),0.01))}% 100%;height:100%;width:${Math.round(_pct*100)}%;border-radius:4px;"></div></div><div style="font-size:.72rem;color:var(--muted);margin-top:3px;">${Math.round(_pct*100)}% da meta</div>`:'<div style="font-size:.75rem;color:var(--muted);margin-top:4px;">Toque para definir meta</div>'}
+      <div class="value" style="font-size:.9rem;color:${_pct>1?'#92400e':_corMeta};">${fmtBRL(_acumulado)}${_metaValor?` / ${fmtBRL(_metaValor)}`:''}</div>
+      ${_metaValor?(_pct>1?`<div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:6px;overflow:hidden;"><div style="background:linear-gradient(to right,#dc2626,#f97316,#f59e0b,#84cc16,#16a34a);height:100%;width:100%;border-radius:4px;"></div></div><div style="font-size:.72rem;color:#92400e;background:#fef3c7;border-radius:10px;padding:1px 6px;margin-top:3px;display:inline-block;">+${Math.round((_pct-1)*100)}% 🏆</div>`:`<div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:6px;overflow:hidden;"><div style="background:linear-gradient(to right,#dc2626,#f97316,#f59e0b,#84cc16,#16a34a);background-size:${Math.round(100/Math.max(_pct,0.01))}% 100%;height:100%;width:${Math.round(_pct*100)}%;border-radius:4px;"></div></div><div style="font-size:.72rem;color:var(--muted);margin-top:3px;">${Math.round(_pct*100)}% da meta</div>`):'<div style="font-size:.75rem;color:var(--muted);margin-top:4px;">Toque para definir meta</div>'}
     </div>`;
   }
   renderQuickBar();
@@ -2862,7 +2862,7 @@ function showMetaModal(viewMk){
   const metaValor=(state.metas&&state.metas[mk])?state.metas[mk].valor||0:(mk===curMk?state.metaAtual?.valor||0:0);
   const entries=getMetaEntries(mk);
   const acumulado=entries.reduce((s,e)=>s+(e.valorPagamento||0),0);
-  const pct=metaValor>0?Math.min(acumulado/metaValor,1):0;
+  const pct=metaValor>0?acumulado/metaValor:0;
   const cor=pct>=1?'#16a34a':pct>=0.7?'#d97706':'#dc2626';
   const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const [ano,mes]=mk.split('-');
@@ -2872,6 +2872,9 @@ function showMetaModal(viewMk){
   const prevMk=mNum===1?`${yNum-1}-12`:`${yNum}-${String(mNum-1).padStart(2,'0')}`;
   const nextMk=mNum===12?`${yNum+1}-01`:`${yNum}-${String(mNum+1).padStart(2,'0')}`;
   const canGoNext=nextMk<=curMk;
+  const _exPct=pct>1?Math.round((pct-1)*100):0;
+  const _ovW=Math.min(_exPct*0.4,14);
+  const metaBarHtml=metaValor?(pct>1?`<div style="display:flex;align-items:center;margin:8px 0 18px;"><div style="flex:0 0 82%;height:14px;border-radius:8px;background:var(--border);overflow:visible;position:relative;"><div style="height:100%;width:100%;border-radius:8px;background:linear-gradient(to right,#dc2626,#f97316,#f59e0b,#84cc16,#16a34a);position:relative;"><div style="position:absolute;right:0;top:-3px;width:2px;height:20px;background:white;border:1px solid #d1d5db;border-radius:1px;z-index:2;"></div></div></div><div style="height:14px;flex:0 0 ${_ovW}%;background:linear-gradient(to right,#f59e0b,#fbbf24);border-radius:0 8px 8px 0;position:relative;"><span style="position:absolute;left:calc(100% + 4px);top:-3px;font-size:10px;font-weight:600;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:10px;white-space:nowrap;">+${_exPct}% 🏆</span></div></div>`:`<div class="meta-progress-bar"><div class="meta-progress-fill" style="width:${Math.round(pct*100)}%;background:linear-gradient(to right,#dc2626,#f97316,#f59e0b,#84cc16,#16a34a);background-size:${Math.round(100/Math.max(pct,0.01))}% 100%;"></div></div>`):'';
   let rows='';
   entries.slice().sort((a,b)=>(b.data||new Date(0))-(a.data||new Date(0))).forEach(e=>{
     const dt=e.data instanceof Date?e.data:null;
@@ -2913,7 +2916,7 @@ function showMetaModal(viewMk){
         ${metaValor&&acumulado>=metaValor?'&nbsp;<span style="color:#16a34a;font-weight:700;">✅ Meta atingida!</span>':''}
         ${metaValor&&acumulado<metaValor?'&nbsp;— Faltam <strong>'+fmtBRL(metaValor-acumulado)+'</strong>':''}
       </div>
-      ${metaValor?`<div class="meta-progress-bar"><div class="meta-progress-fill" style="width:${Math.round(pct*100)}%;background:linear-gradient(to right,#dc2626,#f97316,#f59e0b,#84cc16,#16a34a);background-size:${Math.round(100/Math.max(Math.min(pct,1),0.01))}% 100%;"></div></div>`:''}
+      ${metaBarHtml}
       <table class="meta-table">
         <thead><tr><th>Cliente / Produto</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th><th>Angariação</th><th></th></tr></thead>
         <tbody>${rows||'<tr><td colspan="8" class="empty" style="padding:12px;">Nenhum cliente cadastrado neste mês ainda.</td></tr>'}</tbody>
