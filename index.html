@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260908-01';
+  var BUILD='20260929-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -127,6 +127,13 @@ nav button.active{color:#fff;border-left-color:var(--gold);background:rgba(255,2
 .aceite-item-meta{font-size:.8rem;color:var(--text2);margin-bottom:8px;}
 .aceite-instrs{display:none;margin-top:8px;}
 .aceite-instrs.open{display:block;}
+.banco-panel{background:var(--card-bg,#fff);border:2px solid #7c3aed;border-radius:10px;padding:14px;margin-bottom:16px;}
+.banco-panel table{width:100%;border-collapse:collapse;}
+.banco-panel table td,.banco-panel table th{padding:5px 8px;border-bottom:1px solid var(--border);}
+.banco-panel table tbody tr:last-child td{border-bottom:none;}
+.banco-panel table thead tr{font-size:.75rem;color:var(--text2);border-bottom:2px solid var(--border);}
+.banco-pendente td{background:#fffbeb!important;}
+.banco-hoje td{background:rgba(124,58,237,.04)!important;}
 .badge.reagendada{background:var(--amber-bg);color:var(--amber);}
 .badge.owner{background:var(--gold-bg);color:var(--gold);}
 .badge.collaborator{background:var(--gray-bg);color:var(--gray);}
@@ -275,6 +282,8 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 .kanban-col{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;min-height:120px;}
 .kanban-col h4{font-size:13px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;color:var(--accent);border-bottom:2px solid var(--gold);padding-bottom:6px;}
 .kanban-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px;}
+@keyframes leadHighlight{0%,100%{box-shadow:0 0 0 0 transparent;background:var(--card);}40%{box-shadow:0 0 0 5px #f59e0b;background:rgba(245,158,11,.13);}70%{box-shadow:0 0 0 3px #f59e0b;background:rgba(245,158,11,.07);}}
+.kanban-card-highlight{animation:leadHighlight 1.2s ease 0s 3;}
 .kanban-card .kc-title{font-weight:600;margin-bottom:4px;}
 .kanban-card .kc-value{color:var(--gold);font-weight:600;font-size:12px;margin-bottom:4px;}
 .kanban-card select{width:100%;margin-bottom:6px;}
@@ -490,6 +499,7 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div class="row" style="margin-bottom:12px;">
     <button class="btn primary" id="newActivityBtn">+ Nova atividade</button>
   </div>
+  <div id="bancoHorasWrap"></div>
   <div id="activityFormWrap"></div>
   <div id="activitiesList"></div>
 </section>
@@ -1086,51 +1096,32 @@ const COVERAGE_TYPES=[
   {key:'Vgbl',label:'VGBL'}
 ];
 const SEGUROS_LIST=[
-  'PGBL PRIVATE FREE 812','VGBL PRIVATE FREE 813',
-  'PGBL VIDA TODA 1800','VGBL VIDA TODA 1801','PGBL PRIVATE 1808','VGBL PRIVATE 1809','PGBL PRIVATE TOP 1810','VGBL PRIVATE TOP 1811',
-  'Morte por acidente 1501','Renda por invalidez 2009','IPA com majoração 2278',
-  'IPA com majoração + IFPD 2279','Diária por incapacidade temporária por acidente 2330',
-  'Dit + MQC 7 dias 2397','Dit + MAC + IPAM 10 dias 2398','Dit + MQC 10 dias 2399',
-  'PGBL Especial 2298','VGBL Especial 2299','Doenças graves master 2345',
+  'PGBL','VGBL',
+  'MAC','RENDA','IPA','DITA','DIT',
+  'DG','SAF','MORTE','PENSÃO',
+  'CIRURGIAS','DIH',
+  'ASS. INVIDA','ASS. RESIDENCIAL','ASS. AUTO','ASS. PET','MASTER ACIDENTES',
   'Vida produtor rural 5 2504',
-  'IPTA - Rider 2427','Morte acidental - Rider 2429',
-  'SAF essencial individual 3057','SAF essencial familiar 3058',
-  'SAF essencial familiar + pais 3060','SAF essencial familiar + pais e sogros 3061',
-  'SAF Plus individual 3062','SAF Plus familiar 3063',
-  'SAF Plus familiar + pais 3064','SAF Plus familiar + pais e sogros 3065',
-  'SAF Premium individual 3066','SAF Premium familiar 3067','SAF Premium familiar + pais 3068','SAF Premium familiar + pais e sogros 3069',
-  'SAF Essencial individual - Rider 3070','SAF Essencial familiar - Rider 3071',
-  'SAF Plus individual - Rider 3074','SAF Plus familiar - Rider 3075',
-  'SAF Premium individual - Rider 3078','SAF Premium familiar - Rider 3079',
-  'Vida inteira 3082','Pensão por morte 3084','Prazo certo 3085','Term Life sob medida pagamento único 3086',
-  'Whole Life integral 3108','Whole Life integral 10 anos 3109','Whole Life integral pagamento único 3110',
-  'Whole Life dinâmico 3111','Whole Life dinâmico 10 anos 3112','Whole Life dinâmico pagamento único 3113',
-  'Whole Life sucessão 10 anos 3115','Whole Life sucessão pagamento único 3116',
+  'Prazo certo 3085','Term Life sob medida pagamento único 3086',
   'Term Life sob medida 3117',
-  'Doenças graves essencial 3500','Doenças graves plus 3501','Doenças graves infantil 3503',
-  'Diária por internação hospitalar + suporte 150 3509','Diária por internação hospitalar + suporte 250 3510',
-  'Cirurgias + amparo 3511',
-  'Doenças graves essencial - Rider 3512','Doenças graves plus - Rider 3513','Doenças graves multi - Rider 3514','Doenças graves vital - Rider 3515',
-  'Assistência Invida 3529','Cirurgias + amparo - Rider 3530','Doenças graves multi 3531','Doenças graves vital 3532',
-  'Diária por internação hospitalar + suporte 150 - Rider 3534','Diária por internação hospitalar + suporte 250 - Rider 3535',
-  'Vivermais benefícios 3536','Assistência residencial 3539','Assistência auto 3541','Assistência proteção pet 3542',
   '(nome a definir) 1113','(nome a definir) 1504','(nome a definir) 1505','(nome a definir) 1537','(nome a definir) 1538','(nome a definir) 1546',
-  'IPTA 1548','Vida Premiada 1561','(nome a definir) 1567','(nome a definir) 1570','(nome a definir) 1581','(nome a definir) 1583',
+  'Vida Premiada 1561','(nome a definir) 1567','(nome a definir) 1570','(nome a definir) 1581','(nome a definir) 1583',
   '(nome a definir) 1628','(nome a definir) 1660','(nome a definir) 1780','DIT com LER e DORT 1782','DIT com LER e DORT e IPAM 1784','(nome a definir) 1947',
-  '(nome a definir) 1950','(nome a definir) 1953','SAF 2025','SAF 2026','SAF 2027','SAF 2028',
-  'Vida Empresarial Global 2037','Vida Top Produtor Rural Coop Temporário 2113','DIH 2114','DIH 2117','Doenças Graves 2230','Doenças Graves 2231',
-  'DIT com LER e DORT 2232','DIT com LER e DORT e IPAM 2234','Cirurgias 2301','Bem Estar 2322','Master acidentes domiciliares 2342',
-  'Pensão por Morte 2390','Private Solutions - Term Life 2395','DIT 2396','DIT Médicos 2400','Private IPAM e IFPD 2406','Private DG 2413',
-  'Private DG 2414','Private SAF 2418','Private DIT 2419','Private DIT 2420','Private DIT 2421',
-  'Private Cirurgias 2430','Ass. Residencial 2444','Ass. Auto 2445','Vida Inteira Resgatável 2595','Vida Inteira 2694','Vida Premiada 2696',
-  'Vida Premiada 2697','Vida Inteira Resgatável 2795','Private - Whole Life 2800','Private - SAF 3073',
-  'Private - SAF 3080'
+  '(nome a definir) 1950','(nome a definir) 1953',
+  'Vida Top Produtor Rural Coop Temporário 2113',
+  'DIT com LER e DORT 2232','DIT com LER e DORT e IPAM 2234',
+  'Vida Premiada 2696','Vida Premiada 2697'
+];
+// Produtos exclusivos para clientes Pessoa Jurídica (PJ)
+const PJ_SEGUROS_LIST=[
+  'Vida Empresarial Global 2037'
 ];
 const STAGE_LABELS={lead:'Lead',contato:'Contato',proposta:'Proposta enviada',negociacao:'Negociação',fechado:'Venda fechada',espera:'Em espera',perdido:'Perdida',resolvido:'Resolvido s/ venda'};
 const STAGE_ORDER=['lead','contato','proposta','negociacao','fechado','espera','perdido','resolvido'];
 const STAGE_COLORS={lead:'#3b82f6',contato:'#eab308',proposta:'#ec4899',negociacao:'#f97316',espera:'#6b7280',perdido:'#ef4444',fechado:'#16a34a',resolvido:'#0891b2'};
 const LEAD_TEMPLATES=[
   {label:'Primeiro contato',texto:'Olá [nome]! Tudo bem? Gostaríamos de apresentar nossas soluções em seguros. Teria alguns minutinhos para conversar?'},
+  {label:'Contato via indicação',texto:'Boa tarde, [nome]! Tudo bem?\n\nMeu nome é Mildian Peixoto, sou corretora de seguros de vida e proteção financeira. [indicador] me falou de você e pediu que eu entrasse em contato — ele quis garantir que você tivesse acesso às mesmas soluções que estruturamos juntos para ele.\n\nA ideia é só uma conversa rápida para entender sua situação e ver se faz sentido para você também. Sem compromisso nenhum.\n\nVocê teria 15 minutinhos essa semana — por vídeo ou pessoalmente?'},
   {label:'Proposta enviada',texto:'Olá [nome]! Passando para verificar se recebeu nossa proposta e se ficou alguma dúvida. Estou à disposição! 😊'},
   {label:'Retorno agendado',texto:'Olá [nome]! Combinamos de conversar hoje. Pode falar agora?'},
   {label:'Proposta não respondida',texto:'Olá [nome]! Ficou alguma dúvida sobre nossa proposta? Podemos ajustar para melhor atender sua necessidade. 😊'},
@@ -1157,6 +1148,7 @@ let expandedClientHist=new Set();
 let clientSearchQuery='';
 let selectedClientId=null;
 let editingClientId=null;
+let _convertingLeadId=null; // id do lead sendo convertido (para calcular incentivo ao salvar)
 let clientesTipoFiltro=null; // null=selector, 'PF' ou 'PJ'
 let coberturaFiltro=null; // null=todas, ou key: 'Dit','Morte','Invalidez','DG','Cirurgias'
 let coberturaFiltroMode='tem'; // 'tem' ou 'naoTem'
@@ -1196,8 +1188,12 @@ let state={
   clientDocs:[],
   formularios:[],
   docsMildian:[],
-  pendingApprovals:[] // ocorrências aguardando aceite do owner
+  pendingApprovals:[], // ocorrências aguardando aceite do owner
+  bancoHoras:[],       // entradas manuais/ausências do banco de horas
+  bancoHorasOccs:{}    // { 'YYYY-MM-DD': totalSegundos } agregado dos timers
 };
+const BANCO_START='2026-09-23'; // data de início do banco de horas
+const BANCO_META_S=4*3600;      // meta diária: 4h em segundos
 let boletosViewMes=new Date().toISOString().slice(0,7);
 let selectedBoletoId=null;
 let _boletosSortCol='status'; let _boletosSortAsc=true;
@@ -1440,6 +1436,27 @@ function initApp(){
       updateAceiteBadge();
     }
   },err=>console.error(err)));
+
+  // Banco de horas (apenas owner)
+  if(currentUser.role==='owner'){
+    listeners.push(db.collection('bancoHoras').orderBy('date','asc').onSnapshot(snap=>{
+      state.bancoHoras=snap.docs.map(d=>({id:d.id,...d.data()}));
+      if(document.getElementById('bancoHorasWrap')) renderBancoHoras();
+    },err=>console.error(err)));
+    listeners.push(db.collection('occurrences').where('date','>=',BANCO_START).onSnapshot(snap=>{
+      const agg={};
+      snap.forEach(d=>{
+        const o=d.data();
+        if(!o.date||!o.timeSpent) return;
+        // contar apenas ocorrências de atividades não atribuídas ao owner
+        const act=state.activities.find(a=>a.id===o.activityId);
+        if(act&&act.assignedTo===currentUser.uid) return;
+        agg[o.date]=(agg[o.date]||0)+o.timeSpent;
+      });
+      state.bancoHorasOccs=agg;
+      if(document.getElementById('bancoHorasWrap')) renderBancoHoras();
+    },err=>console.error(err)));
+  }
 
   switchTab('hoje');
 }
@@ -1953,6 +1970,7 @@ function renderActivityCard(act,occ){
       </div>
       <span class="icon-btn">${expanded?'▲':'▼'}</span>
     </div>
+    ${occ.status==='devolvida'&&occ.instrucoesDevolucao?`<div class="devolucao-box" style="margin:6px 0 0;cursor:pointer;" onclick="toggleActDetail('${act.id}')">↩️ <strong>Devolvida:</strong> ${esc(occ.instrucoesDevolucao)}</div>`:''}
     ${expanded?`<div class="act-detail">
     <div class="activity-top">
       <div>
@@ -2143,6 +2161,7 @@ function renderHoje(){
       html+=`<div class="aceite-item">
         <div class="aceite-item-title">📋 ${esc(act.title||'Atividade')}</div>
         <div class="aceite-item-meta">👤 ${esc(occ.concluidoPorName||'Colaborador')}${dtStr?' · '+dtStr:''} · Data: ${esc(occ.date||'')}</div>
+        ${act.description?`<div style="background:var(--bg2);border-left:3px solid #a78bfa;border-radius:0 6px 6px 0;padding:6px 10px;margin:6px 0;font-size:.84rem;color:var(--text2);"><strong style="color:var(--text);">📋 Instrução original:</strong> ${esc(act.description)}</div>`:''}
         ${occ.descricaoFeito?`<div class="descricao-feito-box" style="margin:8px 0;">📝 <strong>O que foi feito:</strong> ${esc(occ.descricaoFeito)}</div>`:`<div style="color:#92400e;font-size:.82rem;margin:6px 0;font-style:italic;">⚠️ Colaborador não informou o que foi feito</div>`}
         <div class="row" style="gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary" style="background:#16a34a;border-color:#16a34a;" onclick="aceitarAtividade('${occ.id}','${occ.activityId}','${occ.date||''}')">✅ Aceitar</button>
@@ -2213,7 +2232,7 @@ function renderHoje(){
               <button class="btn" onclick="agendarProximoContatoRapido('${l.id}')">✓ Salvar</button>
             </div>
             <div style="margin-top:6px;">
-              <button class="icon-btn" onclick="switchTab('funil')">Ver no funil ↗</button>
+              <button class="icon-btn" onclick="abrirLeadNoFunil('${l.id}')">Ver no funil ↗</button>
             </div>
           </div>`:''}
         </div>`;
@@ -2453,7 +2472,10 @@ function editActivity(id){
 }
 function deleteActivity(id){
   if(!confirm('Excluir esta atividade? O histórico de ocorrências passadas será mantido, mas ela deixará de aparecer nos próximos dias.')) return;
-  db.collection('activities').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+  const item=state.activities.find(x=>x.id===id);
+  db.collection('activities').doc(id).delete()
+    .then(()=>{ if(item){const d={...item};delete d.id;_showUndoBar('Atividade excluída',()=>db.collection('activities').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));} })
+    .catch(err=>alert('Erro: '+err.message));
 }
 var concluidasAberta=true; // começa expandida por padrão
 function marcarExecutada(actId){
@@ -2543,10 +2565,172 @@ function renderActivitiesList(){
   }
 
   document.getElementById('activitiesList').innerHTML=html;
+  if(currentUser&&currentUser.role==='owner') renderBancoHoras();
 }
 function toggleConcluidas(){
   concluidasAberta=!concluidasAberta;
   renderActivitiesList();
+}
+
+/* ====================== Banco de Horas ====================== */
+var _bancoHorasAberto=true;
+function renderBancoHoras(){
+  const el=document.getElementById('bancoHorasWrap');
+  if(!el||!currentUser||currentUser.role!=='owner') return;
+  const today=todayStr();
+  // gera todos os dias úteis de BANCO_START até hoje
+  const days=[];
+  for(let d=new Date(BANCO_START+'T12:00:00'),end=new Date(today+'T12:00:00');d<=end;d.setDate(d.getDate()+1)){
+    if(d.getDay()!==0&&d.getDay()!==6) days.push(d.toISOString().slice(0,10));
+  }
+  function fmtHM(s){
+    s=Math.abs(s);
+    const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);
+    return h>0&&m>0?`${h}h${m}min`:h>0?`${h}h`:m>0?`${m}min`:'0min';
+  }
+  function saldoHtml(s){
+    if(s===null||s===undefined) return '<span class="muted">—</span>';
+    const color=s>0?'#16a34a':s<0?'#dc2626':'var(--text2)';
+    return `<span style="color:${color};font-weight:600;">${s>=0?'+':'-'}${fmtHM(s)}</span>`;
+  }
+  function diaBR(date){
+    const [y,mo,da]=date.split('-');
+    const dow=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][new Date(date+'T12:00:00').getDay()];
+    return `${dow} ${da}/${mo}`;
+  }
+  let totalKnownS=0,hasPending=false;
+  const rowsData=days.map(date=>{
+    const timerS=state.bancoHorasOccs[date]||0;
+    const entries=state.bancoHoras.filter(e=>e.date===date);
+    const ausencia=entries.find(e=>e.tipo==='ausencia_justificada'||e.tipo==='ausencia_nao_justificada');
+    const manuais=entries.filter(e=>e.tipo==='horas_manual');
+    const manualS=manuais.reduce((sum,e)=>sum+(e.horasSegundos||0),0);
+    const totalS=timerS+manualS;
+    let saldoS=null,status='';
+    if(ausencia){
+      status=ausencia.tipo;
+      saldoS=ausencia.tipo==='ausencia_justificada'?0:-BANCO_META_S;
+    } else if(totalS>0){
+      status='trabalhado';
+      saldoS=totalS-BANCO_META_S;
+    } else if(date<today){
+      status='pendente';hasPending=true;
+    } else {
+      status='hoje';
+    }
+    if(saldoS!==null) totalKnownS+=saldoS;
+    return {date,timerS,manualS,totalS,saldoS,status,ausencia,manuais};
+  });
+  let runS=0;
+  const trs=rowsData.map(r=>{
+    if(r.saldoS!==null) runS+=r.saldoS;
+    const saldoDia=saldoHtml(r.saldoS);
+    const saldoAcum=r.saldoS!==null?saldoHtml(runS):'<span class="muted">—</span>';
+    let trabCell='';
+    if(r.status==='ausencia_justificada') trabCell='<span class="muted">Ausência justificada</span>';
+    else if(r.status==='ausencia_nao_justificada') trabCell='<span style="color:#dc2626;">Ausente (não justificada)</span>';
+    else if(r.totalS>0){
+      const parts=[];
+      if(r.timerS>0) parts.push(fmtHM(r.timerS));
+      if(r.manualS>0) parts.push(`<span style="color:#7c3aed;">+${fmtHM(r.manualS)} combinado</span>`);
+      trabCell=parts.join(' ');
+    } else if(r.status==='hoje') trabCell='<span class="muted">Em andamento…</span>';
+    else trabCell='<span class="muted">—</span>';
+    let situCell='';
+    if(r.status==='pendente') situCell='<span style="color:#92400e;font-size:.77rem;font-weight:600;">⚠️ Pendente</span>';
+    else if(r.status==='ausencia_justificada') situCell='<span style="color:#16a34a;font-size:.77rem;">✅ Justificada</span>';
+    else if(r.status==='ausencia_nao_justificada') situCell='<span style="color:#dc2626;font-size:.77rem;">❌ Não justificada</span>';
+    else if(r.status==='hoje') situCell='<span style="color:#7c3aed;font-size:.77rem;">📍 Hoje</span>';
+    let acoes='';
+    if(r.status==='pendente'){
+      acoes=`<div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button class="btn" style="font-size:.72rem;padding:2px 7px;background:#dcfce7;color:#16a34a;border-color:#16a34a;" onclick="marcarBancoAusencia('${r.date}','ausencia_justificada')">✅ Justificada</button>
+        <button class="btn" style="font-size:.72rem;padding:2px 7px;background:#fee2e2;color:#dc2626;border-color:#dc2626;" onclick="marcarBancoAusencia('${r.date}','ausencia_nao_justificada')">❌ Não justificada</button>
+      </div>`;
+    } else if(r.ausencia){
+      acoes=`<button class="icon-btn" style="font-size:.72rem;color:var(--text2);" onclick="excluirBancoEntry('${r.ausencia.id}')">↺ Desfazer</button>`;
+    }
+    const manualEntries=r.manuais.length?r.manuais.map(e=>`<div style="font-size:.77rem;color:#7c3aed;margin-top:2px;">📌 ${fmtHM(e.horasSegundos||0)}${e.observacao?' — '+esc(e.observacao):''} <button class="icon-btn" style="font-size:.7rem;" onclick="excluirBancoEntry('${e.id}')">✕</button></div>`).join(''):'';
+    const manualBtn=r.status!=='ausencia_justificada'?`<button class="icon-btn" style="font-size:.72rem;color:#7c3aed;margin-top:3px;" onclick="toggleBancoManual('${r.date}')">+ Horas combinadas</button>`:'';
+    const rowClass=r.status==='pendente'?'banco-pendente':r.status==='hoje'?'banco-hoje':'';
+    return `<tr class="${rowClass}">
+      <td style="font-size:.84rem;white-space:nowrap;">${diaBR(r.date)}</td>
+      <td style="font-size:.83rem;">${trabCell}</td>
+      <td style="text-align:center;">${situCell}</td>
+      <td style="text-align:right;">${saldoDia}</td>
+      <td style="text-align:right;">${saldoAcum}</td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:2px;">${acoes}${manualBtn}</div>
+        <div id="banco-manual-${r.date}" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border-radius:6px;">
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:5px;">
+            <input type="number" id="bh-h-${r.date}" min="0" max="12" value="0" style="width:44px;padding:3px;border:1px solid var(--border);border-radius:4px;font-size:.83rem;"> h
+            <input type="number" id="bh-m-${r.date}" min="0" max="59" value="0" style="width:44px;padding:3px;border:1px solid var(--border);border-radius:4px;font-size:.83rem;"> min
+          </div>
+          <input type="text" id="bh-obs-${r.date}" placeholder="Ex: sábado compensatório combinado em 20/09" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:.81rem;box-sizing:border-box;margin-bottom:5px;">
+          <div style="display:flex;gap:6px;">
+            <button class="btn primary" style="font-size:.78rem;padding:3px 10px;" onclick="confirmarBancoManual('${r.date}')">✓ Salvar</button>
+            <button class="icon-btn" style="font-size:.78rem;" onclick="toggleBancoManual('${r.date}')">Cancelar</button>
+          </div>
+          ${manualEntries}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  const saldoColor=totalKnownS>=0?'#16a34a':'#dc2626';
+  el.innerHTML=`<div class="banco-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleBancoHoras()">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-weight:700;font-size:.97rem;">⏱ Banco de Horas — Lara</span>
+        <span style="color:${saldoColor};font-weight:700;">${totalKnownS>=0?'+':'-'}${fmtHM(totalKnownS)}</span>
+        <span class="muted" style="font-size:.78rem;">meta: 4h/dia</span>
+        ${hasPending?`<span style="background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;font-size:.72rem;font-weight:700;">⚠️ Dias pendentes</span>`:''}
+      </div>
+      <span class="icon-btn">${_bancoHorasAberto?'▲':'▼'}</span>
+    </div>
+    ${_bancoHorasAberto?`
+    <div style="font-size:.77rem;color:var(--text2);margin:8px 0 10px;">Início: ${fmtDateBR(BANCO_START)} · Saldo acumulado considera apenas dias já classificados</div>
+    <div style="overflow-x:auto;">
+      <table class="banco-panel">
+        <thead><tr>
+          <th style="text-align:left;">Data</th>
+          <th style="text-align:left;">Trabalhado</th>
+          <th style="text-align:center;">Situação</th>
+          <th style="text-align:right;">Saldo dia</th>
+          <th style="text-align:right;">Saldo acumulado</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${trs}</tbody>
+      </table>
+    </div>`:''}
+  </div>`;
+}
+function toggleBancoHoras(){
+  _bancoHorasAberto=!_bancoHorasAberto;
+  renderBancoHoras();
+}
+function marcarBancoAusencia(date,tipo){
+  // remove entrada anterior da mesma data se existir
+  const prev=state.bancoHoras.find(e=>e.date===date&&(e.tipo==='ausencia_justificada'||e.tipo==='ausencia_nao_justificada'));
+  const set=()=>db.collection('bancoHoras').add({date,tipo,observacao:tipo==='ausencia_justificada'?'Ausência justificada':'Ausência não justificada',registradoPor:currentUser.uid,criadoEm:ts()}).catch(err=>alert('Erro: '+err.message));
+  if(prev) db.collection('bancoHoras').doc(prev.id).delete().then(set).catch(set);
+  else set();
+}
+function toggleBancoManual(date){
+  const el=document.getElementById('banco-manual-'+date);
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
+}
+function confirmarBancoManual(date){
+  const h=parseInt(document.getElementById('bh-h-'+date)?.value||0,10)||0;
+  const m=parseInt(document.getElementById('bh-m-'+date)?.value||0,10)||0;
+  const obs=(document.getElementById('bh-obs-'+date)?.value||'').trim();
+  const s=h*3600+m*60;
+  if(s<=0){showToast('Informe pelo menos 1 minuto','error');return;}
+  db.collection('bancoHoras').add({date,tipo:'horas_manual',horasSegundos:s,observacao:obs||'Horas combinadas',registradoPor:currentUser.uid,criadoEm:ts()})
+    .then(()=>showToast('✅ Horas adicionadas!','success'))
+    .catch(err=>alert('Erro: '+err.message));
+}
+function excluirBancoEntry(id){
+  db.collection('bancoHoras').doc(id).delete().catch(err=>alert('Erro: '+err.message));
 }
 
 /* ====================== Colaboradores (administradora) ====================== */
@@ -2904,7 +3088,7 @@ function addCoberturaRow(){
   div.className='cob-row';
   div.dataset.cap='0';
   div.dataset.sin='0';
-  div.innerHTML=`<div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="text" class="cob-valor" placeholder="0,00" inputmode="numeric" value="" oninput="maskBRL(this);recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="0" readonly style="background:var(--bg2)"></div><div class="cob-f-rm"><button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button></div>`;
+  div.innerHTML=`<div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" list="segurosDatalist" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="text" class="cob-valor" placeholder="0,00" inputmode="numeric" value="" oninput="maskBRL(this);recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="0" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="0" readonly style="background:var(--bg2)"></div><div class="cob-f-rm"><button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button></div>`;
   wrap.appendChild(div);
   syncCapitalSinistros();
   div.querySelector('.cob-plano').focus();
@@ -3145,6 +3329,7 @@ function showClientForm(client, containerId){
   containerId = containerId || 'clientFormWrap';
   const isInline = containerId !== 'clientFormWrap';
   function closeThisForm(){
+    _convertingLeadId=null;
     if(isInline){ editingClientId=null; renderClients(); }
     else { document.getElementById('clientFormWrap').innerHTML=''; }
   }
@@ -3209,7 +3394,8 @@ function showClientForm(client, containerId){
       <div class="full cli-sec-header">🛡️ Produtos Contratados</div>
       <div><label>Nº da proposta (principal)</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
       <div><label>Data da proposta <span class="muted" style="font-weight:400;">— deixe em branco para usar hoje</span></label><input type="date" id="cliDataProposta" value="${client.createdAt?(client.createdAt.toDate?client.createdAt.toDate():new Date((client.createdAt.seconds||0)*1000)).toISOString().slice(0,10):new Date().toISOString().slice(0,10)}"></div>
-      <div class="full" id="cliCoberturasWrap">${_initCobs.map((cob,idx)=>`<div class="cob-row" data-cap="${cob.capitalSegurado||0}" data-sin="${cob.sinistrosPagos||0}"><div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" value="${esc(cob.plano||'')}" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="text" class="cob-valor" placeholder="0,00" inputmode="numeric" value="${fmtBRLInput(cob.valorPlano)}" oninput="maskBRL(this);recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="${cob.percentCarteira||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="${(cob.valorCarteira||0).toFixed(2)}" readonly style="background:var(--bg2)"></div><div class="cob-f-rm">${idx>0?'<button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button>':''}</div></div>`).join('')}</div>
+      <datalist id="segurosDatalist">${(isPF?SEGUROS_LIST:[...SEGUROS_LIST,...PJ_SEGUROS_LIST]).map(s=>`<option value="${s}">`).join('')}</datalist>
+      <div class="full" id="cliCoberturasWrap">${_initCobs.map((cob,idx)=>`<div class="cob-row" data-cap="${cob.capitalSegurado||0}" data-sin="${cob.sinistrosPagos||0}"><div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" list="segurosDatalist" value="${esc(cob.plano||'')}" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="text" class="cob-valor" placeholder="0,00" inputmode="numeric" value="${fmtBRLInput(cob.valorPlano)}" oninput="maskBRL(this);recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="${cob.percentCarteira||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="${(cob.valorCarteira||0).toFixed(2)}" readonly style="background:var(--bg2)"></div><div class="cob-f-rm">${idx>0?'<button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button>':''}</div></div>`).join('')}</div>
       <div class="full" style="padding:0 0 4px 0;"><button type="button" class="btn" style="font-size:.83rem;padding:4px 12px;" onclick="addCoberturaRow()">+ Adicionar cobertura</button></div>
       <div class="full cob-summary-row">
         <div class="cob-f-total"><label>Total contribuição (R$)</label><input type="number" id="cliValor" readonly style="background:var(--bg2);" value="${_initTotal.toFixed(2)}"></div>
@@ -3352,7 +3538,20 @@ function showClientForm(client, containerId){
               })
             : Promise.resolve()
           );
-    p.then(()=>closeThisForm()).catch(err=>{ submitBtn.disabled=false; alert('Erro: '+err.message); });
+    p.then(()=>{
+      // Se veio de conversão de lead, calcula incentivo = 10% da venda nova (exceto PGBL/VGBL)
+      if(_convertingLeadId && !isEdit){
+        const vendaNova=(obj.coberturas||[])
+          .filter(c=>!['PGBL','VGBL'].includes((c.plano||'').trim().toUpperCase()))
+          .reduce((s,c)=>s+(c.valorPlano||0),0);
+        const incentivo=Math.round(vendaNova*0.10*100)/100;
+        db.collection('leads').doc(_convertingLeadId).update({
+          valorEstimado: incentivo,
+          etapa: 'fechado'
+        }).catch(err=>console.error('Erro ao fechar lead:',err));
+      }
+      closeThisForm();
+    }).catch(err=>{ submitBtn.disabled=false; _convertingLeadId=null; alert('Erro: '+err.message); });
   });
 }
 function cancelClientForm(){ document.getElementById('clientFormWrap').innerHTML=''; }
@@ -3452,9 +3651,12 @@ function uploadClientDocs(clientId, input){
 }
 function deleteClientDoc(docId, storePath){
   if(!confirm('Excluir este documento permanentemente?')) return;
-  db.collection('clientDocuments').doc(docId).delete()
-    .then(()=>{ if(storePath) return storage.ref(storePath).delete().catch(()=>{}); })
-    .catch(err=>alert('Erro: '+err.message));
+  db.collection('clientDocuments').doc(docId).get().then(snap=>{
+    const data=snap.exists?snap.data():null;
+    return db.collection('clientDocuments').doc(docId).delete()
+      .then(()=>{ if(storePath) return storage.ref(storePath).delete().catch(()=>{}); })
+      .then(()=>{ if(data) _showUndoBar('Documento excluído',()=>db.collection('clientDocuments').doc(docId).set(data).catch(e=>alert('Erro ao desfazer: '+e.message))); });
+  }).catch(err=>alert('Erro: '+err.message));
 }
 /* ===== Fim Documentos ===== */
 function editClient(id){
@@ -3472,7 +3674,10 @@ function editClient(id){
 }
 function deleteClient(id){
   if(!confirm('Excluir este cliente?')) return;
-  db.collection('clients').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+  const item=state.clients.find(x=>x.id===id);
+  db.collection('clients').doc(id).delete()
+    .then(()=>{ if(item){const d={...item};delete d.id;_showUndoBar('Cliente excluído',()=>db.collection('clients').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));} })
+    .catch(err=>alert('Erro: '+err.message));
 }
 function setCoberturaFiltro(key){
   coberturaFiltro=(coberturaFiltro===key)?null:key;
@@ -4230,6 +4435,29 @@ function _showToast(msg){
   clearTimeout(_toastTmr);
   _toastTmr=setTimeout(()=>{ t.style.opacity='0'; },2500);
 }
+var _undoAction=null;
+function _showUndoBar(label,restoreFn){
+  _undoAction=restoreFn;
+  var bar=document.getElementById('_undoBar');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='_undoBar';
+    bar.style.cssText='position:fixed;bottom:130px;left:50%;transform:translateX(-50%);background:#1a1035;color:#fff;padding:10px 18px;border-radius:10px;font-size:.92rem;z-index:99999;display:flex;align-items:center;gap:14px;box-shadow:0 4px 16px rgba(0,0,0,.4);white-space:nowrap;';
+    bar.innerHTML='<span id="_undoBarLabel"></span><button onclick="_executeUndo()" style="background:#4e6ef2;color:#fff;border:none;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:.88rem;">↩ Desfazer</button><button onclick="_hideUndoBar()" style="background:transparent;color:#aaa;border:none;cursor:pointer;font-size:1.2rem;line-height:1;padding:0 2px;">×</button>';
+    document.body.appendChild(bar);
+  }
+  document.getElementById('_undoBarLabel').textContent=label;
+  bar.style.display='flex';
+}
+function _hideUndoBar(){
+  var bar=document.getElementById('_undoBar');
+  if(bar) bar.style.display='none';
+  _undoAction=null;
+}
+function _executeUndo(){
+  if(_undoAction){ _undoAction(); _showToast('↩ Desfeito com sucesso'); }
+  _hideUndoBar();
+}
 function toggleMsgDropdown(id){
   // Fecha todos os outros e abre/fecha o clicado
   document.querySelectorAll('[id^="msgDrop_"]').forEach(d=>{
@@ -4238,10 +4466,10 @@ function toggleMsgDropdown(id){
   const el=document.getElementById('msgDrop_'+id);
   if(el) el.style.display=el.style.display==='none'?'block':'none';
 }
-function copiarMensagemIdx(type,idx,nome){
+function copiarMensagemIdx(type,idx,nome,indicador){
   const t=(type==='lead'?LEAD_TEMPLATES:CLIENT_TEMPLATES)[idx];
   if(!t) return;
-  const texto=t.texto.replace('[nome]',nome);
+  const texto=t.texto.replace(/\[nome\]/g,nome).replace(/\[indicador\]/g,indicador||'[indicador]');
   if(navigator.clipboard){
     navigator.clipboard.writeText(texto).then(()=>_showToast('✓ Mensagem copiada!')).catch(()=>_copiarFallback(texto));
   } else { _copiarFallback(texto); }
@@ -4254,15 +4482,16 @@ function _copiarFallback(texto){
   document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
   _showToast('✓ Mensagem copiada!');
 }
-function msgDropdownHtml(type,uid,nome){
+function msgDropdownHtml(type,uid,nome,indicador){
   const templates=type==='lead'?LEAD_TEMPLATES:CLIENT_TEMPLATES;
   const safeNome=nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const safeInd=(indicador||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   let h=`<div style="margin:6px 0;position:relative;">
     <button class="icon-btn" onclick="toggleMsgDropdown('${uid}')">💬 Mensagem rápida</button>
     <div id="msgDrop_${uid}" style="display:none;position:absolute;left:0;top:28px;z-index:100;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;min-width:240px;box-shadow:0 4px 16px rgba(0,0,0,.12);">
       <div style="font-size:.78rem;color:var(--text2);font-weight:600;margin-bottom:6px;">Copiar modelo:</div>`;
   templates.forEach((tmpl,i)=>{
-    h+=`<button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:4px;font-size:.81rem;padding:5px 10px;" onclick="copiarMensagemIdx('${type}',${i},'${safeNome}')">📋 ${esc(tmpl.label)}</button>`;
+    h+=`<button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:4px;font-size:.81rem;padding:5px 10px;" onclick="copiarMensagemIdx('${type}',${i},'${safeNome}','${safeInd}')">📋 ${esc(tmpl.label)}</button>`;
   });
   h+='</div></div>';
   return h;
@@ -4367,6 +4596,20 @@ function editLead(id){
   const l=state.leads.find(x=>x.id===id);
   if(l) showLeadForm(l);
 }
+function abrirLeadNoFunil(id){
+  expandedLeadCard.add(id);
+  switchTab('funil');
+  renderFunil();
+  setTimeout(()=>{
+    const el=document.getElementById('leadEditWrap-'+id);
+    if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+    const card=document.getElementById('kanbanCard-'+id);
+    if(card){
+      card.classList.add('kanban-card-highlight');
+      setTimeout(()=>card.classList.remove('kanban-card-highlight'),3700);
+    }
+  },80);
+}
 function toggleLeadCard(id){
   if(expandedLeadCard.has(id)) expandedLeadCard.delete(id);
   else expandedLeadCard.add(id);
@@ -4374,7 +4617,10 @@ function toggleLeadCard(id){
 }
 function deleteLead(id){
   if(!confirm('Excluir este lead?')) return;
-  db.collection('leads').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+  const item=state.leads.find(x=>x.id===id);
+  db.collection('leads').doc(id).delete()
+    .then(()=>{ if(item){const d={...item};delete d.id;_showUndoBar('Lead excluído',()=>db.collection('leads').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));} })
+    .catch(err=>alert('Erro: '+err.message));
 }
 function moveLead(id,etapa){
   db.collection('leads').doc(id).update({etapa}).catch(err=>alert('Erro: '+err.message));
@@ -4382,6 +4628,7 @@ function moveLead(id,etapa){
 function convertLeadToClient(id){
   const l=state.leads.find(x=>x.id===id);
   if(!l) return;
+  _convertingLeadId=id;
   switchTab('clientes');
   selecionarTipoCliente('PF');
   showClientForm({id:null,nome:l.nome,cpf:'',telefone:l.telefone||l.contato||'',email:l.email||'',dataNascimento:'',endereco:'',plano:'',coberturas:[{plano:'',valorPlano:l.valorEstimado||0,percentCarteira:0,valorCarteira:0}],valorPagamento:l.valorEstimado||0,percentAngariacao:0,valorAngariacao:0,valorCarteira:0,historico:l.historico||[]});
@@ -4410,7 +4657,18 @@ function convertClientToLead(id){
 function toggleLeadHist(id){
   if(expandedLeadHist.has(id)) expandedLeadHist.delete(id);
   else expandedLeadHist.add(id);
-  renderFunil();
+  const l=state.leads.find(x=>x.id===id);
+  const wrap=document.getElementById('leadHistWrap-'+id);
+  const btn=document.getElementById('leadHistBtn-'+id);
+  if(!wrap||!l){renderFunil();return;} // fallback se o DOM ainda não existir
+  const open=expandedLeadHist.has(id);
+  const count=(l.historico||[]).length;
+  if(btn) btn.textContent=`📝 Anotações (${count}) ${open?'▲':'▼'}`;
+  if(open){
+    wrap.innerHTML=`<div class="hist-list" style="margin-top:6px;">${count?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}<div style="margin-top:6px;"><input type="text" id="leadHistInput-${id}" placeholder="Nova anotação... (será salva junto com o formulário acima)" style="width:100%;"></div></div>`;
+  } else {
+    wrap.innerHTML='';
+  }
 }
 function addLeadHistorico(id){
   const input=document.getElementById(`leadHistInput-${id}`);
@@ -4447,7 +4705,7 @@ function renderFunil(){
       const tsMs=l.createdAt?(l.createdAt.toDate?l.createdAt.toDate():new Date((l.createdAt.seconds||0)*1000)).getTime():null;
       const daysAgo=tsMs!=null?Math.floor((Date.now()-tsMs)/86400000):null;
       const daysBadge=daysAgo!=null?`<span style="font-size:10px;color:${daysAgo>7?'#dc2626':'var(--text2)'};background:${daysAgo>7?'rgba(220,38,38,.08)':'rgba(0,0,0,.05)'};padding:1px 5px;border-radius:4px;">⏱ ${daysAgo===0?'hoje':daysAgo+'d'}</span>`:'';
-      html+=`<div class="kanban-card" style="border-left:3px solid ${stageColor};border-radius:0 8px 8px 0;padding-left:10px;">
+      html+=`<div id="kanbanCard-${l.id}" class="kanban-card" style="border-left:3px solid ${stageColor};border-radius:0 8px 8px 0;padding-left:10px;">
         <div class="kc-compact-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
           <div>
             <div class="kc-title" style="margin:0;">${esc(l.nome)}</div>
@@ -4473,21 +4731,14 @@ function renderFunil(){
             const lbl=l.proximoContato<ds?'Contato atrasado':(l.proximoContato===ds?'Contato hoje':'Próximo contato');
             return `<div class="kc-next ${cls}">📅 ${lbl}: ${fmtDateBR(l.proximoContato)}</div>`;
           })():''}
-          ${(l.telefone||l.email)?msgDropdownHtml('lead',l.id,l.nome):''}
+          ${(l.telefone||l.email)?msgDropdownHtml('lead',l.id,l.nome,l.indicadoPor||''):''}
           <div id="leadEditWrap-${l.id}" style="margin-top:8px;"></div>
           <div class="row" style="margin-top:8px;">
             ${isOwner?`<button class="icon-btn" onclick="deleteLead('${l.id}')">Excluir</button>`:''}
             ${isOwner&&stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
           </div>
-          <button class="icon-btn" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
-          ${expandedLeadHist.has(l.id)?`
-            <div class="hist-list" style="margin-top:6px;">
-              ${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}
-              <div style="margin-top:6px;">
-                <input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação... (será salva junto com o formulário acima)" style="width:100%;">
-              </div>
-            </div>
-          `:''}
+          <button class="icon-btn" id="leadHistBtn-${l.id}" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
+          <div id="leadHistWrap-${l.id}">${expandedLeadHist.has(l.id)?`<div class="hist-list" style="margin-top:6px;">${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}<div style="margin-top:6px;"><input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação... (será salva junto com o formulário acima)" style="width:100%;"></div></div>`:''}</div>
         </div>
         `:''}
       </div>`;
@@ -4682,7 +4933,10 @@ function editLink(id){
 }
 function deleteLink(id){
   if(!confirm('Excluir este link?')) return;
-  db.collection('links').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+  const item=state.links.find(x=>x.id===id);
+  db.collection('links').doc(id).delete()
+    .then(()=>{ if(item){const d={...item};delete d.id;_showUndoBar('Link excluído',()=>db.collection('links').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));} })
+    .catch(err=>alert('Erro: '+err.message));
 }
 function renderLinks(){
   const isOwner=currentUser.role==='owner';
@@ -4790,7 +5044,10 @@ function editNoteCard(id){
 }
 function deleteNoteCard(id){
   if(!confirm('Excluir este card?')) return;
-  db.collection('cards').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+  const item=state.cards.find(x=>x.id===id);
+  db.collection('cards').doc(id).delete()
+    .then(()=>{ if(item){const d={...item};delete d.id;_showUndoBar('Card excluído',()=>db.collection('cards').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));} })
+    .catch(err=>alert('Erro: '+err.message));
 }
 function renderNotesBoard(){
   const boardEl=document.getElementById('notesBoard');
@@ -5508,8 +5765,20 @@ function payableAppliesInMonth(p,mk){
     if(!p.startDate) return false;
     const startMk=monthKeyOf(p.startDate);
     if(mk<startMk) return false;
-    // Aparece somente no mesmo mês do ano (ex: startDate em março → aparece todo mês de março)
     return mk.slice(5,7)===p.startDate.slice(5,7);
+  }
+  if(p.recurrence==='custom'){
+    if(!p.startDate||!(p.customIntervalDays>=1)) return false;
+    const intv=p.customIntervalDays;
+    const [y,m]=mk.split('-').map(Number);
+    const startMs=new Date(p.startDate+'T00:00:00').getTime();
+    const monthStartMs=new Date(y,m-1,1).getTime();
+    const monthEndMs=new Date(y,m,0,23,59,59).getTime();
+    if(monthEndMs<startMs) return false;
+    const daysToStart=Math.max(0,Math.ceil((monthStartMs-startMs)/86400000));
+    const n=Math.ceil(daysToStart/intv);
+    const firstOccMs=startMs+n*intv*86400000;
+    return firstOccMs<=monthEndMs;
   }
   const startMonth=monthKeyOf(p.startDate);
   if(mk<startMonth) return false;
@@ -5521,6 +5790,17 @@ function payableAppliesInMonth(p,mk){
 }
 function payableDueDateInMonth(p,mk){
   if(p.recurrence==='unico') return p.dueDate;
+  if(p.recurrence==='custom'){
+    if(!p.startDate||!(p.customIntervalDays>=1)) return null;
+    const intv=p.customIntervalDays;
+    const [y,m]=mk.split('-').map(Number);
+    const startMs=new Date(p.startDate+'T00:00:00').getTime();
+    const monthStartMs=new Date(y,m-1,1).getTime();
+    const daysToStart=Math.max(0,Math.ceil((monthStartMs-startMs)/86400000));
+    const n=Math.ceil(daysToStart/intv);
+    const d=new Date(startMs+n*intv*86400000);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
   const [y,m]=mk.split('-').map(Number);
   const lastDay=new Date(y,m,0).getDate();
   const day=Math.min(p.dueDay||1,lastDay);
@@ -5557,6 +5837,7 @@ function showPayableForm(p,containerId){
         <option value="unico" ${p.recurrence==='unico'?'selected':''}>Único</option>
         <option value="mensal" ${p.recurrence==='mensal'?'selected':''}>Mensal</option>
         <option value="anual" ${p.recurrence==='anual'?'selected':''}>Anual</option>
+        <option value="custom" ${p.recurrence==='custom'?'selected':''}>Personalizada (a cada X dias)</option>
       </select></div>
       <div id="payDateWrap" class="row" style="display:contents;"></div>
       <div id="payTermWrap" class="row" style="display:contents;"></div>
@@ -5574,6 +5855,13 @@ function showPayableForm(p,containerId){
     }else if(rec==='anual'){
       wrap.innerHTML=`
         <div><label>Mês e dia de vencimento</label><input type="date" id="payStartDate" value="${p.startDate||todayStr()}" required></div>`;
+    }else if(rec==='custom'){
+      wrap.innerHTML=`
+        <div><label>Intervalo (dias)</label>
+          <input type="number" id="payCustomInterval" min="1" max="365" value="${p.customIntervalDays||14}" required>
+          <div style="font-size:.78rem;color:var(--text2);margin-top:3px;">Ex: 2 = dia sim dia não · 7 = semanal · 14 = quinzenal · 21 = a cada 3 semanas</div>
+        </div>
+        <div><label>Início (primeira cobrança)</label><input type="date" id="payStartDate" value="${p.startDate||todayStr()}" required></div>`;
     }else{
       wrap.innerHTML=`
         <div><label>Dia de vencimento (1-31)</label><input type="number" id="payDueDay" min="1" max="31" value="${p.dueDay||1}" required></div>
@@ -5613,16 +5901,20 @@ function showPayableForm(p,containerId){
     if(rec==='unico'){
       obj.dueDate=document.getElementById('payDueDate').value;
       obj.startDate=obj.dueDate;
-      obj.dueDay=null; obj.termType=null; obj.termCount=null;
+      obj.dueDay=null; obj.termType=null; obj.termCount=null; obj.customIntervalDays=null;
     }else if(rec==='anual'){
       const sd=document.getElementById('payStartDate').value;
       obj.startDate=sd;
       obj.dueDay=parseInt((sd||todayStr()).slice(8,10),10)||1;
-      obj.dueDate=null; obj.termType='indefinido'; obj.termCount=null;
+      obj.dueDate=null; obj.termType='indefinido'; obj.termCount=null; obj.customIntervalDays=null;
+    }else if(rec==='custom'){
+      obj.customIntervalDays=parseInt(document.getElementById('payCustomInterval').value,10)||14;
+      obj.startDate=document.getElementById('payStartDate').value;
+      obj.dueDay=null; obj.dueDate=null; obj.termType='indefinido'; obj.termCount=null;
     }else{
       obj.dueDay=parseInt(document.getElementById('payDueDay').value,10);
       obj.startDate=document.getElementById('payStartDate').value;
-      obj.dueDate=null;
+      obj.dueDate=null; obj.customIntervalDays=null;
       obj.termType=document.getElementById('payTermType').value;
       obj.termCount=obj.termType==='parcelas'?parseInt(document.getElementById('payTermCount').value,10):null;
     }
@@ -5640,7 +5932,10 @@ function editPayable(id){
 }
 function deletePayable(id){
   if(!confirm('Excluir esta conta a pagar?')) return;
-  db.collection('payables').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+  const item=state.payables.find(x=>x.id===id);
+  db.collection('payables').doc(id).delete()
+    .then(()=>{ if(item){const d={...item};delete d.id;_showUndoBar('Conta excluída',()=>db.collection('payables').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));} })
+    .catch(err=>alert('Erro: '+err.message));
 }
 function setPayableOccurrence(payableId,mk,patch){
   return db.collection('payableOccurrences').doc(`${mk}_${payableId}`).set({payableId,month:mk,...patch},{merge:true});
@@ -5905,7 +6200,7 @@ function renderPayablesMonthList(){
         html+=`<tr id="payrow-${p.id}">
           <td>${esc(p.name)}</td>
           <td id="payval-${p.id}" style="white-space:nowrap;">💰 ${fmtBRL(effVal)}${p.tipoValor==='variavel'?'<span class="muted" style="font-size:10px;margin-left:4px;">(variável)</span>':''}${editValBtn}</td>
-          <td>${{unico:'Único',mensal:'Mensal',anual:'Anual'}[p.recurrence]||p.recurrence}</td>
+          <td>${p.recurrence==='custom'?(p.customIntervalDays%7===0?`A cada ${p.customIntervalDays/7} sem.`:`A cada ${p.customIntervalDays} dias`):({unico:'Único',mensal:'Mensal',anual:'Anual',diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal'}[p.recurrence]||p.recurrence)}</td>
           <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
           <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'↩ Desfazer':'✔ Marcar pago'}</button></td>
         </tr>`;
@@ -5961,11 +6256,21 @@ function renderPayablesList(){
     <th></th>
   </tr></thead><tbody>`;
   const RECUR_TEXT={diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal',mensal:'Mensal',anual:'Anual',unico:'Único'};
+  function recurrenceLabel(p){
+    if(p.recurrence==='custom'){
+      const d=p.customIntervalDays||0;
+      return d%7===0?`A cada ${d/7} semana${d/7!==1?'s':''}`:d===2?'Dia sim, dia não':`A cada ${d} dias`;
+    }
+    return RECUR_TEXT[p.recurrence]||p.recurrence||'—';
+  }
   sorted.forEach(p=>{
     let pagamento, prazo;
     if(p.recurrence==='unico'){
       pagamento=fmtDateFull(p.dueDate);
       prazo='Parcela única';
+    }else if(p.recurrence==='custom'){
+      pagamento=`A cada ${p.customIntervalDays||'?'} dias (início ${fmtDateFull(p.startDate)})`;
+      prazo='Indefinido';
     }else{
       pagamento=`Todo dia ${p.dueDay}`;
       prazo = p.termType==='parcelas' ? `${p.termCount} parcelas (a partir de ${fmtDateFull(p.startDate)})` : `Indefinido (a partir de ${fmtDateFull(p.startDate)})`;
@@ -5973,7 +6278,7 @@ function renderPayablesList(){
     html+=`<tr>
       <td>${esc(p.name)}</td>
       <td>💰 ${fmtBRL(p.value||0)}${p.tipoValor==='variavel'?'<br><span class="muted" style="font-size:10px;">Variável por mês</span>':''}</td>
-      <td>${RECUR_TEXT[p.recurrence]||p.recurrence||'—'}</td>
+      <td>${recurrenceLabel(p)}</td>
       <td>${pagamento}</td>
       <td>${prazo}</td>
       <td class="row">
@@ -6048,7 +6353,7 @@ function payablesArchiveDetailHtml(r){
       <td>${esc(it.name)}</td>
       <td>💰 ${fmtBRL(it.value||0)}</td>
       <td>${fmtDateFull(it.dueDate)}</td>
-      <td>${{unico:'Único',mensal:'Mensal',anual:'Anual'}[it.recurrence]||it.recurrence}</td>
+      <td>${it.recurrence==='custom'?(it.customIntervalDays%7===0?`A cada ${it.customIntervalDays/7} sem.`:`A cada ${it.customIntervalDays} dias`):({unico:'Único',mensal:'Mensal',anual:'Anual',diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal'}[it.recurrence]||it.recurrence)}</td>
       <td><span class="badge ${paid?'finalizada':'pendente'}">${paid?'Pago':'Pendente'}</span></td>
     </tr>`;
   });
@@ -6473,13 +6778,15 @@ function confirmarUploadFormularios(input){
 }
 function excluirFormulario(id){
   if(!confirm('Excluir este documento permanentemente?')) return;
-  db.collection('formularios').doc(id).get().then(snap=>{
-    const path=snap.exists&&snap.data().storagePath;
-    return db.collection('formularios').doc(id).delete()
-      .then(()=>{ if(path) return storage.ref(path).delete().catch(()=>{}); });
-  })
-  .then(()=>showToast('🗑️ Documento excluído','success'))
-  .catch(err=>alert('Erro ao excluir: '+err.message));
+  const item=(state.formularios||[]).find(x=>x.id===id);
+  const path=item&&item.storagePath;
+  db.collection('formularios').doc(id).delete()
+    .then(()=>{
+      if(path) storage.ref(path).delete().catch(()=>{});
+      showToast('🗑️ Documento excluído','success');
+      if(item){const d={...item};delete d.id;_showUndoBar('Formulário excluído',()=>db.collection('formularios').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));}
+    })
+    .catch(err=>alert('Erro ao excluir: '+err.message));
 }
 /* ===== Fim Formulários ===== */
 
@@ -6572,8 +6879,12 @@ function confirmarUploadDocMildian(input){
 }
 function excluirDocMildian(id){
   if(!confirm('Excluir este documento permanentemente?')) return;
+  const item=(state.docsMildian||[]).find(x=>x.id===id);
   db.collection('documentosMildian').doc(id).delete()
-    .then(()=>showToast('🗑️ Documento excluído','success'))
+    .then(()=>{
+      showToast('🗑️ Documento excluído','success');
+      if(item){const d={...item};delete d.id;_showUndoBar('Documento excluído',()=>db.collection('documentosMildian').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));}
+    })
     .catch(err=>alert('Erro: '+err.message));
 }
 /* ===== Fim Documentos Mildian ===== */
@@ -6666,8 +6977,12 @@ function confirmarUploadSimulacao(input){
 }
 function excluirSimulacao(id){
   if(!confirm('Excluir esta simulação permanentemente?')) return;
+  const item=(state.simulacoes||[]).find(x=>x.id===id);
   db.collection('simulacoes').doc(id).delete()
-    .then(()=>showToast('🗑️ Simulação excluída','success'))
+    .then(()=>{
+      showToast('🗑️ Simulação excluída','success');
+      if(item){const d={...item};delete d.id;_showUndoBar('Simulação excluída',()=>db.collection('simulacoes').doc(id).set(d).catch(e=>alert('Erro ao desfazer: '+e.message)));}
+    })
     .catch(err=>alert('Erro: '+err.message));
 }
 /* ===== Fim Simulações ===== */
