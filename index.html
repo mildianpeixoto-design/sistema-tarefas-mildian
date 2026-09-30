@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260929-05';
+  var BUILD='20260930-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2960,12 +2960,14 @@ function toggleAngariacaoAdicional(clientId, vendaIdx, currentPaga){
     .catch(err=>alert('Erro: '+err.message));
 }
 function _criarIncentivoPagavel(clientId, vendaIdx){
+  const client=state.clients.find(c=>c.id===clientId);
+  if(!client) return;
+  // Só gera incentivo para clientes originados de leads da Lara
+  if(!client.temIncentivo) return;
   const origemKey=vendaIdx!==null?`${clientId}_v${vendaIdx}`:clientId;
   if(state.payables.some(p=>p.origemIncentivo===origemKey)){
     showToast('ℹ️ Incentivo desta angariação já está em Contas a Pagar','info'); return;
   }
-  const client=state.clients.find(c=>c.id===clientId);
-  if(!client) return;
   const cobs=vendaIdx!==null?((client.vendasAdicionais||[])[vendaIdx]?.coberturas||[]):(client.coberturas||[]);
   const vendaNova=cobs.filter(c=>!['PGBL','VGBL'].includes((c.plano||'').trim().toUpperCase())).reduce((s,c)=>s+(c.valorPlano||0),0);
   const incentivo=Math.round(vendaNova*0.10*100)/100;
@@ -3552,6 +3554,11 @@ function showClientForm(client, containerId){
       observacoesSaude: isPFsub ? document.getElementById('cliSaude').value.trim() : '',
       historico: client.historico||[]
     };
+    // Incentivo Lara: só aplicável se o lead original foi criado pela colaboradora (não pelo owner)
+    if(_convertingLeadId){
+      const _srcLead=state.leads.find(x=>x.id===_convertingLeadId);
+      if(_srcLead&&_srcLead.createdBy&&_srcLead.createdBy!==currentUser.uid) obj.temIncentivo=true;
+    }
     if(!obj.nome){ submitBtn.disabled=false; return; }
     const dataPropostaStr = document.getElementById('cliDataProposta')?.value;
     const createdAtValue = dataPropostaStr
