@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260930-01';
+  var BUILD='20260930-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2872,6 +2872,29 @@ function showMetaModal(viewMk){
   const prevMk=mNum===1?`${yNum-1}-12`:`${yNum}-${String(mNum-1).padStart(2,'0')}`;
   const nextMk=mNum===12?`${yNum+1}-01`:`${yNum}-${String(mNum+1).padStart(2,'0')}`;
   const canGoNext=nextMk<=curMk;
+  // Projeção de fechamento — só mês atual com dados
+  let projecaoHtml='';
+  if(mk===curMk&&acumulado>0){
+    const _hoje=new Date();
+    const _diaHoje=_hoje.getDate();
+    let _totalDU=0,_decDU=0;
+    for(let d=1;d<=new Date(yNum,mNum,0).getDate();d++){
+      const dow=new Date(yNum,mNum-1,d).getDay();
+      if(dow>=1&&dow<=5){_totalDU++;if(d<=_diaHoje)_decDU++;}
+    }
+    if(_decDU>0){
+      const _proj=Math.round(acumulado/_decDU*_totalDU*100)/100;
+      const _rOk=metaValor>0?_proj>=metaValor:null;
+      const _pctP=metaValor>0?_proj/metaValor:null;
+      const _corP=_rOk===null?'#6b7280':_rOk?'#16a34a':_pctP>=0.8?'#d97706':'#dc2626';
+      const _bgP=_rOk===null?'#f9fafb':_rOk?'#f0fdf4':'#fef2f2';
+      const _bdP=_rOk===null?'#e5e7eb':_rOk?'#bbf7d0':'#fecaca';
+      const _icP=_rOk===null?'📈':_rOk?'🚀':'⚠️';
+      const _msgP=_rOk===null?`No ritmo atual, você fecha em ${fmtBRL(_proj)}`:_rOk?`No ritmo atual, você fecha em ${fmtBRL(_proj)} — acima da meta! 🎯`:`No ritmo atual, você fecha em ${fmtBRL(_proj)} — abaixo da meta`;
+      const _restDU=_totalDU-_decDU;
+      projecaoHtml=`<div style="background:${_bgP};border:1px solid ${_bdP};border-radius:8px;padding:10px 14px;margin:4px 0 14px;font-size:.875rem;"><div style="display:flex;align-items:center;gap:6px;color:${_corP};font-weight:600;">${_icP} ${_msgP}</div><div style="color:#6b7280;font-size:.78rem;margin-top:3px;">${_decDU} de ${_totalDU} dias úteis decorridos · ${_restDU} restante${_restDU!==1?'s':''}</div></div>`;
+    }
+  }
   const _exPct=pct>1?Math.round((pct-1)*100):0;
   const _ovW=Math.min(_exPct*0.4,14);
   const metaBarHtml=metaValor?(pct>1?`<div style="display:flex;align-items:center;margin:8px 0 18px;"><div style="flex:0 0 82%;height:14px;border-radius:8px;background:var(--border);overflow:visible;position:relative;"><div style="height:100%;width:100%;border-radius:8px;background:linear-gradient(to right,#dc2626,#f97316,#f59e0b,#84cc16,#16a34a);position:relative;"><div style="position:absolute;right:0;top:-3px;width:2px;height:20px;background:white;border:1px solid #d1d5db;border-radius:1px;z-index:2;"></div></div></div><div style="height:14px;flex:0 0 ${_ovW}%;background:linear-gradient(to right,#f59e0b,#fbbf24);border-radius:0 8px 8px 0;position:relative;"><span style="position:absolute;left:calc(100% + 4px);top:-3px;font-size:10px;font-weight:600;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:10px;white-space:nowrap;">+${_exPct}% 🏆</span></div></div>`:`<div class="meta-progress-bar"><div class="meta-progress-fill" style="width:${Math.round(pct*100)}%;background:linear-gradient(to right,#dc2626,#f97316,#f59e0b,#84cc16,#16a34a);background-size:${Math.round(100/Math.max(pct,0.01))}% 100%;"></div></div>`):'';
@@ -2917,6 +2940,7 @@ function showMetaModal(viewMk){
         ${metaValor&&acumulado<metaValor?'&nbsp;— Faltam <strong>'+fmtBRL(metaValor-acumulado)+'</strong>':''}
       </div>
       ${metaBarHtml}
+      ${projecaoHtml}
       <table class="meta-table">
         <thead><tr><th>Cliente / Produto</th><th>Valor/mês</th><th>Data</th><th>Nº Proposta</th><th>Pagamento</th><th>Comissão</th><th>Angariação</th><th></th></tr></thead>
         <tbody>${rows||'<tr><td colspan="8" class="empty" style="padding:12px;">Nenhum cliente cadastrado neste mês ainda.</td></tr>'}</tbody>
