@@ -1,4 +1,4 @@
-/* Service Worker - BUILD: 20260930-02 */
+/* Service Worker - BUILD: 20260930-03 */
 
 self.addEventListener('install', () => {
   self.skipWaiting();

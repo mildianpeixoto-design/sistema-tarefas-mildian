@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260930-02';
+  var BUILD='20260930-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -2819,6 +2819,7 @@ function renderQuickBar(){
     const cor=pct>=1?'#16a34a':pct>=0.7?'#d97706':'#dc2626';
     const label=metaValor?`${fmtBRL(acumulado)} / ${fmtBRL(metaValor)}`:`${fmtBRL(acumulado)}`;
     html+=`<button class="qa-btn qa-meta" style="background:${cor};" onclick="showMetaModal()">🎯 ${label}</button>`;
+    html+=`<button class="qa-btn qa-nav" onclick="showProdutoRankingModal()" title="Ranking de angariação por produto" style="background:#6b7280;">📦 Produtos</button>`;
     html+=`<span style="width:4px;"></span>`;
   }
   html+=`<button class="qa-btn qa-nav" onclick="switchTab('ponto')" title="Ir para Ponto">🕐 Ponto</button>`;
@@ -2960,6 +2961,110 @@ function saveMeta(){
     .then(()=>{ closeMetaModal(); showMetaModal(mk); showToast('✅ Meta salva!','success'); })
     .catch(err=>alert('Erro: '+err.message));
 }
+
+/* ====================== Ranking Angariação por Produto ====================== */
+function showProdutoRankingModal(periodo){
+  periodo=periodo||'all';
+  const agora=new Date();
+  const curMk=currentMonthKey();
+  const curYear=agora.getFullYear().toString();
+  const mapa={};
+  function addItem(plano,valorPlano,valorAngariacao){
+    if(!plano) plano='Sem produto';
+    const key=plano.trim().toUpperCase();
+    if(!mapa[key]) mapa[key]={plano:plano.trim(),contagem:0,totalPlano:0,totalAngariacao:0};
+    mapa[key].contagem++;
+    mapa[key].totalPlano+=valorPlano||0;
+    mapa[key].totalAngariacao+=valorAngariacao||0;
+  }
+  state.clients.filter(c=>c.status!=='cancelado').forEach(c=>{
+    const d=c.createdAt?(c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000)):null;
+    const dMk=d?monthKeyOf(d.toISOString().slice(0,10)):null;
+    const dYear=d?d.getFullYear().toString():null;
+    const pf=periodo==='all'||(periodo==='year'&&dYear===curYear)||(periodo==='month'&&dMk===curMk);
+    if(pf&&d&&!c.excluidaDeMeta){
+      const cobs=Array.isArray(c.coberturas)&&c.coberturas.length?c.coberturas:(c.plano?[{plano:c.plano,valorPlano:c.valorPagamento||0}]:[]);
+      const totalCob=cobs.reduce((s,cb)=>s+(cb.valorPlano||0),0);
+      const angTotal=c.valorAngariacao||c.comissaoValor||0;
+      cobs.forEach(cb=>{
+        if(!cb.plano&&!(cb.valorPlano>0)) return;
+        const ratio=totalCob>0?(cb.valorPlano||0)/totalCob:(1/Math.max(cobs.length,1));
+        addItem(cb.plano||'Sem produto',cb.valorPlano||0,Math.round(angTotal*ratio*100)/100);
+      });
+    }
+    (c.vendasAdicionais||[]).forEach(v=>{
+      if(v.cancelada||!v.plano) return;
+      const vd=v.data?(v.data.toDate?v.data.toDate():new Date((v.data.seconds||0)*1000)):null;
+      const vMk=vd?monthKeyOf(vd.toISOString().slice(0,10)):null;
+      const vYear=vd?vd.getFullYear().toString():null;
+      const vp=periodo==='all'||(periodo==='year'&&vYear===curYear)||(periodo==='month'&&vMk===curMk);
+      if(vp) addItem(v.plano,v.valorPlano||0,v.valorAngariacao||0);
+    });
+  });
+  const items=Object.values(mapa).sort((a,b)=>b.totalAngariacao-a.totalAngariacao);
+  const totalGeral=items.reduce((s,i)=>s+i.totalAngariacao,0);
+  const medals=['🥇','🥈','🥉'];
+  let rows='';
+  items.forEach((item,idx)=>{
+    const share=totalGeral>0?Math.round(item.totalAngariacao/totalGeral*100):0;
+    const rank=medals[idx]||`${idx+1}º`;
+    rows+=`<tr>
+      <td style="font-size:1.05rem;text-align:center;">${rank}</td>
+      <td><strong>${esc(item.plano)}</strong></td>
+      <td style="text-align:center;">${item.contagem}</td>
+      <td style="text-align:right;">${fmtBRL(item.totalPlano)}</td>
+      <td style="text-align:right;color:#16a34a;font-weight:600;">${fmtBRL(item.totalAngariacao)}</td>
+      <td style="text-align:right;color:#6b7280;">${fmtBRL(Math.round(item.totalAngariacao/item.contagem*100)/100)}</td>
+      <td style="text-align:center;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div style="background:#e5e7eb;border-radius:4px;height:7px;width:70px;overflow:hidden;flex-shrink:0;">
+            <div style="background:#16a34a;height:100%;width:${share}%;border-radius:4px;"></div>
+          </div>
+          <span style="font-size:.75rem;color:#6b7280;">${share}%</span>
+        </div>
+      </td>
+    </tr>`;
+  });
+  if(!rows) rows='<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--muted);">Nenhum produto encontrado para este período.</td></tr>';
+  const overlay=document.createElement('div');
+  overlay.className='meta-modal-overlay';
+  overlay.id='produtoRankingOverlay';
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) closeProdutoRankingModal(); });
+  overlay.innerHTML=`
+    <div class="meta-modal" style="max-width:720px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <h2 style="margin:0;flex:1;font-size:1.1rem;">📦 Angariação por Produto</h2>
+        <button class="icon-btn" onclick="closeProdutoRankingModal()">✕</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <button class="btn${periodo==='month'?' btn-primary':''}" onclick="closeProdutoRankingModal();showProdutoRankingModal('month')" style="font-size:.82rem;padding:4px 12px;">Este mês</button>
+        <button class="btn${periodo==='year'?' btn-primary':''}" onclick="closeProdutoRankingModal();showProdutoRankingModal('year')" style="font-size:.82rem;padding:4px 12px;">Este ano</button>
+        <button class="btn${periodo==='all'?' btn-primary':''}" onclick="closeProdutoRankingModal();showProdutoRankingModal('all')" style="font-size:.82rem;padding:4px 12px;">Todo o período</button>
+        <span style="margin-left:auto;font-size:.82rem;color:var(--muted);">Total angariado: <strong style="color:var(--text);">${fmtBRL(totalGeral)}</strong></span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="meta-table">
+          <thead><tr>
+            <th style="text-align:center;">#</th>
+            <th>Produto</th>
+            <th style="text-align:center;">Clientes</th>
+            <th style="text-align:right;">Valor/mês</th>
+            <th style="text-align:right;">Total angariado</th>
+            <th style="text-align:right;">Média/cliente</th>
+            <th style="text-align:center;">Participação</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:10px;">* Angariação de clientes com múltiplos produtos é distribuída proporcionalmente ao valor de cada produto.</div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function closeProdutoRankingModal(){
+  const el=document.getElementById('produtoRankingOverlay');
+  if(el) el.remove();
+}
+
 function toggleAngariacao(id, currentPaga){
   db.collection('clients').doc(id).update({angariacacaoPaga: !currentPaga})
     .then(()=>{
