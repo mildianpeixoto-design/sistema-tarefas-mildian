@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20260930-03';
+  var BUILD='20261008-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -4782,8 +4782,17 @@ function abrirLeadNoFunil(id){
   },80);
 }
 function toggleLeadCard(id){
-  if(expandedLeadCard.has(id)) expandedLeadCard.delete(id);
-  else expandedLeadCard.add(id);
+  if(expandedLeadCard.has(id)){
+    expandedLeadCard.delete(id);
+  } else {
+    expandedLeadCard.add(id);
+    // Limpa busca ao abrir o lead — ele já foi encontrado
+    if(_funilBusca){
+      _funilBusca='';
+      const inp=document.getElementById('funilBusca');
+      if(inp) inp.value='';
+    }
+  }
   renderFunil();
 }
 function deleteLead(id){
