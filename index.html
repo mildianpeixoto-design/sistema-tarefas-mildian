@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20261008-01';
+  var BUILD='20261013-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1558,6 +1558,7 @@ function subscribeToday(){
     state.logsToday={}; snap.forEach(d=>state.logsToday[d.data().uid]=d.data());
     renderHoje();
     renderPonto();
+    renderQuickBar(); // garante que a barra de ações reflete o estado real após sync
   },err=>console.error(err)));
 }
 
