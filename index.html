@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20261013-02';
+  var BUILD='20261013-03';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1640,27 +1640,51 @@ function setOccurrence(date,activityId,patch){
     });
 }
 function toggleTimer(actId){
+  if(window._timerPending===actId) return; // evita duplo clique
   const ds=todayStr();
   const occ=state.occToday[actId]||{};
+  window._timerPending=actId;
+  const done=()=>{ window._timerPending=null; };
   if(occ.timerStart){
     const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
-    setOccurrence(ds,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()});
+    const prev=state.occToday[actId];
+    // Atualização otimista: pausa o timer imediatamente
+    state.occToday[actId]={...occ, timeSpent:(occ.timeSpent||0)+elapsed, timerStart:null};
+    renderHoje();
+    setOccurrence(ds,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()})
+      .then(done).catch(()=>{ state.occToday[actId]=prev; renderHoje(); done(); });
   }else{
-    const patch={timerStart:ts(), status:occ.status||'pendente'};
-    if(!occ.startedAt) patch.startedAt=ts(); // registra horário de início da primeira sessão
-    setOccurrence(ds,actId,patch);
+    const nowTs=ts();
+    const patch={timerStart:nowTs, status:occ.status||'pendente'};
+    if(!occ.startedAt) patch.startedAt=nowTs;
+    const prev=state.occToday[actId];
+    // Atualização otimista: inicia o timer imediatamente
+    state.occToday[actId]={...occ, ...patch};
+    renderHoje();
+    setOccurrence(ds,actId,patch).then(done).catch(()=>{ state.occToday[actId]=prev||{}; renderHoje(); done(); });
   }
 }
 function toggleOverdueTimer(actId,date){
   const key=`${date}_${actId}`;
+  if(window._timerPending===key) return;
   const occ=state.occRange[key]||{};
+  window._timerPending=key;
+  const done=()=>{ window._timerPending=null; };
   if(occ.timerStart){
     const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
-    setOccurrence(date,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()});
+    const prev=state.occRange[key];
+    state.occRange[key]={...occ, timeSpent:(occ.timeSpent||0)+elapsed, timerStart:null};
+    renderHoje();
+    setOccurrence(date,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()})
+      .then(done).catch(()=>{ state.occRange[key]=prev; renderHoje(); done(); });
   }else{
-    const patch={timerStart:ts(), status:occ.status||'pendente'};
-    if(!occ.startedAt) patch.startedAt=ts();
-    setOccurrence(date,actId,patch);
+    const nowTs=ts();
+    const patch={timerStart:nowTs, status:occ.status||'pendente'};
+    if(!occ.startedAt) patch.startedAt=nowTs;
+    const prev=state.occRange[key];
+    state.occRange[key]={...occ, ...patch};
+    renderHoje();
+    setOccurrence(date,actId,patch).then(done).catch(()=>{ state.occRange[key]=prev||{}; renderHoje(); done(); });
   }
 }
 let _conclusaoForm=null;
