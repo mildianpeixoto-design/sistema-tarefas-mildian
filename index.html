@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20261013-01';
+  var BUILD='20261013-02';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -3356,17 +3356,32 @@ function archiveMissingMetaReports(){
 
 /* ====================== Ponto ====================== */
 function toggleClock(){
+  if(window._clockPending) return; // evita duplo clique
   const ds=todayStr();
   const uid=currentUser.uid;
   const log=state.logsToday[uid];
   const ref=db.collection('timeLogs').doc(`${ds}_${uid}`);
+  window._clockPending=true;
   if(log&&log.activeStart){
+    const prevLog=state.logsToday[uid];
+    const nowTs=ts();
+    // Atualização otimista: fecha sessão imediatamente na UI
+    state.logsToday[uid]={...prevLog, sessions:[...(prevLog.sessions||[]),{in:prevLog.activeStart,out:nowTs}], activeStart:null};
+    renderPonto(); renderQuickBar();
     ref.update({
-      sessions: firebase.firestore.FieldValue.arrayUnion({in:log.activeStart, out:ts()}),
+      sessions: firebase.firestore.FieldValue.arrayUnion({in:log.activeStart, out:nowTs}),
       activeStart: del()
-    }).then(()=>renderQuickBar()).catch(err=>alert('Erro: '+err.message));
+    }).then(()=>{ window._clockPending=false; renderQuickBar(); })
+      .catch(err=>{ state.logsToday[uid]=prevLog; renderPonto(); renderQuickBar(); window._clockPending=false; alert('Erro ao encerrar expediente: '+err.message); });
   }else{
-    ref.set({date:ds, uid, activeStart:ts()},{merge:true}).then(()=>renderQuickBar()).catch(err=>alert('Erro: '+err.message));
+    const prevLog=state.logsToday[uid];
+    const nowTs=ts();
+    // Atualização otimista: inicia sessão imediatamente na UI
+    state.logsToday[uid]={date:ds, uid, activeStart:nowTs, sessions:(prevLog?.sessions||[])};
+    renderPonto(); renderQuickBar();
+    ref.set({date:ds, uid, activeStart:nowTs},{merge:true})
+      .then(()=>{ window._clockPending=false; renderQuickBar(); })
+      .catch(err=>{ if(prevLog) state.logsToday[uid]=prevLog; else delete state.logsToday[uid]; renderPonto(); renderQuickBar(); window._clockPending=false; alert('Erro ao iniciar expediente: '+err.message); });
   }
 }
 function renderPonto(){
