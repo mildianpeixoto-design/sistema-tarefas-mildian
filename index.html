@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20261013-03';
+  var BUILD='20261019-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -1652,7 +1652,7 @@ function toggleTimer(actId){
     state.occToday[actId]={...occ, timeSpent:(occ.timeSpent||0)+elapsed, timerStart:null};
     renderHoje();
     setOccurrence(ds,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()})
-      .then(done).catch(()=>{ state.occToday[actId]=prev; renderHoje(); done(); });
+      .then(done).catch(err=>{ state.occToday[actId]=prev; renderHoje(); done(); alert('ERRO ao pausar timer: '+err.message); });
   }else{
     const nowTs=ts();
     const patch={timerStart:nowTs, status:occ.status||'pendente'};
@@ -1661,7 +1661,7 @@ function toggleTimer(actId){
     // Atualização otimista: inicia o timer imediatamente
     state.occToday[actId]={...occ, ...patch};
     renderHoje();
-    setOccurrence(ds,actId,patch).then(done).catch(()=>{ state.occToday[actId]=prev||{}; renderHoje(); done(); });
+    setOccurrence(ds,actId,patch).then(done).catch(err=>{ state.occToday[actId]=prev||{}; renderHoje(); done(); alert('ERRO ao iniciar timer: '+err.message); });
   }
 }
 function toggleOverdueTimer(actId,date){
@@ -2850,6 +2850,7 @@ function renderQuickBar(){
   html+=`<button class="qa-btn qa-nav" onclick="switchTab('ponto')" title="Ir para Ponto">🕐 Ponto</button>`;
   html+=`<button class="qa-btn qa-nav" onclick="switchTab('funil')" title="Ir para Funil">📊 Funil</button>`;
   html+=`<button class="qa-btn qa-nav" onclick="switchTab('video')" title="Ir para Vídeo">🎥 Vídeo</button>`;
+  html+=`<span style="margin-left:auto;font-size:.7rem;color:#999;opacity:.6;">${BUILD}</span>`;
   bar.innerHTML=html;
   bar.style.display='flex';
 }
@@ -3388,24 +3389,29 @@ function toggleClock(){
   window._clockPending=true;
   if(log&&log.activeStart){
     const prevLog=state.logsToday[uid];
-    const nowTs=ts();
+    // Calcula elapsed usando tempo de início salvo no cliente (independe do relógio do PC)
+    const clientStartMs=parseInt(localStorage.getItem('_clockStart_'+uid)||'0');
+    const elapsedMs=clientStartMs>0?(Date.now()-clientStartMs):(Date.now()-log.activeStart.toMillis());
+    const outTs=firebase.firestore.Timestamp.fromMillis(log.activeStart.toMillis()+Math.max(0,elapsedMs));
     // Atualização otimista: fecha sessão imediatamente na UI
-    state.logsToday[uid]={...prevLog, sessions:[...(prevLog.sessions||[]),{in:prevLog.activeStart,out:nowTs}], activeStart:null};
+    state.logsToday[uid]={...prevLog, sessions:[...(prevLog.sessions||[]),{in:prevLog.activeStart,out:outTs}], activeStart:null};
     renderPonto(); renderQuickBar();
     ref.update({
-      sessions: firebase.firestore.FieldValue.arrayUnion({in:log.activeStart, out:nowTs}),
+      sessions: firebase.firestore.FieldValue.arrayUnion({in:log.activeStart, out:outTs}),
       activeStart: del()
-    }).then(()=>{ window._clockPending=false; renderQuickBar(); })
+    }).then(()=>{ window._clockPending=false; localStorage.removeItem('_clockStart_'+uid); renderQuickBar(); })
       .catch(err=>{ state.logsToday[uid]=prevLog; renderPonto(); renderQuickBar(); window._clockPending=false; alert('Erro ao encerrar expediente: '+err.message); });
   }else{
     const prevLog=state.logsToday[uid];
-    const nowTs=ts();
+    const nowTs=ts(); // apenas para UI otimista
+    localStorage.setItem('_clockStart_'+uid, Date.now().toString()); // salva horário real de início
     // Atualização otimista: inicia sessão imediatamente na UI
     state.logsToday[uid]={date:ds, uid, activeStart:nowTs, sessions:(prevLog?.sessions||[])};
     renderPonto(); renderQuickBar();
-    ref.set({date:ds, uid, activeStart:nowTs},{merge:true})
+    // activeStart no Firestore usa horário do servidor (imune a relógio errado)
+    ref.set({date:ds, uid, activeStart:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
       .then(()=>{ window._clockPending=false; renderQuickBar(); })
-      .catch(err=>{ if(prevLog) state.logsToday[uid]=prevLog; else delete state.logsToday[uid]; renderPonto(); renderQuickBar(); window._clockPending=false; alert('Erro ao iniciar expediente: '+err.message); });
+      .catch(err=>{ if(prevLog) state.logsToday[uid]=prevLog; else delete state.logsToday[uid]; renderPonto(); renderQuickBar(); window._clockPending=false; localStorage.removeItem('_clockStart_'+uid); alert('Erro ao iniciar expediente: '+err.message); });
   }
 }
 function renderPonto(){
