@@ -17,7 +17,7 @@
 <script>
 // Force clear old service worker cache on build update
 (function(){
-  var BUILD='20261019-01';
+  var BUILD='20261020-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
@@ -884,7 +884,7 @@ function fmtHMS(sec){
   const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
   return [h,m,s].map(v=>String(v).padStart(2,'0')).join(':');
 }
-function fmtHours(sec){ return (sec/3600).toFixed(1).replace('.',',')+'h'; }
+function fmtHours(sec){ return (Math.max(0,sec)/3600).toFixed(1).replace('.',',')+'h'; }
 function fmtHoursMin(sec){
   sec=Math.max(0,Math.round(sec||0));
   const h=Math.floor(sec/3600);
@@ -954,9 +954,18 @@ function occElapsed(occ){
 }
 function logTotalSeconds(log){
   if(!log) return 0;
-  let total=(log.sessions||[]).reduce((s,x)=>s+(x.out.toMillis()-x.in.toMillis())/1000,0);
-  if(log.activeStart) total += (Date.now()-log.activeStart.toMillis())/1000;
-  return total;
+  // Ignora sessões corrompidas onde saída < entrada
+  let total=(log.sessions||[])
+    .filter(x=>x.out&&x.in&&x.out.toMillis()>x.in.toMillis())
+    .reduce((s,x)=>s+(x.out.toMillis()-x.in.toMillis())/1000,0);
+  if(log.activeStart){
+    // Usa localStorage para elapsed preciso (evita skew do relógio do cliente)
+    const uid=log.uid||'';
+    const clientMs=parseInt(localStorage.getItem('_clockStart_'+uid)||'0');
+    const elapsed=clientMs>0?(Date.now()-clientMs):(Date.now()-log.activeStart.toMillis());
+    total+=Math.max(0,elapsed/1000);
+  }
+  return Math.max(0,total);
 }
 function userName(uid){
   const u=state.users.find(u=>u.id===uid);
