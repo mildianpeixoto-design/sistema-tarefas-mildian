@@ -9,15 +9,15 @@
 <title>Gestão de Equipe</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#4b4fa8">
-<link rel="icon" href="./icon-192.png">
+<link rel="icon" href="./ícone-192.png">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
-var BUILD='20261019-01';
 // Force clear old service worker cache on build update
 (function(){
+  var BUILD='20261019-01';
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister();});
