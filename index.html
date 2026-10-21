@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261020-01';
+var BUILD='20261021-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -2348,6 +2348,7 @@ function renderHoje(){
         </div>
         ${act.description?`<div class="activity-desc">${esc(act.description)}</div>`:''}
         ${act.cliente?`<div class="cliente-tag">Cliente/Apólice: ${esc(act.cliente)}</div>`:''}
+        ${occ.status==='devolvida'&&occ.instrucoesDevolucao?`<div class="devolucao-box">↩️ <strong>Devolvida:</strong> ${esc(occ.instrucoesDevolucao)}</div>`:''}
         <div class="activity-controls">
           <span class="timer" id="overtimer-${date}_${act.id}">${fmtHMS(occElapsed(occ))}</span>
           ${occ.timerStart
