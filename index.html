@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261021-01';
+var BUILD='20261026-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -1565,10 +1565,20 @@ function subscribeToday(){
     const _el=document.getElementById('activitiesList');if(_el)renderActivitiesList();
   },err=>console.error(err)));
   todayUnsubs.push(db.collection('timeLogs').where('date','==',ds).onSnapshot(snap=>{
-    state.logsToday={}; snap.forEach(d=>state.logsToday[d.data().uid]=d.data());
+    // Preserva estado local para escritas pendentes: quando usamos serverTimestamp(),
+    // o Firebase dispara um snapshot imediato com activeStart=null antes de confirmar
+    // no servidor. Isso faria o botão piscar "Iniciar → Encerrar" sozinho.
+    const updated={};
+    snap.forEach(d=>{
+      const data=d.data();
+      updated[data.uid] = d.metadata.hasPendingWrites
+        ? (state.logsToday[data.uid] || data)  // mantém estado otimista local
+        : data;                                  // usa dado confirmado pelo servidor
+    });
+    state.logsToday=updated;
     renderHoje();
     renderPonto();
-    renderQuickBar(); // garante que a barra de ações reflete o estado real após sync
+    renderQuickBar();
   },err=>console.error(err)));
 }
 
