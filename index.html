@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261027-01';
+var BUILD='20261027-02';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -6132,7 +6132,7 @@ function showPayableForm(p,containerId){
   containerId=containerId||'payableFormWrap';
   const isInline = containerId!=='payableFormWrap';
   const isEdit=!!p;
-  p=p||{id:null,name:'',value:0,recurrence:'unico',dueDate:todayStr(),dueDay:1,startDate:todayStr(),termType:'indefinido',termCount:12};
+  p=p||{id:null,name:'',tipoConta:'PF',value:0,recurrence:'unico',dueDate:todayStr(),dueDay:1,startDate:todayStr(),termType:'indefinido',termCount:12};
   const container=document.getElementById(containerId);
   if(!container) return;
   function closeThisForm(){
@@ -6141,6 +6141,16 @@ function showPayableForm(p,containerId){
   }
   container.innerHTML=`
     <form class="form-grid" id="payableForm">
+      <div class="full"><label>Tipo da conta</label>
+        <div style="display:flex;gap:18px;align-items:center;padding-top:4px;flex-wrap:wrap;">
+          <label style="display:flex;gap:6px;align-items:center;cursor:pointer;font-weight:400;">
+            <input type="radio" name="payTipoConta" value="PF" ${(!p.tipoConta||p.tipoConta==='PF')?'checked':''}> 👤 Pessoal (PF)
+          </label>
+          <label style="display:flex;gap:6px;align-items:center;cursor:pointer;font-weight:400;">
+            <input type="radio" name="payTipoConta" value="PJ" ${p.tipoConta==='PJ'?'checked':''}> 🏢 Empresa (PJ)
+          </label>
+        </div>
+      </div>
       <div class="full"><label>Nome da conta</label><input type="text" id="payName" value="${esc(p.name)}" required></div>
       <div><label>Valor da conta</label>
         <div class="input-icon-wrap"><span class="input-icon">R$</span><input type="text" id="payValue" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)" value="${p.value?fmtBRLInput(p.value):''}"></div>
@@ -6218,7 +6228,7 @@ function showPayableForm(p,containerId){
   document.getElementById('payableForm').addEventListener('submit',e=>{
     e.preventDefault();
     const rec=document.getElementById('payRecurrence').value;
-    const obj={ name:document.getElementById('payName').value.trim(), value:parseBRL(document.getElementById('payValue').value||''), recurrence:rec, active:true, tipoValor:document.querySelector('input[name="payTipoValor"]:checked')?.value||'fixo' };
+    const obj={ name:document.getElementById('payName').value.trim(), value:parseBRL(document.getElementById('payValue').value||''), recurrence:rec, active:true, tipoValor:document.querySelector('input[name="payTipoValor"]:checked')?.value||'fixo', tipoConta:document.querySelector('input[name="payTipoConta"]:checked')?.value||'PF' };
     if(!obj.name) return;
     if(rec==='unico'){
       obj.dueDate=document.getElementById('payDueDate').value;
@@ -6404,7 +6414,8 @@ function renderPayablesMonthList(){
   const hidePaid=document.getElementById('hidePaidPayables')?.checked;
 
   const allItems=state.payables.filter(p=>p.active!==false && payableAppliesInMonth(p,mk));
-  // Calcular totais sobre todos os itens (antes do filtro de ocultar)
+
+  // Grand totals
   let totalMes=0, totalPago=0;
   allItems.forEach(p=>{
     const occ=occMap[p.id]||{status:'pendente'};
@@ -6413,11 +6424,11 @@ function renderPayablesMonthList(){
     if(occ.status==='pago') totalPago+=effVal;
   });
 
-  // Aplicar filtro de ocultar pagas
-  const items=hidePaid ? allItems.filter(p=>(occMap[p.id]||{status:'pendente'}).status!=='pago') : allItems;
+  // Split by PF/PJ
+  const pfItems=allItems.filter(p=>(p.tipoConta||'PF')==='PF');
+  const pjItems=allItems.filter(p=>p.tipoConta==='PJ');
 
   if(allItems.length===0){
-    // Mesmo sem contas no mês, pode haver atraso de meses anteriores
     let emptyHtml='';
     if(mk===currentMonthKey()){
       const overdue=computeOverdueBills();
@@ -6440,24 +6451,6 @@ function renderPayablesMonthList(){
     el.innerHTML=emptyHtml+`<div class="empty">Nenhuma conta a pagar em ${fmtMonthBR(mk)}.</div>`;
     return;
   }
-
-  items.sort((a,b)=>{
-    const paidA=(occMap[a.id]||{}).status==='pago'?1:0;
-    const paidB=(occMap[b.id]||{}).status==='pago'?1:0;
-    if(paidA!==paidB) return paidA-paidB; // pendentes primeiro
-    const da=payableDueDateInMonth(a,mk);
-    const db_=payableDueDateInMonth(b,mk);
-    if(da!==db_) return da.localeCompare(db_);
-    return (a.name||'').localeCompare(b.name||'','pt-BR');
-  });
-
-  // Agrupar por dia de vencimento
-  const grupos={};
-  items.forEach(p=>{
-    const due=payableDueDateInMonth(p,mk);
-    if(!grupos[due]) grupos[due]=[];
-    grupos[due].push(p);
-  });
 
   // ── Seção de contas em atraso (apenas no mês atual) ───────────────────────
   let overdueHtml='';
@@ -6486,10 +6479,41 @@ function renderPayablesMonthList(){
     }
   }
 
-  let html='';
-  if(items.length===0){
-    html='<div class="empty" style="padding:14px 0;">Todas as contas deste mês já foram pagas. ✅</div>';
-  } else {
+  // ── Helper: renderiza grupos de vencimento para um subconjunto de itens ──
+  function renderPayableSection(sItems, sLabel, accentColor){
+    let sTot=0, sPago=0;
+    sItems.forEach(p=>{
+      const occ=occMap[p.id]||{status:'pendente'};
+      const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
+      sTot+=effVal;
+      if(occ.status==='pago') sPago+=effVal;
+    });
+    let sh=`<div style="margin:20px 0 10px;padding:9px 14px;border-left:4px solid ${accentColor};border-radius:0 8px 8px 0;background:var(--bg2);display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <span style="font-weight:700;font-size:.95rem;">${sLabel}</span>
+      <span style="font-size:.82rem;color:var(--text2);">✅ Pago: <strong>${fmtBRL(sPago)}</strong> &nbsp;·&nbsp; ⏳ Pendente: <strong>${fmtBRL(sTot-sPago)}</strong> &nbsp;·&nbsp; 📋 Total: <strong>${fmtBRL(sTot)}</strong></span>
+    </div>`;
+    if(sItems.length===0){
+      return sh+`<div class="empty" style="padding:6px 0 14px;font-size:.88rem;">Nenhuma conta de ${sLabel} neste mês.</div>`;
+    }
+    const visItems=hidePaid ? sItems.filter(p=>(occMap[p.id]||{status:'pendente'}).status!=='pago') : sItems;
+    if(visItems.length===0){
+      return sh+`<div class="empty" style="padding:6px 0 14px;font-size:.88rem;">Todas as contas de ${sLabel} estão pagas. ✅</div>`;
+    }
+    visItems.sort((a,b)=>{
+      const paidA=(occMap[a.id]||{}).status==='pago'?1:0;
+      const paidB=(occMap[b.id]||{}).status==='pago'?1:0;
+      if(paidA!==paidB) return paidA-paidB;
+      const da=payableDueDateInMonth(a,mk);
+      const db_=payableDueDateInMonth(b,mk);
+      if(da!==db_) return da.localeCompare(db_);
+      return (a.name||'').localeCompare(b.name||'','pt-BR');
+    });
+    const grupos={};
+    visItems.forEach(p=>{
+      const due=payableDueDateInMonth(p,mk);
+      if(!grupos[due]) grupos[due]=[];
+      grupos[due].push(p);
+    });
     Object.keys(grupos).sort().forEach(due=>{
       const dia=due.slice(-2).replace(/^0/,'');
       const nomeMes=new Date(due+'T12:00:00').toLocaleDateString('pt-BR',{month:'long'});
@@ -6503,11 +6527,9 @@ function renderPayablesMonthList(){
         const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
         return s+(occ.status!=='pago'?effVal:0);
       },0);
-      html+=`<div style="margin-bottom:18px;">
+      sh+=`<div style="margin-bottom:18px;">
         <div style="margin-bottom:6px;padding:6px 0;border-bottom:2px solid var(--gold);">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Vencimento dia ${dia} de ${nomeMes}</span>
-          </div>
+          <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Vencimento dia ${dia} de ${nomeMes}</span>
           <div style="display:flex;gap:16px;margin-top:4px;font-size:.82rem;">
             <span style="color:#16a34a;">✅ Pago: <strong>${fmtBRL(subtotalPago)}</strong></span>
             <span style="color:var(--amber,#e67e22);">⏳ Pendente: <strong>${fmtBRL(subtotalPendente)}</strong></span>
@@ -6519,7 +6541,7 @@ function renderPayablesMonthList(){
         const paid=occ.status==='pago';
         const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
         const editValBtn=p.tipoValor==='variavel'?`<button class="icon-btn" style="margin-left:6px;" onclick="editPayableMonthValue('${p.id}','${mk}')" title="Alterar valor deste mês">✏️ Editar valor</button>`:'';
-        html+=`<tr id="payrow-${p.id}">
+        sh+=`<tr id="payrow-${p.id}">
           <td>${esc(p.name)}</td>
           <td id="payval-${p.id}" style="white-space:nowrap;">💰 ${fmtBRL(effVal)}${p.tipoValor==='variavel'?'<span class="muted" style="font-size:10px;margin-left:4px;">(variável)</span>':''}${editValBtn}</td>
           <td>${p.recurrence==='custom'?(p.customIntervalDays%7===0?`A cada ${p.customIntervalDays/7} sem.`:`A cada ${p.customIntervalDays} dias`):({unico:'Único',mensal:'Mensal',anual:'Anual',diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal'}[p.recurrence]||p.recurrence)}</td>
@@ -6527,18 +6549,22 @@ function renderPayablesMonthList(){
           <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'↩ Desfazer':'✔ Marcar pago'}</button></td>
         </tr>`;
       });
-      html+=`</tbody></table></div>`;
+      sh+=`</tbody></table></div>`;
     });
+    return sh;
   }
-  html+=`<div style="padding:12px 0;border-top:2px solid var(--border);margin-top:8px;">
-    <div style="font-size:.85rem;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Total do mês</div>
+
+  const sectionsHtml = renderPayableSection(pfItems,'👤 Pessoal (PF)','#4f7cff') + renderPayableSection(pjItems,'🏢 Empresa (PJ)','#f59e0b');
+
+  const grandTotal=`<div style="padding:12px 0;border-top:2px solid var(--border);margin-top:8px;">
+    <div style="font-size:.85rem;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Total geral do mês</div>
     <div style="display:flex;gap:24px;flex-wrap:wrap;">
       <span style="color:#16a34a;font-size:.95rem;">✅ Total pago: <strong>${fmtBRL(totalPago)}</strong></span>
       <span style="color:var(--amber,#e67e22);font-size:.95rem;">⏳ Total pendente: <strong>${fmtBRL(totalMes-totalPago)}</strong></span>
       <span style="color:var(--text2);font-size:.95rem;">📋 Total geral: <strong>${fmtBRL(totalMes)}</strong></span>
     </div>
   </div>`;
-  el.innerHTML=overdueHtml+html;
+  el.innerHTML=overdueHtml+sectionsHtml+grandTotal;
 }
 function sortPayablesList(col){
   if(payablesSortCol===col){ payablesSortDir*=-1; }
@@ -6569,14 +6595,6 @@ function renderPayablesList(){
     const arrow=active?(payablesSortDir===1?' ↑':' ↓'):'';
     return `<th onclick="sortPayablesList('${col}')" style="cursor:pointer;user-select:none;white-space:nowrap;">${label}${arrow}</th>`;
   }
-  let html=`<table><thead><tr>
-    ${thHtml('nome','Conta')}
-    ${thHtml('valor','Valor')}
-    ${thHtml('recorrencia','Recorrência')}
-    ${thHtml('pagamento','Pagamento')}
-    ${thHtml('prazo','Prazo')}
-    <th></th>
-  </tr></thead><tbody>`;
   const RECUR_TEXT={diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal',mensal:'Mensal',anual:'Anual',unico:'Único'};
   function recurrenceLabel(p){
     if(p.recurrence==='custom'){
@@ -6585,34 +6603,49 @@ function renderPayablesList(){
     }
     return RECUR_TEXT[p.recurrence]||p.recurrence||'—';
   }
-  sorted.forEach(p=>{
-    let pagamento, prazo;
-    if(p.recurrence==='unico'){
-      pagamento=fmtDateFull(p.dueDate);
-      prazo='Parcela única';
-    }else if(p.recurrence==='custom'){
-      pagamento=`A cada ${p.customIntervalDays||'?'} dias (início ${fmtDateFull(p.startDate)})`;
-      prazo='Indefinido';
-    }else{
-      pagamento=`Todo dia ${p.dueDay}`;
-      prazo = p.termType==='parcelas' ? `${p.termCount} parcelas (a partir de ${fmtDateFull(p.startDate)})` : `Indefinido (a partir de ${fmtDateFull(p.startDate)})`;
-    }
-    html+=`<tr>
-      <td>${esc(p.name)}</td>
-      <td>💰 ${fmtBRL(p.value||0)}${p.tipoValor==='variavel'?'<br><span class="muted" style="font-size:10px;">Variável por mês</span>':''}</td>
-      <td>${recurrenceLabel(p)}</td>
-      <td>${pagamento}</td>
-      <td>${prazo}</td>
-      <td class="row">
-        <button class="icon-btn" onclick="editPayable('${p.id}')">Editar</button>
-        <button class="icon-btn" onclick="deletePayable('${p.id}')">Excluir</button>
-      </td>
-    </tr>`;
-    if(editingPayableId===p.id){
-      html+=`<tr><td colspan="6" style="background:var(--bg2);padding:14px;"><div id="payableEditWrap-${p.id}"></div></td></tr>`;
-    }
-  });
-  html+='</tbody></table>';
+  function buildTableRows(items){
+    let r='';
+    items.forEach(p=>{
+      let pagamento, prazo;
+      if(p.recurrence==='unico'){
+        pagamento=fmtDateFull(p.dueDate);
+        prazo='Parcela única';
+      }else if(p.recurrence==='custom'){
+        pagamento=`A cada ${p.customIntervalDays||'?'} dias (início ${fmtDateFull(p.startDate)})`;
+        prazo='Indefinido';
+      }else{
+        pagamento=`Todo dia ${p.dueDay}`;
+        prazo = p.termType==='parcelas' ? `${p.termCount} parcelas (a partir de ${fmtDateFull(p.startDate)})` : `Indefinido (a partir de ${fmtDateFull(p.startDate)})`;
+      }
+      r+=`<tr>
+        <td>${esc(p.name)}</td>
+        <td>💰 ${fmtBRL(p.value||0)}${p.tipoValor==='variavel'?'<br><span class="muted" style="font-size:10px;">Variável por mês</span>':''}</td>
+        <td>${recurrenceLabel(p)}</td>
+        <td>${pagamento}</td>
+        <td>${prazo}</td>
+        <td class="row">
+          <button class="icon-btn" onclick="editPayable('${p.id}')">Editar</button>
+          <button class="icon-btn" onclick="deletePayable('${p.id}')">Excluir</button>
+        </td>
+      </tr>`;
+      if(editingPayableId===p.id){
+        r+=`<tr><td colspan="6" style="background:var(--bg2);padding:14px;"><div id="payableEditWrap-${p.id}"></div></td></tr>`;
+      }
+    });
+    return r;
+  }
+  function buildSection(items, sLabel, accentColor){
+    const thead=`<thead><tr>${thHtml('nome','Conta')}${thHtml('valor','Valor')}${thHtml('recorrencia','Recorrência')}${thHtml('pagamento','Pagamento')}${thHtml('prazo','Prazo')}<th></th></tr></thead>`;
+    const rows=buildTableRows(items);
+    return `<div style="margin:20px 0 8px;padding:9px 14px;border-left:4px solid ${accentColor};border-radius:0 8px 8px 0;background:var(--bg2);">
+      <span style="font-weight:700;font-size:.95rem;">${sLabel}</span>
+      <span style="margin-left:10px;font-size:.82rem;color:var(--text2);">${items.length} conta${items.length!==1?'s':''}</span>
+    </div>
+    ${items.length===0?`<div class="empty" style="padding:6px 0 12px;font-size:.88rem;">Nenhuma conta de ${sLabel} cadastrada.</div>`:`<table>${thead}<tbody>${rows}</tbody></table>`}`;
+  }
+  const pfSorted=sorted.filter(p=>(p.tipoConta||'PF')==='PF');
+  const pjSorted=sorted.filter(p=>p.tipoConta==='PJ');
+  let html=buildSection(pfSorted,'👤 Pessoal (PF)','#4f7cff')+buildSection(pjSorted,'🏢 Empresa (PJ)','#f59e0b');
   el.innerHTML=html;
   if(editingPayableId){
     const target=state.payables.find(x=>x.id===editingPayableId);
