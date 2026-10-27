@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261026-01';
+var BUILD='20261027-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -1667,12 +1667,18 @@ function toggleTimer(actId){
   const done=()=>{ window._timerPending=null; };
   if(occ.timerStart){
     const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
+    const outTs=firebase.firestore.Timestamp.fromMillis(occ.timerStart.toMillis()+Math.max(0,elapsed*1000));
+    const session={in:occ.timerStart, out:outTs};
     const prev=state.occToday[actId];
     // Atualização otimista: pausa o timer imediatamente
-    state.occToday[actId]={...occ, timeSpent:(occ.timeSpent||0)+elapsed, timerStart:null};
+    state.occToday[actId]={...occ, timeSpent:(occ.timeSpent||0)+elapsed, timerStart:null,
+      timerSessions:[...(occ.timerSessions||[]),session]};
     renderHoje();
-    setOccurrence(ds,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()})
-      .then(done).catch(err=>{ state.occToday[actId]=prev; renderHoje(); done(); alert('ERRO ao pausar timer: '+err.message); });
+    setOccurrence(ds,actId,{
+      timeSpent:(occ.timeSpent||0)+elapsed,
+      timerStart:del(),
+      timerSessions:firebase.firestore.FieldValue.arrayUnion(session)
+    }).then(done).catch(err=>{ state.occToday[actId]=prev; renderHoje(); done(); alert('ERRO ao pausar timer: '+err.message); });
   }else{
     const nowTs=ts();
     const patch={timerStart:nowTs, status:occ.status||'pendente'};
@@ -1692,11 +1698,17 @@ function toggleOverdueTimer(actId,date){
   const done=()=>{ window._timerPending=null; };
   if(occ.timerStart){
     const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
+    const outTs=firebase.firestore.Timestamp.fromMillis(occ.timerStart.toMillis()+Math.max(0,elapsed*1000));
+    const session={in:occ.timerStart, out:outTs};
     const prev=state.occRange[key];
-    state.occRange[key]={...occ, timeSpent:(occ.timeSpent||0)+elapsed, timerStart:null};
+    state.occRange[key]={...occ, timeSpent:(occ.timeSpent||0)+elapsed, timerStart:null,
+      timerSessions:[...(occ.timerSessions||[]),session]};
     renderHoje();
-    setOccurrence(date,actId,{timeSpent:(occ.timeSpent||0)+elapsed, timerStart:del()})
-      .then(done).catch(()=>{ state.occRange[key]=prev; renderHoje(); done(); });
+    setOccurrence(date,actId,{
+      timeSpent:(occ.timeSpent||0)+elapsed,
+      timerStart:del(),
+      timerSessions:firebase.firestore.FieldValue.arrayUnion(session)
+    }).then(done).catch(()=>{ state.occRange[key]=prev; renderHoje(); done(); });
   }else{
     const nowTs=ts();
     const patch={timerStart:nowTs, status:occ.status||'pendente'};
@@ -5725,7 +5737,8 @@ async function buildAndSaveDailyReport(ds){
       completedAt: occ.completedAt ? occ.completedAt.toMillis() : null,
       notaDia: occ.notaDia||'',
       descricaoFeito: occ.descricaoFeito||'',
-      rescheduledTo: occ.rescheduledTo||''
+      rescheduledTo: occ.rescheduledTo||'',
+      timerSessions: (occ.timerSessions||[]).filter(s=>s.in&&s.out).map(s=>({in:s.in.toMillis(),out:s.out.toMillis()}))
     });
   });
 
@@ -5786,15 +5799,17 @@ function exportArquivoPdf(id){
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
   const azul=[31,58,95];
   const cinza=[100,100,100];
-  // Cabeçalho
-  doc.setFillColor(...azul);
-  doc.rect(0,0,297,18,'F');
-  doc.setTextColor(255,255,255);
-  doc.setFontSize(13);
-  doc.setFont('helvetica','bold');
-  doc.text(`Relatório Diário — ${fmtDateFull(r.date)}`,10,12);
-  doc.setFont('helvetica','normal');
-  // Seção de colaboradores
+  function cabecalhoPdf(titulo){
+    doc.setFillColor(...azul);
+    doc.rect(0,0,297,18,'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(13);
+    doc.setFont('helvetica','bold');
+    doc.text(titulo,10,12);
+    doc.setFont('helvetica','normal');
+  }
+  // === PÁGINA 1: Resumo do dia ===
+  cabecalhoPdf(`Relatório Diário — ${fmtDateFull(r.date)}`);
   let y=26;
   doc.setTextColor(...azul);
   doc.setFontSize(10);
@@ -5802,27 +5817,26 @@ function exportArquivoPdf(id){
   doc.text('Equipe',10,y); y+=6;
   doc.setFont('helvetica','normal');
   doc.setTextColor(...cinza);
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   (r.users||[]).forEach(u=>{
-    const entrada=u.sessions&&u.sessions.length
-      ? new Date(u.sessions[0].in).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
-      : '—';
-    const saida=u.sessions&&u.sessions.length
-      ? new Date(u.sessions[u.sessions.length-1].out).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
-      : '—';
-    const linha=u.ausente
-      ? `${u.name}: AUSENTE`
-      : `${u.name}: ${fmtHours(u.horas||0)} trabalhadas  |  Entrada: ${entrada}  |  Saída: ${saida}`;
-    doc.text(linha,10,y); y+=5.5;
+    if(u.ausente){
+      doc.text(`${u.name}: AUSENTE`,10,y); y+=5.5;
+    } else {
+      const sessStr=(u.sessions||[]).map((s,i)=>{
+        const inp=new Date(s.in).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+        const outp=s.out?new Date(s.out).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—';
+        return (u.sessions.length>1?`S${i+1}: `:'Entrada: ')+inp+' / Saída: '+outp;
+      }).join('   ');
+      doc.text(`${u.name}: ${fmtHours(u.horas||0)} trabalhadas   |   ${sessStr}`,10,y); y+=5.5;
+    }
   });
   if(r.ausentes&&r.ausentes.length){
     y+=2;
     doc.setTextColor(180,30,30);
-    doc.text(`⚠ Ausentes no dia: ${r.ausentes.join(', ')}`,10,y); y+=6;
+    doc.text(`Ausentes: ${r.ausentes.join(', ')}`,10,y); y+=6;
     doc.setTextColor(...cinza);
   }
   y+=4;
-  // Tabela de atividades
   doc.autoTable({
     startY:y,
     head:[['Atividade','Cliente/Apólice','Responsável','Prioridade','Status','Início','Conclusão','Tempo']],
@@ -5832,8 +5846,8 @@ function exportArquivoPdf(id){
       it.responsavel,
       PRIORITY_LABELS[it.prioridade]||it.prioridade,
       STATUS_LABELS[it.status]||it.status,
-      it.startedAt ? new Date(it.startedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—',
-      it.completedAt ? new Date(it.completedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—',
+      it.startedAt?new Date(it.startedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—',
+      it.completedAt?new Date(it.completedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—',
       fmtHMS(it.tempo||0)
     ]),
     styles:{fontSize:7.5,cellPadding:2},
@@ -5841,6 +5855,61 @@ function exportArquivoPdf(id){
     alternateRowStyles:{fillColor:[245,247,251]},
     margin:{left:10,right:10}
   });
+  // === PÁGINA 2: Timeline detalhada ===
+  doc.addPage();
+  cabecalhoPdf(`Timeline Detalhada — ${fmtDateFull(r.date)}`);
+  // Monta todos os eventos: sessões de ponto + sessões de timer por atividade
+  const allEvents=[];
+  (r.users||[]).forEach(u=>{
+    (u.sessions||[]).forEach(s=>{
+      if(s.in&&s.out){
+        allEvents.push({
+          ts:s.in, tsOut:s.out,
+          user:u.name,
+          tipo:'Ponto',
+          detalhe:'Período de trabalho',
+          dur:fmtHMS((s.out-s.in)/1000)
+        });
+      }
+    });
+  });
+  (r.activities||[]).forEach(it=>{
+    (it.timerSessions||[]).forEach(s=>{
+      if(s.in&&s.out){
+        allEvents.push({
+          ts:s.in, tsOut:s.out,
+          user:it.responsavel,
+          tipo:'Atividade',
+          detalhe:it.title+(it.cliente?` [${it.cliente}]`:''),
+          dur:fmtHMS((s.out-s.in)/1000)
+        });
+      }
+    });
+  });
+  allEvents.sort((a,b)=>a.ts-b.ts);
+  if(allEvents.length===0){
+    doc.setTextColor(...cinza);
+    doc.setFontSize(9);
+    doc.text('Nenhuma sessão detalhada registrada. Os dados de timeline serão coletados a partir de agora.',10,30);
+  } else {
+    doc.autoTable({
+      startY:26,
+      head:[['Colaborador','Tipo','Atividade / Período','Início','Fim','Duração']],
+      body:allEvents.map(e=>[
+        e.user,
+        e.tipo,
+        e.detalhe,
+        new Date(e.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+        new Date(e.tsOut).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+        e.dur
+      ]),
+      styles:{fontSize:8,cellPadding:2.5},
+      headStyles:{fillColor:azul,textColor:255,fontStyle:'bold'},
+      alternateRowStyles:{fillColor:[245,247,251]},
+      margin:{left:10,right:10},
+      columnStyles:{0:{cellWidth:38},1:{cellWidth:22},2:{cellWidth:135},3:{cellWidth:20},4:{cellWidth:20},5:{cellWidth:22}}
+    });
+  }
   doc.save(`relatorio_${r.date}.pdf`);
 }
 function toggleArquivoDetail(id){
@@ -5888,13 +5957,15 @@ function arquivoDetailHtml(r){
   let html='<div class="cards">';
   (r.users||[]).forEach(u=>{
     const ausente=u.ausente||false;
-    const entrada=u.sessions&&u.sessions.length ? fmtTimestamp(u.sessions[0].in) : '—';
-    const saida=u.sessions&&u.sessions.length ? fmtTimestamp(u.sessions[u.sessions.length-1].out) : '—';
+    const sessHtml=(u.sessions||[]).map((s,i)=>{
+      const inp=fmtTimestamp(s.in);
+      const outp=s.out?fmtTimestamp(s.out):'em andamento';
+      return `<div style="font-size:11px;color:var(--muted);margin-top:2px">${u.sessions.length>1?`Sessão ${i+1}: `:''}Entrada: <strong>${inp}</strong> &nbsp; Saída: <strong>${outp}</strong></div>`;
+    }).join('');
     html+=`<div class="card${ausente?' style="border-color:#c0392b"':''}">
       <div class="label">${esc(u.name)}${ausente?' <span style="color:#c0392b;font-size:11px">⚠ Ausente</span>':''}</div>
       <div class="value">${ausente?'—':fmtHours(u.horas||0)}</div>
-      ${!ausente?`<div style="font-size:11px;color:var(--muted);margin-top:4px">Entrada: ${entrada} &nbsp; Saída: ${saida}</div>`:''}
-      ${!ausente&&u.sessions&&u.sessions.length>1?`<div style="font-size:10px;color:var(--muted)">${u.sessions.map((_,i)=>i===0?'':` Intervalo ${i}`).filter(Boolean).join('')}</div>`:''}
+      ${!ausente?sessHtml:''}
     </div>`;
   });
   html+='</div>';
@@ -5915,10 +5986,13 @@ function arquivoDetailHtml(r){
   if(acts.length===0){
     html+='<div class="empty">Nenhuma atividade registrada nesta data.</div>';
   }else{
-    html+='<table><thead><tr><th>Atividade</th><th>Cliente/Apólice</th><th>Responsável</th><th>Prioridade</th><th>Status</th><th>Registro do dia</th><th>Início</th><th>Conclusão</th><th>Tempo gasto</th></tr></thead><tbody>';
+    html+='<table><thead><tr><th>Atividade</th><th>Cliente/Apólice</th><th>Responsável</th><th>Prioridade</th><th>Status</th><th>Registro do dia</th><th>Início</th><th>Conclusão</th><th>Tempo gasto</th><th>Sessões de trabalho</th></tr></thead><tbody>';
     acts.forEach(it=>{
       const registroDia=it.notaDia||it.descricaoFeito||'';
       const reagendado=it.rescheduledTo?` <span style="font-size:10px;color:#92400e">(reagendado p/ ${it.rescheduledTo})</span>`:'';
+      const sessStr=(it.timerSessions||[]).length===0
+        ? '<span style="color:#aaa;font-size:11px">sem registro</span>'
+        : (it.timerSessions||[]).map((s,i)=>`<span style="font-size:11px;white-space:nowrap">S${i+1}: ${fmtTimestamp(s.in)}→${fmtTimestamp(s.out)} <em style="color:var(--muted)">(${fmtHMS((s.out-s.in)/1000)})</em></span>`).join('<br>');
       html+=`<tr>
         <td>${esc(it.title)}</td>
         <td>${esc(it.cliente||'')}</td>
@@ -5929,6 +6003,7 @@ function arquivoDetailHtml(r){
         <td>${fmtTimestamp(it.startedAt)}</td>
         <td>${fmtTimestamp(it.completedAt)}</td>
         <td>${fmtHMS(it.tempo||0)}</td>
+        <td>${sessStr}</td>
       </tr>`;
     });
     html+='</tbody></table>';
