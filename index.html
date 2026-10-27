@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261027-02';
+var BUILD='20261027-03';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -629,9 +629,14 @@ textarea{width:100%;min-height:60px;resize:vertical;}
 </section>
 
 <section id="tab-contas" class="section owner-only">
-  <div class="row" style="margin-bottom:12px;">
+  <div class="row" style="margin-bottom:18px;">
     <button class="btn primary" id="newPayableBtn">+ Nova conta</button>
     <button class="btn" id="genPayablesReportBtn">Gerar relatório do mês e arquivar</button>
+  </div>
+  <!-- Sub-abas PF / PJ -->
+  <div style="display:flex;gap:3px;border-bottom:2px solid var(--border);margin-bottom:22px;">
+    <button id="payTabPF" onclick="switchPayablesTab('PF')" style="padding:9px 26px;border:2px solid var(--border);border-bottom:2px solid var(--bg);border-radius:9px 9px 0 0;font-weight:700;color:var(--accent);background:var(--bg);cursor:pointer;position:relative;bottom:-2px;z-index:1;font-size:.92rem;transition:all .15s;">👤 Pessoal (PF)</button>
+    <button id="payTabPJ" onclick="switchPayablesTab('PJ')" style="padding:9px 26px;border:2px solid var(--border);border-bottom:none;border-radius:9px 9px 0 0;font-weight:500;color:var(--text2);background:var(--bg2);cursor:pointer;position:relative;bottom:-2px;font-size:.92rem;transition:all .15s;">🏢 Empresa (PJ)</button>
   </div>
   <div id="payableFormWrap"></div>
   <h3>Contas do mês</h3>
@@ -1209,6 +1214,7 @@ let selectedBoletoId=null;
 let _boletosSortCol='status'; let _boletosSortAsc=true;
 let payablesSortCol='nome';
 let payablesSortDir=1; // 1=asc, -1=desc
+let payablesTab='PF'; // aba ativa em Contas a Pagar
 let editingPayableId=null;
 
 document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
@@ -6132,7 +6138,7 @@ function showPayableForm(p,containerId){
   containerId=containerId||'payableFormWrap';
   const isInline = containerId!=='payableFormWrap';
   const isEdit=!!p;
-  p=p||{id:null,name:'',tipoConta:'PF',value:0,recurrence:'unico',dueDate:todayStr(),dueDay:1,startDate:todayStr(),termType:'indefinido',termCount:12};
+  p=p||{id:null,name:'',tipoConta:payablesTab,value:0,recurrence:'unico',dueDate:todayStr(),dueDay:1,startDate:todayStr(),termType:'indefinido',termCount:12};
   const container=document.getElementById(containerId);
   if(!container) return;
   function closeThisForm(){
@@ -6291,6 +6297,20 @@ function goToCurrentPayablesMonth(){
   state.payableOccSelected=state.payableOccCurrent;
   renderPayablesMonthList();
 }
+function switchPayablesTab(tab){
+  payablesTab=tab;
+  const activeS='padding:9px 26px;border:2px solid var(--border);border-bottom:2px solid var(--bg);border-radius:9px 9px 0 0;font-weight:700;color:var(--accent);background:var(--bg);cursor:pointer;position:relative;bottom:-2px;z-index:1;font-size:.92rem;transition:all .15s;';
+  const inactS='padding:9px 26px;border:2px solid var(--border);border-bottom:none;border-radius:9px 9px 0 0;font-weight:500;color:var(--text2);background:var(--bg2);cursor:pointer;position:relative;bottom:-2px;font-size:.92rem;transition:all .15s;';
+  const pfBtn=document.getElementById('payTabPF');
+  const pjBtn=document.getElementById('payTabPJ');
+  if(pfBtn) pfBtn.style.cssText=tab==='PF'?activeS:inactS;
+  if(pjBtn) pjBtn.style.cssText=tab==='PJ'?activeS:inactS;
+  const fw=document.getElementById('payableFormWrap');
+  if(fw) fw.innerHTML='';
+  editingPayableId=null;
+  renderPayablesMonthList();
+  renderPayablesList();
+}
 function togglePayablePaid(payableId,mk,currentStatus){
   const newStatus = currentStatus==='pago'?'pendente':'pago';
   const patch={status:newStatus};
@@ -6413,9 +6433,10 @@ function renderPayablesMonthList(){
   const occMap=mk===currentMonthKey() ? state.payableOccCurrent : state.payableOccSelected;
   const hidePaid=document.getElementById('hidePaidPayables')?.checked;
 
-  const allItems=state.payables.filter(p=>p.active!==false && payableAppliesInMonth(p,mk));
+  // Filtrar pela aba ativa (PF ou PJ)
+  const allItems=state.payables.filter(p=>p.active!==false && payableAppliesInMonth(p,mk) && (p.tipoConta||'PF')===payablesTab);
 
-  // Grand totals
+  // Calcular totais
   let totalMes=0, totalPago=0;
   allItems.forEach(p=>{
     const occ=occMap[p.id]||{status:'pendente'};
@@ -6424,14 +6445,13 @@ function renderPayablesMonthList(){
     if(occ.status==='pago') totalPago+=effVal;
   });
 
-  // Split by PF/PJ
-  const pfItems=allItems.filter(p=>(p.tipoConta||'PF')==='PF');
-  const pjItems=allItems.filter(p=>p.tipoConta==='PJ');
+  // Filtro de ocultar pagas
+  const items=hidePaid ? allItems.filter(p=>(occMap[p.id]||{status:'pendente'}).status!=='pago') : allItems;
 
   if(allItems.length===0){
     let emptyHtml='';
     if(mk===currentMonthKey()){
-      const overdue=computeOverdueBills();
+      const overdue=computeOverdueBills().filter(({payable:p})=>(p.tipoConta||'PF')===payablesTab);
       if(overdue.length>0){
         emptyHtml=`<div style="margin-bottom:20px;padding:14px 16px;background:var(--danger-bg,#fff5f5);border:2px solid #e53e3e;border-radius:10px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
@@ -6452,10 +6472,10 @@ function renderPayablesMonthList(){
     return;
   }
 
-  // ── Seção de contas em atraso (apenas no mês atual) ───────────────────────
+  // ── Contas em atraso (apenas mês atual, filtradas pela aba ativa) ─────────
   let overdueHtml='';
   if(mk===currentMonthKey()){
-    const overdue=computeOverdueBills();
+    const overdue=computeOverdueBills().filter(({payable:p})=>(p.tipoConta||'PF')===payablesTab);
     if(overdue.length>0){
       overdueHtml=`<div style="margin-bottom:20px;padding:14px 16px;background:var(--danger-bg,#fff5f5);border:2px solid #e53e3e;border-radius:10px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
@@ -6479,27 +6499,11 @@ function renderPayablesMonthList(){
     }
   }
 
-  // ── Helper: renderiza grupos de vencimento para um subconjunto de itens ──
-  function renderPayableSection(sItems, sLabel, accentColor){
-    let sTot=0, sPago=0;
-    sItems.forEach(p=>{
-      const occ=occMap[p.id]||{status:'pendente'};
-      const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
-      sTot+=effVal;
-      if(occ.status==='pago') sPago+=effVal;
-    });
-    let sh=`<div style="margin:20px 0 10px;padding:9px 14px;border-left:4px solid ${accentColor};border-radius:0 8px 8px 0;background:var(--bg2);display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-      <span style="font-weight:700;font-size:.95rem;">${sLabel}</span>
-      <span style="font-size:.82rem;color:var(--text2);">✅ Pago: <strong>${fmtBRL(sPago)}</strong> &nbsp;·&nbsp; ⏳ Pendente: <strong>${fmtBRL(sTot-sPago)}</strong> &nbsp;·&nbsp; 📋 Total: <strong>${fmtBRL(sTot)}</strong></span>
-    </div>`;
-    if(sItems.length===0){
-      return sh+`<div class="empty" style="padding:6px 0 14px;font-size:.88rem;">Nenhuma conta de ${sLabel} neste mês.</div>`;
-    }
-    const visItems=hidePaid ? sItems.filter(p=>(occMap[p.id]||{status:'pendente'}).status!=='pago') : sItems;
-    if(visItems.length===0){
-      return sh+`<div class="empty" style="padding:6px 0 14px;font-size:.88rem;">Todas as contas de ${sLabel} estão pagas. ✅</div>`;
-    }
-    visItems.sort((a,b)=>{
+  let html='';
+  if(items.length===0){
+    html='<div class="empty" style="padding:14px 0;">Todas as contas deste mês já foram pagas. ✅</div>';
+  } else {
+    items.sort((a,b)=>{
       const paidA=(occMap[a.id]||{}).status==='pago'?1:0;
       const paidB=(occMap[b.id]||{}).status==='pago'?1:0;
       if(paidA!==paidB) return paidA-paidB;
@@ -6509,7 +6513,7 @@ function renderPayablesMonthList(){
       return (a.name||'').localeCompare(b.name||'','pt-BR');
     });
     const grupos={};
-    visItems.forEach(p=>{
+    items.forEach(p=>{
       const due=payableDueDateInMonth(p,mk);
       if(!grupos[due]) grupos[due]=[];
       grupos[due].push(p);
@@ -6527,9 +6531,11 @@ function renderPayablesMonthList(){
         const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
         return s+(occ.status!=='pago'?effVal:0);
       },0);
-      sh+=`<div style="margin-bottom:18px;">
+      html+=`<div style="margin-bottom:18px;">
         <div style="margin-bottom:6px;padding:6px 0;border-bottom:2px solid var(--gold);">
-          <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Vencimento dia ${dia} de ${nomeMes}</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-weight:700;color:var(--gold);font-size:.9rem;text-transform:uppercase;">📅 Vencimento dia ${dia} de ${nomeMes}</span>
+          </div>
           <div style="display:flex;gap:16px;margin-top:4px;font-size:.82rem;">
             <span style="color:#16a34a;">✅ Pago: <strong>${fmtBRL(subtotalPago)}</strong></span>
             <span style="color:var(--amber,#e67e22);">⏳ Pendente: <strong>${fmtBRL(subtotalPendente)}</strong></span>
@@ -6541,7 +6547,7 @@ function renderPayablesMonthList(){
         const paid=occ.status==='pago';
         const effVal=(p.tipoValor==='variavel'&&occ.valorMes!=null)?occ.valorMes:(p.value||0);
         const editValBtn=p.tipoValor==='variavel'?`<button class="icon-btn" style="margin-left:6px;" onclick="editPayableMonthValue('${p.id}','${mk}')" title="Alterar valor deste mês">✏️ Editar valor</button>`:'';
-        sh+=`<tr id="payrow-${p.id}">
+        html+=`<tr id="payrow-${p.id}">
           <td>${esc(p.name)}</td>
           <td id="payval-${p.id}" style="white-space:nowrap;">💰 ${fmtBRL(effVal)}${p.tipoValor==='variavel'?'<span class="muted" style="font-size:10px;margin-left:4px;">(variável)</span>':''}${editValBtn}</td>
           <td>${p.recurrence==='custom'?(p.customIntervalDays%7===0?`A cada ${p.customIntervalDays/7} sem.`:`A cada ${p.customIntervalDays} dias`):({unico:'Único',mensal:'Mensal',anual:'Anual',diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal'}[p.recurrence]||p.recurrence)}</td>
@@ -6549,22 +6555,18 @@ function renderPayablesMonthList(){
           <td><button class="icon-btn" onclick="togglePayablePaid('${p.id}','${mk}','${occ.status||'pendente'}')">${paid?'↩ Desfazer':'✔ Marcar pago'}</button></td>
         </tr>`;
       });
-      sh+=`</tbody></table></div>`;
+      html+=`</tbody></table></div>`;
     });
-    return sh;
   }
-
-  const sectionsHtml = renderPayableSection(pfItems,'👤 Pessoal (PF)','#4f7cff') + renderPayableSection(pjItems,'🏢 Empresa (PJ)','#f59e0b');
-
-  const grandTotal=`<div style="padding:12px 0;border-top:2px solid var(--border);margin-top:8px;">
-    <div style="font-size:.85rem;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Total geral do mês</div>
+  html+=`<div style="padding:12px 0;border-top:2px solid var(--border);margin-top:8px;">
+    <div style="font-size:.85rem;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Total do mês</div>
     <div style="display:flex;gap:24px;flex-wrap:wrap;">
       <span style="color:#16a34a;font-size:.95rem;">✅ Total pago: <strong>${fmtBRL(totalPago)}</strong></span>
       <span style="color:var(--amber,#e67e22);font-size:.95rem;">⏳ Total pendente: <strong>${fmtBRL(totalMes-totalPago)}</strong></span>
       <span style="color:var(--text2);font-size:.95rem;">📋 Total geral: <strong>${fmtBRL(totalMes)}</strong></span>
     </div>
   </div>`;
-  el.innerHTML=overdueHtml+sectionsHtml+grandTotal;
+  el.innerHTML=overdueHtml+html;
 }
 function sortPayablesList(col){
   if(payablesSortCol===col){ payablesSortDir*=-1; }
@@ -6574,14 +6576,13 @@ function sortPayablesList(col){
 function renderPayablesList(){
   const el=document.getElementById('payablesList');
   if(!el) return;
-  if(state.payables.length===0){ el.innerHTML='<div class="empty">Nenhuma conta cadastrada ainda.</div>'; return; }
-  // Ordem de recorrência: diaria < semanal < quinzenal < mensal < unico
+  // Filtrar pela aba ativa
+  const filtered=state.payables.filter(p=>(p.tipoConta||'PF')===payablesTab);
+  if(filtered.length===0){ el.innerHTML='<div class="empty">Nenhuma conta cadastrada nesta aba.</div>'; return; }
   const recurOrder={diaria:0,semanal:1,quinzenal:2,mensal:3,anual:4,unico:5};
-  // Ordem de prazo: unico(0) < parcelas(1) < indefinido(2)
   function prazoPeso(p){ if(p.recurrence==='unico') return 0; if(p.termType==='parcelas') return 1; return 2; }
-  // Pagamento: para unico usa dueDate, para recorrente usa dueDay como "000X" para comparar
   function pagamentoSort(p){ return p.recurrence==='unico' ? (p.dueDate||'9999') : String(p.dueDay||99).padStart(2,'0'); }
-  const sorted=[...state.payables].sort((a,b)=>{
+  const sorted=[...filtered].sort((a,b)=>{
     let r=0;
     if(payablesSortCol==='nome') r=(a.name||'').localeCompare(b.name||'','pt-BR',{sensitivity:'base'});
     else if(payablesSortCol==='valor') r=(a.value||0)-(b.value||0);
@@ -6603,49 +6604,42 @@ function renderPayablesList(){
     }
     return RECUR_TEXT[p.recurrence]||p.recurrence||'—';
   }
-  function buildTableRows(items){
-    let r='';
-    items.forEach(p=>{
-      let pagamento, prazo;
-      if(p.recurrence==='unico'){
-        pagamento=fmtDateFull(p.dueDate);
-        prazo='Parcela única';
-      }else if(p.recurrence==='custom'){
-        pagamento=`A cada ${p.customIntervalDays||'?'} dias (início ${fmtDateFull(p.startDate)})`;
-        prazo='Indefinido';
-      }else{
-        pagamento=`Todo dia ${p.dueDay}`;
-        prazo = p.termType==='parcelas' ? `${p.termCount} parcelas (a partir de ${fmtDateFull(p.startDate)})` : `Indefinido (a partir de ${fmtDateFull(p.startDate)})`;
-      }
-      r+=`<tr>
-        <td>${esc(p.name)}</td>
-        <td>💰 ${fmtBRL(p.value||0)}${p.tipoValor==='variavel'?'<br><span class="muted" style="font-size:10px;">Variável por mês</span>':''}</td>
-        <td>${recurrenceLabel(p)}</td>
-        <td>${pagamento}</td>
-        <td>${prazo}</td>
-        <td class="row">
-          <button class="icon-btn" onclick="editPayable('${p.id}')">Editar</button>
-          <button class="icon-btn" onclick="deletePayable('${p.id}')">Excluir</button>
-        </td>
-      </tr>`;
-      if(editingPayableId===p.id){
-        r+=`<tr><td colspan="6" style="background:var(--bg2);padding:14px;"><div id="payableEditWrap-${p.id}"></div></td></tr>`;
-      }
-    });
-    return r;
-  }
-  function buildSection(items, sLabel, accentColor){
-    const thead=`<thead><tr>${thHtml('nome','Conta')}${thHtml('valor','Valor')}${thHtml('recorrencia','Recorrência')}${thHtml('pagamento','Pagamento')}${thHtml('prazo','Prazo')}<th></th></tr></thead>`;
-    const rows=buildTableRows(items);
-    return `<div style="margin:20px 0 8px;padding:9px 14px;border-left:4px solid ${accentColor};border-radius:0 8px 8px 0;background:var(--bg2);">
-      <span style="font-weight:700;font-size:.95rem;">${sLabel}</span>
-      <span style="margin-left:10px;font-size:.82rem;color:var(--text2);">${items.length} conta${items.length!==1?'s':''}</span>
-    </div>
-    ${items.length===0?`<div class="empty" style="padding:6px 0 12px;font-size:.88rem;">Nenhuma conta de ${sLabel} cadastrada.</div>`:`<table>${thead}<tbody>${rows}</tbody></table>`}`;
-  }
-  const pfSorted=sorted.filter(p=>(p.tipoConta||'PF')==='PF');
-  const pjSorted=sorted.filter(p=>p.tipoConta==='PJ');
-  let html=buildSection(pfSorted,'👤 Pessoal (PF)','#4f7cff')+buildSection(pjSorted,'🏢 Empresa (PJ)','#f59e0b');
+  let html=`<table><thead><tr>
+    ${thHtml('nome','Conta')}
+    ${thHtml('valor','Valor')}
+    ${thHtml('recorrencia','Recorrência')}
+    ${thHtml('pagamento','Pagamento')}
+    ${thHtml('prazo','Prazo')}
+    <th></th>
+  </tr></thead><tbody>`;
+  sorted.forEach(p=>{
+    let pagamento, prazo;
+    if(p.recurrence==='unico'){
+      pagamento=fmtDateFull(p.dueDate);
+      prazo='Parcela única';
+    }else if(p.recurrence==='custom'){
+      pagamento=`A cada ${p.customIntervalDays||'?'} dias (início ${fmtDateFull(p.startDate)})`;
+      prazo='Indefinido';
+    }else{
+      pagamento=`Todo dia ${p.dueDay}`;
+      prazo = p.termType==='parcelas' ? `${p.termCount} parcelas (a partir de ${fmtDateFull(p.startDate)})` : `Indefinido (a partir de ${fmtDateFull(p.startDate)})`;
+    }
+    html+=`<tr>
+      <td>${esc(p.name)}</td>
+      <td>💰 ${fmtBRL(p.value||0)}${p.tipoValor==='variavel'?'<br><span class="muted" style="font-size:10px;">Variável por mês</span>':''}</td>
+      <td>${recurrenceLabel(p)}</td>
+      <td>${pagamento}</td>
+      <td>${prazo}</td>
+      <td class="row">
+        <button class="icon-btn" onclick="editPayable('${p.id}')">Editar</button>
+        <button class="icon-btn" onclick="deletePayable('${p.id}')">Excluir</button>
+      </td>
+    </tr>`;
+    if(editingPayableId===p.id){
+      html+=`<tr><td colspan="6" style="background:var(--bg2);padding:14px;"><div id="payableEditWrap-${p.id}"></div></td></tr>`;
+    }
+  });
+  html+='</tbody></table>';
   el.innerHTML=html;
   if(editingPayableId){
     const target=state.payables.find(x=>x.id===editingPayableId);
