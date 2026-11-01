@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261027-04';
+var BUILD='20261031-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -2901,7 +2901,7 @@ function getMetaEntries(mk){
     // Clientes novos criados neste mês (exceto os excluídos manualmente da meta)
     if(c.createdAt && !c.excluidaDeMeta){
       const d=c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000);
-      if(monthKeyOf(d.toISOString().slice(0,10))===mk){
+      if(monthKeyOf(dstr(d))===mk){
         // Subtrair vendas adicionais do valorPagamento para não contar duas vezes
         const adicionaisTotal=(c.vendasAdicionais||[]).filter(v=>!v.cancelada).reduce((s,v)=>s+(v.valorPlano||0),0);
         const valorOriginal=Math.max(0,(c.valorPagamento||0)-adicionaisTotal);
@@ -2912,7 +2912,7 @@ function getMetaEntries(mk){
     (c.vendasAdicionais||[]).forEach((v,idx)=>{
       if(!v.data || v.cancelada) return;
       const vd=v.data.toDate?v.data.toDate():new Date((v.data.seconds||0)*1000);
-      if(monthKeyOf(vd.toISOString().slice(0,10))===mk){
+      if(monthKeyOf(dstr(vd))===mk){
         entries.push({nome:c.nome,id:c.id,vendaIdx:idx,valorPagamento:v.valorPlano||0,valorAngariacao:v.valorAngariacao||0,numeroProposta:v.numeroProposta||'',banco:c.banco||'',data:vd,tipo:'adicional',planoLabel:v.plano||'Cobertura adicional',angariacacaoPaga:!!v.angariacacaoPaga});
       }
     });
@@ -3044,7 +3044,7 @@ function showProdutoRankingModal(periodo){
   }
   state.clients.filter(c=>c.status!=='cancelado').forEach(c=>{
     const d=c.createdAt?(c.createdAt.toDate?c.createdAt.toDate():new Date((c.createdAt.seconds||0)*1000)):null;
-    const dMk=d?monthKeyOf(d.toISOString().slice(0,10)):null;
+    const dMk=d?monthKeyOf(dstr(d)):null;
     const dYear=d?d.getFullYear().toString():null;
     const pf=periodo==='all'||(periodo==='year'&&dYear===curYear)||(periodo==='month'&&dMk===curMk);
     if(pf&&d&&!c.excluidaDeMeta){
@@ -3644,7 +3644,7 @@ function showClientForm(client, containerId){
 
       <div class="full cli-sec-header">🛡️ Produtos Contratados</div>
       <div><label>Nº da proposta (principal)</label><input type="text" id="cliNumeroProposta" value="${esc(client.numeroProposta||'')}" placeholder="Ex: 113410358"></div>
-      <div><label>Data da proposta <span class="muted" style="font-weight:400;">— deixe em branco para usar hoje</span></label><input type="date" id="cliDataProposta" value="${client.createdAt?(client.createdAt.toDate?client.createdAt.toDate():new Date((client.createdAt.seconds||0)*1000)).toISOString().slice(0,10):new Date().toISOString().slice(0,10)}"></div>
+      <div><label>Data da proposta <span class="muted" style="font-weight:400;">— deixe em branco para usar hoje</span></label><input type="date" id="cliDataProposta" value="${client.createdAt?dstr(client.createdAt.toDate?client.createdAt.toDate():new Date((client.createdAt.seconds||0)*1000)):todayStr()}"></div>
       <datalist id="segurosDatalist">${(isPF?SEGUROS_LIST:[...SEGUROS_LIST,...PJ_SEGUROS_LIST]).map(s=>`<option value="${s}">`).join('')}</datalist>
       <div class="full" id="cliCoberturasWrap">${_initCobs.map((cob,idx)=>`<div class="cob-row" data-cap="${cob.capitalSegurado||0}" data-sin="${cob.sinistrosPagos||0}"><div class="cob-f-plano"><label>Plano</label><input type="text" class="cob-plano" list="segurosDatalist" value="${esc(cob.plano||'')}" placeholder="Nome do plano" oninput="syncCapitalSinistros()"></div><div class="cob-f-valor"><label>Valor R$</label><input type="text" class="cob-valor" placeholder="0,00" inputmode="numeric" value="${fmtBRLInput(cob.valorPlano)}" oninput="maskBRL(this);recalcCobRow(this)"></div><div class="cob-f-pct"><label>% carteira</label><input type="number" class="cob-pct" step="0.01" min="0" value="${cob.percentCarteira||0}" oninput="recalcCobRow(this)"></div><div class="cob-f-cart"><label>Carteira R$</label><input type="number" class="cob-cart" step="0.01" min="0" value="${(cob.valorCarteira||0).toFixed(2)}" readonly style="background:var(--bg2)"></div><div class="cob-f-rm">${idx>0?'<button type="button" class="btn-rm" onclick="removeCoberturaRow(this)" title="Remover linha">✕</button>':''}</div></div>`).join('')}</div>
       <div class="full" style="padding:0 0 4px 0;"><button type="button" class="btn" style="font-size:.83rem;padding:4px 12px;" onclick="addCoberturaRow()">+ Adicionar cobertura</button></div>
