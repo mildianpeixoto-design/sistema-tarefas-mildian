@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261104-02';
+var BUILD='20261109-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -1159,6 +1159,8 @@ let expandedArquivo=new Set();
 let expandedLeadHist=new Set();
 let expandedLeadCard=new Set();
 let _funilBusca='';
+let _funilMostrarTodos=false; // Feature: filtro 6 meses
+let _autoRetornoJaRodou=false; // Evita múltiplas execuções por snapshot
 let expandedClientHist=new Set();
 let clientSearchQuery='';
 let selectedClientId=null;
@@ -1377,6 +1379,7 @@ function initApp(){
 
   listeners.push(db.collection('leads').onSnapshot(snap=>{
     state.leads=[]; snap.forEach(d=>state.leads.push({id:d.id,...d.data()}));
+    checkLeadAutoRetorno();
     renderFunil();
     renderLeadsFinalizados();
     renderHoje();
@@ -4845,9 +4848,21 @@ function showLeadForm(lead,containerId){
       <div><label>Telefone (com DDD)</label><input type="text" id="leadTelefone_${lid}" value="${fmtTel(lead.telefone||lead.contato||'')}" placeholder="(00) 00000-0000" oninput="maskTel(this)" inputmode="numeric"></div>
       <div><label>E-mail</label><input type="email" id="leadEmail_${lid}" value="${esc(lead.email||'')}"></div>
       <div><label>Valor estimado (R$)</label><input type="text" id="leadValor_${lid}" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)" value="${lead.valorEstimado?fmtBRLInput(lead.valorEstimado):''}"></div>
-      <div><label>Etapa</label><select id="leadEtapa_${lid}">
+      <div><label>Etapa</label><select id="leadEtapa_${lid}" onchange="(function(){
+        const v=this.value;
+        const ra=document.getElementById('leadRetornoWrap_${lid}');
+        const tn=document.getElementById('leadTentarWrap_${lid}');
+        if(ra) ra.style.display=(v==='espera')?'':'none';
+        if(tn) tn.style.display=(v==='perdido'||v==='resolvido')?'':'none';
+      }).call(this)">
         ${STAGE_ORDER.map(s=>`<option value="${s}" ${lead.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
       </select></div>
+      <div id="leadRetornoWrap_${lid}" style="display:${lead.etapa==='espera'?'':'none'}"><label>Retornar em (voltar para Lead)</label><input type="date" id="leadRetornoAgendado_${lid}" value="${esc(lead.retornoAgendado||'')}"></div>
+      <div id="leadTentarWrap_${lid}" style="display:${(lead.etapa==='perdido'||lead.etapa==='resolvido')?'':'none'}"><label>Tentar novamente em</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+        <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setMonth(d.getMonth()+3);document.getElementById('leadTentarNovamenteEm_${lid}').value=dstr(d);})()">+3 meses</button>
+        <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setMonth(d.getMonth()+6);document.getElementById('leadTentarNovamenteEm_${lid}').value=dstr(d);})()">+6 meses</button>
+        <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setFullYear(d.getFullYear()+1);document.getElementById('leadTentarNovamenteEm_${lid}').value=dstr(d);})()">+1 ano</button>
+      </div><input type="date" id="leadTentarNovamenteEm_${lid}" value="${esc(lead.tentarNovamenteEm||'')}"></div>
       <div><label>Próximo contato</label><input type="date" id="leadProximoContato_${lid}" value="${esc(lead.proximoContato||'')}"></div>
       <div class="full"><label>Indicado por</label><input type="text" id="leadIndicadoPor_${lid}" value="${esc(lead.indicadoPor||'')}" placeholder="Nome de quem indicou (opcional)"></div>
       ${!isEdit?`<div class="full"><label>Anotação inicial (opcional)</label><textarea id="leadObsInicial_${lid}" placeholder="Será registrada nas anotações com a data de hoje"></textarea></div>`:''}
@@ -4864,16 +4879,29 @@ function showLeadForm(lead,containerId){
     const submitBtn=e.target.querySelector('button[type="submit"]');
     if(submitBtn.disabled) return; // evita duplicidade por duplo clique/Enter
     submitBtn.disabled=true;
+    const _etapaSalva=container.querySelector(`#leadEtapa_${lid}`).value;
+    const _retornoEl=container.querySelector(`#leadRetornoAgendado_${lid}`);
+    const _tentarEl=container.querySelector(`#leadTentarNovamenteEm_${lid}`);
+    const _retornoVal=(_etapaSalva==='espera'&&_retornoEl)?(_retornoEl.value||null):null;
+    const _tentarVal=((_etapaSalva==='perdido'||_etapaSalva==='resolvido')&&_tentarEl)?(_tentarEl.value||null):null;
     const obj={
       nome: container.querySelector(`#leadNome_${lid}`).value.trim(),
       telefone: container.querySelector(`#leadTelefone_${lid}`).value.trim(),
       email: container.querySelector(`#leadEmail_${lid}`).value.trim(),
       valorEstimado: parseBRL(container.querySelector(`#leadValor_${lid}`).value||''),
-      etapa: container.querySelector(`#leadEtapa_${lid}`).value,
+      etapa: _etapaSalva,
       proximoContato: container.querySelector(`#leadProximoContato_${lid}`).value||null,
       indicadoPor: container.querySelector(`#leadIndicadoPor_${lid}`).value.trim()||'',
       historico: lead.historico||[]
     };
+    // Para edit: salvar ou limpar os campos de retorno; para novo: só incluir se tiver valor
+    if(isEdit){
+      obj.retornoAgendado=_retornoVal||del();
+      obj.tentarNovamenteEm=_tentarVal||del();
+    } else {
+      if(_retornoVal) obj.retornoAgendado=_retornoVal;
+      if(_tentarVal) obj.tentarNovamenteEm=_tentarVal;
+    }
     if(!obj.nome){ submitBtn.disabled=false; return; }
     if(!isEdit){
       const obsInicial=container.querySelector(`#leadObsInicial_${lid}`).value.trim();
@@ -4991,6 +5019,33 @@ function addLeadHistorico(id){
     historico: firebase.firestore.FieldValue.arrayUnion(newEntry)
   }).catch(err=>alert('Erro: '+err.message));
 }
+/* ====================== Auto-retorno de leads ====================== */
+function checkLeadAutoRetorno(){
+  if(!currentUser||currentUser.role!=='owner') return;
+  const today=todayStr();
+  const batch=[];
+  (state.leads||[]).forEach(l=>{
+    if(l.etapa==='espera'&&l.retornoAgendado&&l.retornoAgendado<=today){
+      batch.push({id:l.id,nome:l.nome,motivo:'Retornou automaticamente do status Em espera (data agendada atingida)'});
+    }
+    if((l.etapa==='perdido'||l.etapa==='resolvido')&&l.tentarNovamenteEm&&l.tentarNovamenteEm<=today){
+      batch.push({id:l.id,nome:l.nome,motivo:'Retornou automaticamente para nova tentativa (data programada atingida)'});
+    }
+  });
+  if(!batch.length) return;
+  batch.forEach(({id,motivo})=>{
+    const entry={texto:motivo,at:ts(),uid:'sistema',name:'Sistema automático'};
+    db.collection('leads').doc(id).update({
+      etapa:'lead',
+      retornoAgendado:del(),
+      tentarNovamenteEm:del(),
+      historico:firebase.firestore.FieldValue.arrayUnion(entry)
+    }).catch(err=>console.warn('Auto-retorno lead:',err));
+  });
+  const nomes=batch.map(b=>b.nome).join(', ');
+  showToast(`↩ ${batch.length} lead${batch.length>1?'s':''} retornou${batch.length>1?'ram':''} para a fila: ${nomes}`,'success');
+}
+
 function renderFunil(){
   let html='';
   const isOwner=currentUser.role==='owner';
@@ -5003,11 +5058,22 @@ function renderFunil(){
           ||(l.indicadoPor||'').toLowerCase().includes(q);
       })
     : state.leads||[];
+  // Filtro de 6 meses para perdido/resolvido
+  const seisM=new Date(); seisM.setMonth(seisM.getMonth()-6);
+  const seisMLim=dstr(seisM);
   STAGE_ORDER.filter(s=>s!=='fechado').forEach(stage=>{
-    const items=_funilLeads.filter(l=>l.etapa===stage);
+    const allItems=_funilLeads.filter(l=>l.etapa===stage);
+    const isHistStage=stage==='perdido'||stage==='resolvido';
+    const items=(!_funilMostrarTodos&&isHistStage&&!_funilBusca)
+      ? allItems.filter(l=>{ const dt=l.createdAt?(l.createdAt.toDate?l.createdAt.toDate():new Date((l.createdAt.seconds||0)*1000)):null; return !dt||dstr(dt)>=seisMLim; })
+      : allItems;
+    const hiddenCount=isHistStage?allItems.length-items.length:0;
     const stageColor=STAGE_COLORS[stage]||'#999';
     html+=`<div class="kanban-col${stage==='espera'?' espera':stage==='resolvido'?' resolvido':''}">
-      <h4 style="border-left:4px solid ${stageColor};padding-left:8px;border-radius:0 4px 4px 0;">${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':stage==='resolvido'?'✅ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length})</span></h4>`;
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px;">
+        <h4 style="border-left:4px solid ${stageColor};padding-left:8px;border-radius:0 4px 4px 0;margin:0;">${stage==='espera'?'⏳ ':stage==='perdido'?'❌ ':stage==='resolvido'?'✅ ':''}${STAGE_LABELS[stage]} <span class="muted">(${items.length}${hiddenCount>0?'+'+hiddenCount+'🗂':''})</span></h4>
+        ${isHistStage?`<button class="icon-btn" style="font-size:.74rem;white-space:nowrap;" onclick="_funilMostrarTodos=!_funilMostrarTodos;renderFunil()">${_funilMostrarTodos?'📂 Ocultar antigos':'🗂 +'+hiddenCount+' antigos'}</button>`:''}
+      </div>`;
     items.forEach(l=>{
       const isExpanded=expandedLeadCard.has(l.id);
       const toggleLabel = isExpanded ? 'Fechar ▲' : (isOwner?'Editar ▼':'Ver mais ▼');
@@ -5041,6 +5107,8 @@ function renderFunil(){
             const lbl=l.proximoContato<ds?'Contato atrasado':(l.proximoContato===ds?'Contato hoje':'Próximo contato');
             return `<div class="kc-next ${cls}">📅 ${lbl}: ${fmtDateBR(l.proximoContato)}</div>`;
           })():''}
+          ${l.retornoAgendado?`<div class="muted" style="font-size:12px;color:#6b7280;">⏳ Retorno agendado: <strong>${fmtDateBR(l.retornoAgendado)}</strong></div>`:''}
+          ${l.tentarNovamenteEm?`<div class="muted" style="font-size:12px;color:#6b7280;">🔁 Nova tentativa em: <strong>${fmtDateBR(l.tentarNovamenteEm)}</strong></div>`:''}
           ${(l.telefone||l.email)?msgDropdownHtml('lead',l.id,l.nome,l.indicadoPor||''):''}
           <div id="leadEditWrap-${l.id}" style="margin-top:8px;"></div>
           <div class="row" style="margin-top:8px;">
