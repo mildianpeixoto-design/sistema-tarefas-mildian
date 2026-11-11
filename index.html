@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261111-01';
+var BUILD='20261111-04';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -960,10 +960,11 @@ function occElapsed(occ){
 }
 function logTotalSeconds(log){
   if(!log) return 0;
-  // Ignora sessões corrompidas onde saída < entrada
+  const now=Date.now();
+  // Ignora sessões corrompidas (saída < entrada ou entrada no futuro); cap saída em "agora"
   let total=(log.sessions||[])
-    .filter(x=>x.out&&x.in&&x.out.toMillis()>x.in.toMillis())
-    .reduce((s,x)=>s+(x.out.toMillis()-x.in.toMillis())/1000,0);
+    .filter(x=>x.out&&x.in&&x.out.toMillis()>x.in.toMillis()&&x.in.toMillis()<=now)
+    .reduce((s,x)=>s+(Math.min(x.out.toMillis(),now)-x.in.toMillis())/1000,0);
   if(log.activeStart){
     // Usa localStorage para elapsed preciso (evita skew do relógio do cliente)
     const uid=log.uid||'';
@@ -1207,7 +1208,8 @@ let state={
   docsMildian:[],
   pendingApprovals:[], // ocorrências aguardando aceite do owner
   bancoHoras:[],       // entradas manuais/ausências do banco de horas
-  bancoHorasOccs:{}    // { 'YYYY-MM-DD': totalSegundos } agregado dos timers
+  bancoHorasOccs:{},   // { 'YYYY-MM-DD': totalSegundos } agregado dos timers de tarefa
+  bancoHorasPonto:{}   // { 'YYYY-MM-DD': totalSegundos } agregado do ponto (timeLogs)
 };
 const BANCO_START='2026-09-23'; // data de início do banco de horas
 const BANCO_META_S=4*3600;      // meta diária: 4h em segundos
@@ -1475,6 +1477,35 @@ function initApp(){
       state.bancoHorasOccs=agg;
       if(document.getElementById('bancoHorasWrap')) renderBancoHoras();
     },err=>console.error(err)));
+
+    // Listener de timeLogs para banco de horas (ponto da colaboradora)
+    listeners.push(db.collection('timeLogs').where('date','>=',BANCO_START).onSnapshot(snap=>{
+      const agg={};
+      const now=Date.now();
+      snap.forEach(d=>{
+        const log=d.data();
+        // Apenas logs da colaboradora (não do owner)
+        if(!log.uid||log.uid===currentUser.uid) return;
+        const dateKey=log.date;
+        if(!dateKey) return;
+        let total=0;
+        // Sessões completas
+        (log.sessions||[]).forEach(s=>{
+          if(!s.in||!s.out) return;
+          const inMs=s.in.toMillis();
+          const outMs=Math.min(s.out.toMillis(),now);
+          if(outMs>inMs&&inMs<=now) total+=(outMs-inMs)/1000;
+        });
+        // Sessão ativa (clock-in sem clock-out)
+        if(log.activeStart){
+          const activeMs=log.activeStart.toMillis();
+          if(activeMs<=now) total+=(now-activeMs)/1000;
+        }
+        agg[dateKey]=(agg[dateKey]||0)+total;
+      });
+      state.bancoHorasPonto=agg;
+      if(document.getElementById('bancoHorasWrap')) renderBancoHoras();
+    },err=>console.error(err)));
   }
 
   switchTab('hoje');
@@ -1668,6 +1699,17 @@ function setOccurrence(date,activityId,patch){
       throw err;
     });
 }
+function _pauseTimerSilent(actId,ds){
+  // Fecha o timer de actId silenciosamente (usado para auto-fechar ao abrir outro)
+  const occ=state.occToday[actId];
+  if(!occ||!occ.timerStart) return;
+  const elapsed=Math.max(0,(Date.now()-occ.timerStart.toMillis())/1000);
+  const outTs=firebase.firestore.Timestamp.fromMillis(Math.min(Date.now(),occ.timerStart.toMillis()+elapsed*1000));
+  const session={in:occ.timerStart,out:outTs};
+  state.occToday[actId]={...occ,timeSpent:(occ.timeSpent||0)+elapsed,timerStart:null,timerSessions:[...(occ.timerSessions||[]),session]};
+  setOccurrence(ds,actId,{timeSpent:(occ.timeSpent||0)+elapsed,timerStart:del(),timerSessions:firebase.firestore.FieldValue.arrayUnion(session)})
+    .catch(err=>console.warn('Auto-pausa timer:',err));
+}
 function toggleTimer(actId){
   if(window._timerPending===actId) return; // evita duplo clique
   const ds=todayStr();
@@ -1675,11 +1717,11 @@ function toggleTimer(actId){
   window._timerPending=actId;
   const done=()=>{ window._timerPending=null; };
   if(occ.timerStart){
-    const elapsed=(Date.now()-occ.timerStart.toMillis())/1000;
-    const outTs=firebase.firestore.Timestamp.fromMillis(occ.timerStart.toMillis()+Math.max(0,elapsed*1000));
+    // Pausar este timer
+    const elapsed=Math.max(0,(Date.now()-occ.timerStart.toMillis())/1000);
+    const outTs=firebase.firestore.Timestamp.fromMillis(Math.min(Date.now(),occ.timerStart.toMillis()+elapsed*1000));
     const session={in:occ.timerStart, out:outTs};
     const prev=state.occToday[actId];
-    // Atualização otimista: pausa o timer imediatamente
     state.occToday[actId]={...occ, timeSpent:(occ.timeSpent||0)+elapsed, timerStart:null,
       timerSessions:[...(occ.timerSessions||[]),session]};
     renderHoje();
@@ -1689,11 +1731,16 @@ function toggleTimer(actId){
       timerSessions:firebase.firestore.FieldValue.arrayUnion(session)
     }).then(done).catch(err=>{ state.occToday[actId]=prev; renderHoje(); done(); alert('ERRO ao pausar timer: '+err.message); });
   }else{
+    // Auto-fechar qualquer outro timer aberto antes de iniciar este
+    Object.keys(state.occToday).forEach(otherId=>{
+      if(otherId!==actId && state.occToday[otherId]&&state.occToday[otherId].timerStart){
+        _pauseTimerSilent(otherId,ds);
+      }
+    });
     const nowTs=ts();
     const patch={timerStart:nowTs, status:occ.status||'pendente'};
     if(!occ.startedAt) patch.startedAt=nowTs;
     const prev=state.occToday[actId];
-    // Atualização otimista: inicia o timer imediatamente
     state.occToday[actId]={...occ, ...patch};
     renderHoje();
     setOccurrence(ds,actId,patch).then(done).catch(err=>{ state.occToday[actId]=prev||{}; renderHoje(); done(); alert('ERRO ao iniciar timer: '+err.message); });
@@ -2461,6 +2508,18 @@ setInterval(()=>{
         }).catch(err=>console.warn('Auto-close timer virada de dia:',err));
       }
     });
+    // Fecha o ponto (timeLogs) se estiver aberto na virada do dia
+    const _myLog=state.logsToday[currentUser.uid];
+    if(_myLog&&_myLog.activeStart){
+      const _cs=parseInt(localStorage.getItem('_clockStart_'+currentUser.uid)||'0');
+      const _ce=_cs>0?(Date.now()-_cs):(Date.now()-_myLog.activeStart.toMillis());
+      const _cOut=firebase.firestore.Timestamp.fromMillis(Math.min(Date.now(),_myLog.activeStart.toMillis()+Math.max(0,_ce)));
+      db.collection('timeLogs').doc(`${prevDate}_${currentUser.uid}`).update({
+        sessions:firebase.firestore.FieldValue.arrayUnion({in:_myLog.activeStart,out:_cOut}),
+        activeStart:del()
+      }).catch(err=>console.warn('Auto-close ponto virada de dia:',err));
+      localStorage.removeItem('_clockStart_'+currentUser.uid);
+    }
     // Re-subscribe para o novo dia
     subscribeToday();
   }
@@ -2712,12 +2771,14 @@ function renderBancoHoras(){
   }
   let totalKnownS=0,hasPending=false;
   const rowsData=days.map(date=>{
-    const timerS=state.bancoHorasOccs[date]||0;
+    const pontoS=state.bancoHorasPonto[date]||0;   // horas do ponto (fonte principal)
+    const tarefaS=state.bancoHorasOccs[date]||0;    // horas dos timers de tarefa (informativo)
+    const difS=Math.max(0,pontoS-tarefaS);           // diferença: tempo no ponto mas fora de tarefa
     const entries=state.bancoHoras.filter(e=>e.date===date);
     const ausencia=entries.find(e=>e.tipo==='ausencia_justificada'||e.tipo==='ausencia_nao_justificada');
     const manuais=entries.filter(e=>e.tipo==='horas_manual');
     const manualS=manuais.reduce((sum,e)=>sum+(e.horasSegundos||0),0);
-    const totalS=timerS+manualS;
+    const totalS=pontoS+manualS;  // saldo baseado no ponto, não nos timers
     let saldoS=null,status='';
     if(ausencia){
       status=ausencia.tipo;
@@ -2731,7 +2792,7 @@ function renderBancoHoras(){
       status='hoje';
     }
     if(saldoS!==null) totalKnownS+=saldoS;
-    return {date,timerS,manualS,totalS,saldoS,status,ausencia,manuais};
+    return {date,pontoS,tarefaS,difS,manualS,totalS,saldoS,status,ausencia,manuais};
   });
   let runS=0;
   const trs=rowsData.map(r=>{
@@ -2743,9 +2804,11 @@ function renderBancoHoras(){
     else if(r.status==='ausencia_nao_justificada') trabCell='<span style="color:#dc2626;">Ausente (não justificada)</span>';
     else if(r.totalS>0){
       const parts=[];
-      if(r.timerS>0) parts.push(fmtHM(r.timerS));
+      if(r.pontoS>0) parts.push(`<strong>${fmtHM(r.pontoS)}</strong> <span class="muted" style="font-size:.77rem;">(ponto)</span>`);
+      if(r.tarefaS>0) parts.push(`<span style="color:#0369a1;font-size:.77rem;">⏱ ${fmtHM(r.tarefaS)} em tarefas</span>`);
+      if(r.difS>0) parts.push(`<span style="color:#78716c;font-size:.77rem;">≈ ${fmtHM(r.difS)} fora de tarefa</span>`);
       if(r.manualS>0) parts.push(`<span style="color:#7c3aed;">+${fmtHM(r.manualS)} combinado</span>`);
-      trabCell=parts.join(' ');
+      trabCell=parts.join('<br>');
     } else if(r.status==='hoje') trabCell='<span class="muted">Em andamento…</span>';
     else trabCell='<span class="muted">—</span>';
     let situCell='';
@@ -3479,7 +3542,8 @@ function toggleClock(){
     // Calcula elapsed usando tempo de início salvo no cliente (independe do relógio do PC)
     const clientStartMs=parseInt(localStorage.getItem('_clockStart_'+uid)||'0');
     const elapsedMs=clientStartMs>0?(Date.now()-clientStartMs):(Date.now()-log.activeStart.toMillis());
-    const outTs=firebase.firestore.Timestamp.fromMillis(log.activeStart.toMillis()+Math.max(0,elapsedMs));
+    // Cap em "agora": nunca deixar sessão terminar no futuro por skew de relógio
+    const outTs=firebase.firestore.Timestamp.fromMillis(Math.min(Date.now(),log.activeStart.toMillis()+Math.max(0,elapsedMs)));
     // Atualização otimista: fecha sessão imediatamente na UI
     state.logsToday[uid]={...prevLog, sessions:[...(prevLog.sessions||[]),{in:prevLog.activeStart,out:outTs}], activeStart:null};
     renderPonto(); renderQuickBar();
@@ -3518,7 +3582,7 @@ function renderPonto(){
           ${canToggle?`<button class="btn" onclick="toggleClock()">${active?'Encerrar expediente':'Iniciar expediente'}</button>`:''}
         </div>
       </div>
-      ${(log&&log.sessions&&log.sessions.length)?`<div class="muted" style="margin-top:8px;">${log.sessions.map(s=>`${new Date(s.in.toMillis()).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} – ${new Date(s.out.toMillis()).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`).join(' · ')}</div>`:''}
+      ${(log&&log.sessions&&log.sessions.length)?`<div class="muted" style="margin-top:8px;">${log.sessions.filter(s=>s.in&&s.out&&s.in.toMillis()<=Date.now()).map(s=>`${new Date(s.in.toMillis()).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} – ${new Date(Math.min(s.out.toMillis(),Date.now())).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`).join(' · ')}</div>`:''}
     </div>`;
   });
   if(usersToShow.length===0) html='<div class="empty">Nenhum colaborador cadastrado.</div>';
