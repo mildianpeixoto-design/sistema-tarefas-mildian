@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261109-01';
+var BUILD='20261111-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -4850,20 +4850,20 @@ function showLeadForm(lead,containerId){
       <div><label>Valor estimado (R$)</label><input type="text" id="leadValor_${lid}" placeholder="0,00" inputmode="numeric" oninput="maskBRL(this)" value="${lead.valorEstimado?fmtBRLInput(lead.valorEstimado):''}"></div>
       <div><label>Etapa</label><select id="leadEtapa_${lid}" onchange="(function(){
         const v=this.value;
-        const ra=document.getElementById('leadRetornoWrap_${lid}');
-        const tn=document.getElementById('leadTentarWrap_${lid}');
-        if(ra) ra.style.display=(v==='espera')?'':'none';
-        if(tn) tn.style.display=(v==='perdido'||v==='resolvido')?'':'none';
+        const pausado=v==='espera'||v==='perdido'||v==='resolvido';
+        const atalhos=document.getElementById('leadProximoAtalhos_${lid}');
+        if(atalhos) atalhos.style.display=pausado?'flex':'none';
       }).call(this)">
         ${STAGE_ORDER.map(s=>`<option value="${s}" ${lead.etapa===s?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}
       </select></div>
-      <div id="leadRetornoWrap_${lid}" style="display:${lead.etapa==='espera'?'':'none'}"><label>Retornar em (voltar para Lead)</label><input type="date" id="leadRetornoAgendado_${lid}" value="${esc(lead.retornoAgendado||'')}"></div>
-      <div id="leadTentarWrap_${lid}" style="display:${(lead.etapa==='perdido'||lead.etapa==='resolvido')?'':'none'}"><label>Tentar novamente em</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
-        <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setMonth(d.getMonth()+3);document.getElementById('leadTentarNovamenteEm_${lid}').value=dstr(d);})()">+3 meses</button>
-        <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setMonth(d.getMonth()+6);document.getElementById('leadTentarNovamenteEm_${lid}').value=dstr(d);})()">+6 meses</button>
-        <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setFullYear(d.getFullYear()+1);document.getElementById('leadTentarNovamenteEm_${lid}').value=dstr(d);})()">+1 ano</button>
-      </div><input type="date" id="leadTentarNovamenteEm_${lid}" value="${esc(lead.tentarNovamenteEm||'')}"></div>
-      <div><label>Próximo contato</label><input type="date" id="leadProximoContato_${lid}" value="${esc(lead.proximoContato||'')}"></div>
+      <div><label>Próximo contato ${(lead.etapa==='espera'||lead.etapa==='perdido'||lead.etapa==='resolvido')?'<span style="font-size:11px;color:#6b7280;">(ao chegar, volta automaticamente para Lead)</span>':''}</label>
+        <div id="leadProximoAtalhos_${lid}" style="display:${(lead.etapa==='espera'||lead.etapa==='perdido'||lead.etapa==='resolvido')?'flex':'none'};gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+          <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setMonth(d.getMonth()+3);document.getElementById('leadProximoContato_${lid}').value=dstr(d);})()">+3 meses</button>
+          <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setMonth(d.getMonth()+6);document.getElementById('leadProximoContato_${lid}').value=dstr(d);})()">+6 meses</button>
+          <button type="button" class="icon-btn" onclick="(function(){var d=new Date();d.setFullYear(d.getFullYear()+1);document.getElementById('leadProximoContato_${lid}').value=dstr(d);})()">+1 ano</button>
+        </div>
+        <input type="date" id="leadProximoContato_${lid}" value="${esc(lead.proximoContato||'')}">
+      </div>
       <div class="full"><label>Indicado por</label><input type="text" id="leadIndicadoPor_${lid}" value="${esc(lead.indicadoPor||'')}" placeholder="Nome de quem indicou (opcional)"></div>
       ${!isEdit?`<div class="full"><label>Anotação inicial (opcional)</label><textarea id="leadObsInicial_${lid}" placeholder="Será registrada nas anotações com a data de hoje"></textarea></div>`:''}
       <div class="full row">
@@ -4880,10 +4880,6 @@ function showLeadForm(lead,containerId){
     if(submitBtn.disabled) return; // evita duplicidade por duplo clique/Enter
     submitBtn.disabled=true;
     const _etapaSalva=container.querySelector(`#leadEtapa_${lid}`).value;
-    const _retornoEl=container.querySelector(`#leadRetornoAgendado_${lid}`);
-    const _tentarEl=container.querySelector(`#leadTentarNovamenteEm_${lid}`);
-    const _retornoVal=(_etapaSalva==='espera'&&_retornoEl)?(_retornoEl.value||null):null;
-    const _tentarVal=((_etapaSalva==='perdido'||_etapaSalva==='resolvido')&&_tentarEl)?(_tentarEl.value||null):null;
     const obj={
       nome: container.querySelector(`#leadNome_${lid}`).value.trim(),
       telefone: container.querySelector(`#leadTelefone_${lid}`).value.trim(),
@@ -4894,14 +4890,6 @@ function showLeadForm(lead,containerId){
       indicadoPor: container.querySelector(`#leadIndicadoPor_${lid}`).value.trim()||'',
       historico: lead.historico||[]
     };
-    // Para edit: salvar ou limpar os campos de retorno; para novo: só incluir se tiver valor
-    if(isEdit){
-      obj.retornoAgendado=_retornoVal||del();
-      obj.tentarNovamenteEm=_tentarVal||del();
-    } else {
-      if(_retornoVal) obj.retornoAgendado=_retornoVal;
-      if(_tentarVal) obj.tentarNovamenteEm=_tentarVal;
-    }
     if(!obj.nome){ submitBtn.disabled=false; return; }
     if(!isEdit){
       const obsInicial=container.querySelector(`#leadObsInicial_${lid}`).value.trim();
@@ -5025,11 +5013,10 @@ function checkLeadAutoRetorno(){
   const today=todayStr();
   const batch=[];
   (state.leads||[]).forEach(l=>{
-    if(l.etapa==='espera'&&l.retornoAgendado&&l.retornoAgendado<=today){
-      batch.push({id:l.id,nome:l.nome,motivo:'Retornou automaticamente do status Em espera (data agendada atingida)'});
-    }
-    if((l.etapa==='perdido'||l.etapa==='resolvido')&&l.tentarNovamenteEm&&l.tentarNovamenteEm<=today){
-      batch.push({id:l.id,nome:l.nome,motivo:'Retornou automaticamente para nova tentativa (data programada atingida)'});
+    const pausado=l.etapa==='espera'||l.etapa==='perdido'||l.etapa==='resolvido';
+    if(pausado&&l.proximoContato&&l.proximoContato<=today){
+      const motivo=l.etapa==='espera'?'Retornou automaticamente do status Em espera (data de próximo contato atingida)':'Retornou automaticamente para nova tentativa (data de próximo contato atingida)';
+      batch.push({id:l.id,nome:l.nome,motivo});
     }
   });
   if(!batch.length) return;
@@ -5037,8 +5024,7 @@ function checkLeadAutoRetorno(){
     const entry={texto:motivo,at:ts(),uid:'sistema',name:'Sistema automático'};
     db.collection('leads').doc(id).update({
       etapa:'lead',
-      retornoAgendado:del(),
-      tentarNovamenteEm:del(),
+      proximoContato:del(),
       historico:firebase.firestore.FieldValue.arrayUnion(entry)
     }).catch(err=>console.warn('Auto-retorno lead:',err));
   });
@@ -5107,8 +5093,6 @@ function renderFunil(){
             const lbl=l.proximoContato<ds?'Contato atrasado':(l.proximoContato===ds?'Contato hoje':'Próximo contato');
             return `<div class="kc-next ${cls}">📅 ${lbl}: ${fmtDateBR(l.proximoContato)}</div>`;
           })():''}
-          ${l.retornoAgendado?`<div class="muted" style="font-size:12px;color:#6b7280;">⏳ Retorno agendado: <strong>${fmtDateBR(l.retornoAgendado)}</strong></div>`:''}
-          ${l.tentarNovamenteEm?`<div class="muted" style="font-size:12px;color:#6b7280;">🔁 Nova tentativa em: <strong>${fmtDateBR(l.tentarNovamenteEm)}</strong></div>`:''}
           ${(l.telefone||l.email)?msgDropdownHtml('lead',l.id,l.nome,l.indicadoPor||''):''}
           <div id="leadEditWrap-${l.id}" style="margin-top:8px;"></div>
           <div class="row" style="margin-top:8px;">
