@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261123-01';
+var BUILD='20261123-02';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -70,6 +70,26 @@ body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:
 .userbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.12);flex-wrap:wrap;}
 .userbar .uname{font-size:13px;color:rgba(255,255,255,0.7);}
 .userbar .btn{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.18);color:#fff;}
+/* ---- Busca Global ---- */
+.global-search-wrap{position:relative;margin-bottom:12px;}
+.global-search-wrap input{width:100%;padding:6px 10px 6px 28px;border-radius:7px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:#fff;font-size:13px;outline:none;transition:background .15s;}
+.global-search-wrap input::placeholder{color:rgba(255,255,255,0.45);}
+.global-search-wrap input:focus{background:rgba(255,255,255,0.18);border-color:rgba(255,255,255,0.4);}
+.global-search-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;}
+.global-search-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.18);z-index:999;max-height:380px;overflow-y:auto;display:none;}
+.global-search-results.open{display:block;}
+.gsr-group{padding:6px 0 2px;}
+.gsr-group-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text2);padding:0 10px 4px;}
+.gsr-item{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;transition:background .1s;}
+.gsr-item:hover{background:var(--bg2);}
+.gsr-badge{font-size:10px;font-weight:700;padding:2px 5px;border-radius:4px;white-space:nowrap;flex-shrink:0;}
+.gsr-badge.lead{background:#dbeafe;color:#1d4ed8;}
+.gsr-badge.cliente{background:#dcfce7;color:#15803d;}
+.gsr-badge.atividade{background:#fef3c7;color:#92400e;}
+.gsr-info{flex:1;min-width:0;}
+.gsr-name{font-size:13px;font-weight:600;color:var(--text1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gsr-sub{font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gsr-empty{padding:12px 10px;text-align:center;color:var(--text2);font-size:13px;}
 .userbar .btn:hover{background:rgba(255,255,255,0.16);}
 nav{display:flex;flex-direction:column;gap:2px;}
 nav button{background:none;border:none;padding:8px 12px;font-size:13px;cursor:pointer;color:rgba(255,255,255,0.65);border-left:3px solid transparent;font-weight:500;text-align:left;border-radius:0 6px 6px 0;letter-spacing:.2px;display:flex;align-items:center;gap:7px;}
@@ -477,6 +497,14 @@ textarea{width:100%;min-height:60px;resize:vertical;}
   <div class="logo-wrap"><img src="logo.png" alt="Logo da empresa" onerror="this.style.display='none'"></div>
   <h1>Gestão de Equipe</h1>
   <div class="date" id="todayLabel"></div>
+  <div class="global-search-wrap" id="globalSearchWrap" style="display:none;">
+    <span class="global-search-icon">🔍</span>
+    <input type="text" id="globalSearchInput" placeholder="Buscar..." autocomplete="off"
+      oninput="runGlobalSearch(this.value)"
+      onkeydown="if(event.key==='Escape'){this.value='';closeGlobalSearch();}"
+    >
+    <div class="global-search-results" id="globalSearchResults"></div>
+  </div>
   <nav id="mainNav"></nav>
   <div class="userbar">
     <span class="uname" id="userName"></span>
@@ -1297,6 +1325,8 @@ auth.onAuthStateChanged(async user=>{
       currentUser={uid:user.uid, ...docSnap.data()};
       document.getElementById('loginScreen').style.display='none';
       document.getElementById('app').style.display='block';
+      const _gsw=document.getElementById('globalSearchWrap');
+      if(_gsw) _gsw.style.display='block';
       initApp();
     }catch(err){
       document.getElementById('loginScreen').style.display='flex';
@@ -4977,6 +5007,73 @@ function editLead(id){
   const l=state.leads.find(x=>x.id===id);
   if(l) showLeadForm(l);
 }
+/* ===== BUSCA GLOBAL ===== */
+function runGlobalSearch(q){
+  const res=document.getElementById('globalSearchResults');
+  if(!res) return;
+  q=(q||'').trim().toLowerCase();
+  if(q.length<2){ res.classList.remove('open'); return; }
+  const results=[];
+  // Leads
+  (state.leads||[]).forEach(l=>{
+    const hay=[l.nome,l.telefone,l.email,l.etapa].filter(Boolean).join(' ').toLowerCase();
+    if(hay.includes(q)) results.push({type:'lead',id:l.id,name:l.nome||'(sem nome)',sub:(l.telefone||l.email||'')+(l.etapa?' · '+(STAGE_LABELS[l.etapa]||l.etapa):'')});
+  });
+  // Clientes
+  (state.clients||[]).forEach(c=>{
+    const hay=[c.nome,c.telefone,c.email,c.cidade].filter(Boolean).join(' ').toLowerCase();
+    if(hay.includes(q)) results.push({type:'cliente',id:c.id,name:c.nome||'(sem nome)',sub:[c.telefone,c.email,c.status==='cancelado'?'⛔ cancelado':null].filter(Boolean).join(' · ')});
+  });
+  // Atividades
+  (state.activities||[]).forEach(a=>{
+    const hay=[a.title,a.cliente,a.description].filter(Boolean).join(' ').toLowerCase();
+    if(hay.includes(q)) results.push({type:'atividade',id:a.id,name:a.title||'(sem título)',sub:[a.cliente,a.dueDate].filter(Boolean).join(' · ')});
+  });
+  if(!results.length){
+    res.innerHTML='<div class="gsr-empty">Nenhum resultado para "'+esc(q)+'"</div>';
+    res.classList.add('open'); return;
+  }
+  const groups={lead:[],cliente:[],atividade:[]};
+  results.forEach(r=>groups[r.type].push(r));
+  const labels={lead:'Leads',cliente:'Clientes',atividade:'Atividades'};
+  let html='';
+  ['lead','cliente','atividade'].forEach(type=>{
+    if(!groups[type].length) return;
+    html+=`<div class="gsr-group"><div class="gsr-group-label">${labels[type]}</div>`;
+    groups[type].forEach(r=>{
+      html+=`<div class="gsr-item" onclick="selectGlobalSearch('${type}','${r.id}')">
+        <span class="gsr-badge ${type}">${labels[type].slice(0,-1)}</span>
+        <div class="gsr-info"><div class="gsr-name">${esc(r.name)}</div>${r.sub?`<div class="gsr-sub">${esc(r.sub)}</div>`:''}</div>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  res.innerHTML=html;
+  res.classList.add('open');
+}
+function selectGlobalSearch(type,id){
+  closeGlobalSearch();
+  if(type==='lead') abrirLeadNoFunil(id);
+  else if(type==='cliente'){
+    switchTab('clientes');
+    setTimeout(()=>editClient(id),80);
+  } else if(type==='atividade'){
+    switchTab('atividades');
+    setTimeout(()=>{
+      const el=document.getElementById('act-'+id)||document.querySelector('[data-act-id="'+id+'"]');
+      if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('kanban-card-highlight'); setTimeout(()=>el.classList.remove('kanban-card-highlight'),3700); }
+    },150);
+  }
+}
+function closeGlobalSearch(){
+  const res=document.getElementById('globalSearchResults');
+  if(res) res.classList.remove('open');
+}
+// Fecha ao clicar fora
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('globalSearchWrap');
+  if(wrap&&!wrap.contains(e.target)) closeGlobalSearch();
+});
 function abrirLeadNoFunil(id){
   expandedLeadCard.add(id);
   switchTab('funil');
