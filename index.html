@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261111-04';
+var BUILD='20261123-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -5055,7 +5055,7 @@ function toggleLeadHist(id){
   const count=(l.historico||[]).length;
   if(btn) btn.textContent=`📝 Anotações (${count}) ${open?'▲':'▼'}`;
   if(open){
-    wrap.innerHTML=`<div class="hist-list" style="margin-top:6px;">${count?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}<div style="margin-top:6px;"><input type="text" id="leadHistInput-${id}" placeholder="Nova anotação... (será salva junto com o formulário acima)" style="width:100%;"></div></div>`;
+    wrap.innerHTML=`<div class="hist-list" style="margin-top:6px;"><div style="margin-bottom:8px;"><input type="text" id="leadHistInput-${id}" placeholder="Nova anotação... (será salva junto com o formulário acima)" style="width:100%;"></div>${count?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;">Nenhuma anotação ainda.</div>'}</div>`;
   } else {
     wrap.innerHTML='';
   }
@@ -5164,7 +5164,7 @@ function renderFunil(){
             ${isOwner&&stage==='fechado'?`<button class="icon-btn" onclick="convertLeadToClient('${l.id}')">Converter em cliente</button>`:''}
           </div>
           <button class="icon-btn" id="leadHistBtn-${l.id}" onclick="toggleLeadHist('${l.id}')">📝 Anotações (${(l.historico||[]).length}) ${expandedLeadHist.has(l.id)?'▲':'▼'}</button>
-          <div id="leadHistWrap-${l.id}">${expandedLeadHist.has(l.id)?`<div class="hist-list" style="margin-top:6px;">${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;margin-bottom:4px;">Nenhuma anotação ainda.</div>'}<div style="margin-top:6px;"><input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação... (será salva junto com o formulário acima)" style="width:100%;"></div></div>`:''}</div>
+          <div id="leadHistWrap-${l.id}">${expandedLeadHist.has(l.id)?`<div class="hist-list" style="margin-top:6px;"><div style="margin-bottom:8px;"><input type="text" id="leadHistInput-${l.id}" placeholder="Nova anotação... (será salva junto com o formulário acima)" style="width:100%;"></div>${(l.historico&&l.historico.length)?historicoListHtml(l.historico):'<div class="muted" style="font-size:12px;">Nenhuma anotação ainda.</div>'}</div>`:''}</div>
         </div>
         `:''}
       </div>`;
