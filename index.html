@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261123-02';
+var BUILD='20261123-03';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -86,6 +86,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:
 .gsr-badge.lead{background:#dbeafe;color:#1d4ed8;}
 .gsr-badge.cliente{background:#dcfce7;color:#15803d;}
 .gsr-badge.atividade{background:#fef3c7;color:#92400e;}
+.gsr-badge.colaborador{background:#f3e8ff;color:#6d28d9;}
 .gsr-info{flex:1;min-width:0;}
 .gsr-name{font-size:13px;font-weight:600;color:var(--text1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .gsr-sub{font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -5017,32 +5018,39 @@ function runGlobalSearch(q){
   // Leads
   (state.leads||[]).forEach(l=>{
     const hay=[l.nome,l.telefone,l.email,l.etapa].filter(Boolean).join(' ').toLowerCase();
-    if(hay.includes(q)) results.push({type:'lead',id:l.id,name:l.nome||'(sem nome)',sub:(l.telefone||l.email||'')+(l.etapa?' · '+(STAGE_LABELS[l.etapa]||l.etapa):'')});
+    if(hay.includes(q)) results.push({type:'lead',id:l.id,name:l.nome||'(sem nome)',sub:[l.telefone||l.email||'',l.etapa?(STAGE_LABELS[l.etapa]||l.etapa):''].filter(Boolean).join(' · ')});
   });
   // Clientes
   (state.clients||[]).forEach(c=>{
     const hay=[c.nome,c.telefone,c.email,c.cidade].filter(Boolean).join(' ').toLowerCase();
     if(hay.includes(q)) results.push({type:'cliente',id:c.id,name:c.nome||'(sem nome)',sub:[c.telefone,c.email,c.status==='cancelado'?'⛔ cancelado':null].filter(Boolean).join(' · ')});
   });
-  // Atividades
+  // Atividades — todas, sem filtro de usuário
   (state.activities||[]).forEach(a=>{
-    const hay=[a.title,a.cliente,a.description].filter(Boolean).join(' ').toLowerCase();
-    if(hay.includes(q)) results.push({type:'atividade',id:a.id,name:a.title||'(sem título)',sub:[a.cliente,a.dueDate].filter(Boolean).join(' · ')});
+    const assigneeName=(state.users||[]).find(u=>u.id===a.assignedTo)?.name||'';
+    const hay=[a.title,a.cliente,a.description,assigneeName].filter(Boolean).join(' ').toLowerCase();
+    if(hay.includes(q)) results.push({type:'atividade',id:a.id,name:a.title||'(sem título)',sub:[a.cliente,assigneeName?'👤 '+assigneeName:'',a.dueDate].filter(Boolean).join(' · ')});
+  });
+  // Colaboradores
+  (state.users||[]).forEach(u=>{
+    const hay=[u.name,u.email,u.role].filter(Boolean).join(' ').toLowerCase();
+    if(hay.includes(q)) results.push({type:'colaborador',id:u.id,name:u.name||'(sem nome)',sub:[u.email,u.role==='owner'?'administradora':'colaborador(a)'].filter(Boolean).join(' · ')});
   });
   if(!results.length){
     res.innerHTML='<div class="gsr-empty">Nenhum resultado para "'+esc(q)+'"</div>';
     res.classList.add('open'); return;
   }
-  const groups={lead:[],cliente:[],atividade:[]};
+  const groups={lead:[],cliente:[],atividade:[],colaborador:[]};
   results.forEach(r=>groups[r.type].push(r));
-  const labels={lead:'Leads',cliente:'Clientes',atividade:'Atividades'};
+  const labels={lead:'Leads',cliente:'Clientes',atividade:'Atividades',colaborador:'Colaboradores'};
   let html='';
-  ['lead','cliente','atividade'].forEach(type=>{
+  ['colaborador','cliente','lead','atividade'].forEach(type=>{
     if(!groups[type].length) return;
     html+=`<div class="gsr-group"><div class="gsr-group-label">${labels[type]}</div>`;
     groups[type].forEach(r=>{
+      const badgeLabel={lead:'Lead',cliente:'Cliente',atividade:'Atividade',colaborador:'Equipe'}[type];
       html+=`<div class="gsr-item" onclick="selectGlobalSearch('${type}','${r.id}')">
-        <span class="gsr-badge ${type}">${labels[type].slice(0,-1)}</span>
+        <span class="gsr-badge ${type}">${badgeLabel}</span>
         <div class="gsr-info"><div class="gsr-name">${esc(r.name)}</div>${r.sub?`<div class="gsr-sub">${esc(r.sub)}</div>`:''}</div>
       </div>`;
     });
@@ -5053,6 +5061,8 @@ function runGlobalSearch(q){
 }
 function selectGlobalSearch(type,id){
   closeGlobalSearch();
+  const inp=document.getElementById('globalSearchInput');
+  if(inp) inp.value='';
   if(type==='lead') abrirLeadNoFunil(id);
   else if(type==='cliente'){
     switchTab('clientes');
@@ -5061,6 +5071,13 @@ function selectGlobalSearch(type,id){
     switchTab('atividades');
     setTimeout(()=>{
       const el=document.getElementById('act-'+id)||document.querySelector('[data-act-id="'+id+'"]');
+      if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('kanban-card-highlight'); setTimeout(()=>el.classList.remove('kanban-card-highlight'),3700); }
+    },150);
+  } else if(type==='colaborador'){
+    switchTab('colaboradores');
+    setTimeout(()=>{
+      // Tenta destacar o card/linha do colaborador na aba
+      const el=document.getElementById('colab-'+id)||document.querySelector('[data-uid="'+id+'"]');
       if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('kanban-card-highlight'); setTimeout(()=>el.classList.remove('kanban-card-highlight'),3700); }
     },150);
   }
