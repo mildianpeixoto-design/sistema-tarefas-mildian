@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261123-03';
+var BUILD='20261123-04';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -2134,7 +2134,18 @@ function renderActivityCard(act,occ){
       </div>`).join('')}</div>`;
     })()}
     ${occ.status==='devolvida'&&occ.instrucoesDevolucao?`<div class="devolucao-box">↩️ <strong>Devolvida:</strong> ${esc(occ.instrucoesDevolucao)}</div>`:''}
-    ${occ.descricaoFeito&&(occ.status==='aguardando_aceite'||occ.status==='finalizada')?`<div class="descricao-feito-box">📝 <strong>O que foi feito:</strong> ${esc(occ.descricaoFeito)}</div>`:''}
+    ${occ.status==='finalizada'||occ.status==='aguardando_aceite'?(()=>{
+      const _ct=occ.completedAt?(occ.completedAt.toDate?occ.completedAt.toDate():new Date((occ.completedAt.seconds||0)*1000)):null;
+      const _ctStr=_ct?_ct.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—';
+      const _ts=occ.timeSpent||0;
+      return `<div style="background:var(--green-bg);border:1px solid var(--green);border-radius:7px;padding:7px 10px;margin:6px 0;font-size:.83rem;">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+          <span>✅ <strong>Finalizada às ${_ctStr}</strong></span>
+          <span>⏱ <strong>Tempo total:</strong> ${fmtHMS(_ts)}</span>
+        </div>
+        ${occ.descricaoFeito?`<div style="margin-top:5px;">📝 <strong>O que foi feito:</strong> ${esc(occ.descricaoFeito)}</div>`:'<div style="margin-top:5px;color:#92400e;font-style:italic;">⚠️ Sem descrição do que foi feito</div>'}
+      </div>`;
+    })():''}
     ${_conclusaoForm&&_conclusaoForm.actId===act.id&&_conclusaoForm.date===todayStr()?`<div class="conclusao-form"><label>📝 O que foi feito? (obrigatório)</label><textarea id="conclusao-txt-${act.id}" placeholder="Descreva o que foi realizado nesta atividade..."></textarea><div class="row" style="gap:8px;margin-top:6px;"><button class="btn primary" onclick="confirmarConclusao('${act.id}','${todayStr()}')">📤 Enviar para aceite</button><button class="btn" onclick="cancelarConclusaoForm()">Cancelar</button></div></div>`:''}
     <div class="activity-controls">
       <span class="timer" id="timer-${act.id}">${fmtHMS(occElapsed(occ))}</span>
