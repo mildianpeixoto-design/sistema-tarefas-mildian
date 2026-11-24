@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261123-04';
+var BUILD='20261124-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -2821,21 +2821,29 @@ function renderBancoHoras(){
     const manuais=entries.filter(e=>e.tipo==='horas_manual');
     const manualS=manuais.reduce((sum,e)=>sum+(e.horasSegundos||0),0);
     const totalS=pontoS+manualS;  // saldo baseado no ponto, não nos timers
-    let saldoS=null,status='';
+    const TOLERANCIA_S=600; // 10 minutos — CLT art. 58 §1°
+    let saldoS=null,status='',toleranciaAplicada=false;
     if(ausencia){
       status=ausencia.tipo;
       saldoS=ausencia.tipo==='ausencia_justificada'?0:-BANCO_META_S;
     } else if(totalS>0){
       status='trabalhado';
-      saldoS=totalS-BANCO_META_S;
+      const rawSaldo=totalS-BANCO_META_S;
+      if(Math.abs(rawSaldo)<=TOLERANCIA_S){ saldoS=0; toleranciaAplicada=true; }
+      else { saldoS=rawSaldo; }
     } else if(date<today){
       status='pendente';hasPending=true;
     } else {
       status='hoje';
     }
     if(saldoS!==null) totalKnownS+=saldoS;
-    return {date,pontoS,tarefaS,difS,manualS,totalS,saldoS,status,ausencia,manuais};
+    return {date,pontoS,tarefaS,difS,manualS,totalS,saldoS,status,ausencia,manuais,toleranciaAplicada};
   });
+  // Acertos de saldo globais (tipo:'acerto_saldo')
+  const acertoEntries=state.bancoHoras.filter(e=>e.tipo==='acerto_saldo');
+  const acertoTotalS=acertoEntries.reduce((s,e)=>s+(e.horasSegundos||0),0);
+  totalKnownS+=acertoTotalS;
+
   let runS=0;
   const trs=rowsData.map(r=>{
     if(r.saldoS!==null) runS+=r.saldoS;
@@ -2858,6 +2866,7 @@ function renderBancoHoras(){
     else if(r.status==='ausencia_justificada') situCell='<span style="color:#16a34a;font-size:.77rem;">✅ Justificada</span>';
     else if(r.status==='ausencia_nao_justificada') situCell='<span style="color:#dc2626;font-size:.77rem;">❌ Não justificada</span>';
     else if(r.status==='hoje') situCell='<span style="color:#7c3aed;font-size:.77rem;">📍 Hoje</span>';
+    else if(r.toleranciaAplicada) situCell='<span style="color:#0369a1;font-size:.77rem;" title="Variação ≤10min — CLT art. 58">⚖️ Tolerância</span>';
     let acoes='';
     if(r.status==='pendente'){
       acoes=`<div style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -2893,19 +2902,55 @@ function renderBancoHoras(){
       </td>
     </tr>`;
   }).join('');
+  // Linhas de acerto na tabela
+  const acertoTrs=acertoEntries.map(e=>{
+    const s=e.horasSegundos||0;
+    const cor=s>=0?'#16a34a':'#dc2626';
+    const sinal=s>=0?'+':'−';
+    const dt=e.criadoEm?(e.criadoEm.toDate?e.criadoEm.toDate():new Date((e.criadoEm.seconds||0)*1000)):null;
+    const dtStr=dt?dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'';
+    return `<tr style="background:#fefce8;">
+      <td style="font-size:.82rem;white-space:nowrap;color:#92400e;">⚖️ Acerto${dtStr?' ('+dtStr+')':''}</td>
+      <td style="font-size:.82rem;color:#92400e;">${esc(e.observacao||'')}</td>
+      <td style="text-align:center;"><span style="color:#92400e;font-size:.77rem;">Correção manual</span></td>
+      <td style="text-align:right;font-weight:700;color:${cor};">${sinal}${fmtHM(Math.abs(s))}</td>
+      <td></td>
+      <td><button class="icon-btn" style="font-size:.72rem;color:var(--text2);" onclick="excluirBancoEntry('${e.id}')">✕ Remover</button></td>
+    </tr>`;
+  }).join('');
+
   const saldoColor=totalKnownS>=0?'#16a34a':'#dc2626';
   el.innerHTML=`<div class="banco-panel">
     <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleBancoHoras()">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-weight:700;font-size:.97rem;">⏱ Banco de Horas — Lara</span>
-        <span style="color:${saldoColor};font-weight:700;">${totalKnownS>=0?'+':'-'}${fmtHM(totalKnownS)}</span>
+        <span style="color:${saldoColor};font-weight:700;">${totalKnownS>=0?'+':'-'}${fmtHM(Math.abs(totalKnownS))}</span>
         <span class="muted" style="font-size:.78rem;">meta: 4h/dia</span>
         ${hasPending?`<span style="background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;font-size:.72rem;font-weight:700;">⚠️ Dias pendentes</span>`:''}
       </div>
       <span class="icon-btn">${_bancoHorasAberto?'▲':'▼'}</span>
     </div>
     ${_bancoHorasAberto?`
-    <div style="font-size:.77rem;color:var(--text2);margin:8px 0 10px;">Início: ${fmtDateBR(BANCO_START)} · Saldo acumulado considera apenas dias já classificados</div>
+    <div style="font-size:.77rem;color:var(--text2);margin:8px 0 6px;">Início: ${fmtDateBR(BANCO_START)} · Saldo acumulado considera apenas dias já classificados · Tolerância: ±10min (CLT art. 58)</div>
+    <div style="margin-bottom:10px;">
+      <button class="btn" style="font-size:.78rem;padding:3px 10px;background:#fefce8;border-color:#ca8a04;color:#92400e;" onclick="toggleAcertoSaldo()">⚖️ Acerto de saldo</button>
+    </div>
+    <div id="banco-acerto-form" style="display:none;margin-bottom:10px;padding:10px;background:#fefce8;border:1px solid #ca8a04;border-radius:8px;">
+      <div style="font-weight:600;font-size:.85rem;color:#92400e;margin-bottom:8px;">⚖️ Lançar acerto de saldo</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+        <select id="acerto-sinal" style="padding:4px 6px;border-radius:5px;border:1px solid var(--border);font-size:.83rem;">
+          <option value="-1">− Desconto (horas a menos)</option>
+          <option value="1">+ Crédito (horas a mais)</option>
+        </select>
+        <input type="number" id="acerto-h" min="0" max="99" value="0" style="width:50px;padding:4px;border:1px solid var(--border);border-radius:4px;font-size:.83rem;"> h
+        <input type="number" id="acerto-m" min="0" max="59" value="0" style="width:50px;padding:4px;border:1px solid var(--border);border-radius:4px;font-size:.83rem;"> min
+      </div>
+      <input type="text" id="acerto-obs" placeholder="Motivo obrigatório — ex: Correção de bug de ponto set/out/nov" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:.82rem;box-sizing:border-box;margin-bottom:7px;">
+      <div style="display:flex;gap:7px;">
+        <button class="btn primary" style="font-size:.8rem;padding:4px 12px;" onclick="confirmarAcertoSaldo()">✓ Lançar acerto</button>
+        <button class="icon-btn" style="font-size:.8rem;" onclick="toggleAcertoSaldo()">Cancelar</button>
+      </div>
+    </div>
     <div style="overflow-x:auto;">
       <table class="banco-panel">
         <thead><tr>
@@ -2916,7 +2961,7 @@ function renderBancoHoras(){
           <th style="text-align:right;">Saldo acumulado</th>
           <th></th>
         </tr></thead>
-        <tbody>${trs}</tbody>
+        <tbody>${trs}${acertoTrs}</tbody>
       </table>
     </div>`:''}
   </div>`;
@@ -2948,6 +2993,22 @@ function confirmarBancoManual(date){
 }
 function excluirBancoEntry(id){
   db.collection('bancoHoras').doc(id).delete().catch(err=>alert('Erro: '+err.message));
+}
+function toggleAcertoSaldo(){
+  const el=document.getElementById('banco-acerto-form');
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
+}
+function confirmarAcertoSaldo(){
+  const sinal=parseInt(document.getElementById('acerto-sinal')?.value||'-1',10);
+  const h=parseInt(document.getElementById('acerto-h')?.value||0,10)||0;
+  const m=parseInt(document.getElementById('acerto-m')?.value||0,10)||0;
+  const obs=(document.getElementById('acerto-obs')?.value||'').trim();
+  const s=(h*3600+m*60)*sinal;
+  if(s===0){showToast('Informe pelo menos 1 minuto','error');return;}
+  if(!obs){showToast('O motivo é obrigatório','error');return;}
+  db.collection('bancoHoras').add({tipo:'acerto_saldo',horasSegundos:s,observacao:obs,registradoPor:currentUser.uid,criadoEm:ts()})
+    .then(()=>{showToast('✅ Acerto lançado!','success');toggleAcertoSaldo();})
+    .catch(err=>alert('Erro: '+err.message));
 }
 
 /* ====================== Colaboradores (administradora) ====================== */
