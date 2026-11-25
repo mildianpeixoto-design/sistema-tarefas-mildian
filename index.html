@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261125-01';
+var BUILD='20261125-02';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -2901,7 +2901,7 @@ function renderBancoHoras(){
         </div>
       </td>
     </tr>`;
-  }).join('');
+  }); // mantém como array para poder reverter a ordem na exibição
   // Linhas de acerto na tabela
   const acertoTrs=acertoEntries.map(e=>{
     const s=e.horasSegundos||0;
@@ -2961,7 +2961,7 @@ function renderBancoHoras(){
           <th style="text-align:right;">Saldo acumulado</th>
           <th></th>
         </tr></thead>
-        <tbody>${[...trs].reverse().join('')}${acertoTrs}</tbody>
+        <tbody>${trs.slice().reverse().join('')}${acertoTrs}</tbody>
       </table>
     </div>`:''}
   </div>`;
