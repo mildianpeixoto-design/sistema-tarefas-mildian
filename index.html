@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Gestão de Equipe">
 <script>
 // Build identifier — global para uso em toda a aplicação
-var BUILD='20261124-01';
+var BUILD='20261125-01';
 // Force clear old service worker cache on build update
 (function(){
   if('serviceWorker' in navigator && localStorage.getItem('_swbuild')!==BUILD){
@@ -1491,7 +1491,7 @@ function initApp(){
 
   // Banco de horas (apenas owner)
   if(currentUser.role==='owner'){
-    listeners.push(db.collection('bancoHoras').orderBy('date','asc').onSnapshot(snap=>{
+    listeners.push(db.collection('bancoHoras').onSnapshot(snap=>{
       state.bancoHoras=snap.docs.map(d=>({id:d.id,...d.data()}));
       if(document.getElementById('bancoHorasWrap')) renderBancoHoras();
     },err=>console.error(err)));
@@ -2790,7 +2790,7 @@ function renderBancoHoras(){
   const el=document.getElementById('bancoHorasWrap');
   if(!el||!currentUser||currentUser.role!=='owner') return;
   const today=todayStr();
-  // gera todos os dias úteis de BANCO_START até hoje
+  // gera todos os dias úteis de BANCO_START até hoje (mais recente primeiro)
   const days=[];
   for(let d=new Date(BANCO_START+'T12:00:00'),end=new Date(today+'T12:00:00');d<=end;d.setDate(d.getDate()+1)){
     const ds=dstr(d);
@@ -2961,7 +2961,7 @@ function renderBancoHoras(){
           <th style="text-align:right;">Saldo acumulado</th>
           <th></th>
         </tr></thead>
-        <tbody>${trs}${acertoTrs}</tbody>
+        <tbody>${[...trs].reverse().join('')}${acertoTrs}</tbody>
       </table>
     </div>`:''}
   </div>`;
